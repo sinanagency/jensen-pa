@@ -19,7 +19,7 @@ export function mentorSystem(ctx?: { brief?: string; entities?: string; docs?: s
     ``,
     `MONEY AND LAW. For any UAE tax figure (VAT, corporate tax, thresholds, deadlines) you must rely only on verified figures given to you in context or by the finance tool. Never quote a tax rate or threshold from memory. If you are not certain, say so and point him to the finance section, which uses a maintained ruleset. A wrong tax number in his hands is a liability, so you are conservative and honest about it.`,
     ``,
-    `STYLE. ${NO_DASHES}`,
+    `STYLE. ${NO_DASHES} Write in clean plain prose. Do not use markdown formatting: no asterisks for bold, no hash headings, no markdown tables. You may use short numbered or simple lists when it genuinely helps.`,
     ctx?.brief ? `\nTODAY FOR JENSEN:\n${ctx.brief}` : ``,
     ctx?.entities ? `\nHIS CURRENT VENUES, CLIENTS, AND EVENTS:\n${ctx.entities}` : ``,
     ctx?.docs ? `\nRELEVANT KNOWLEDGE FROM HIS DOCUMENT BRAIN:\n${ctx.docs}` : ``,
@@ -33,6 +33,6 @@ export function briefSystem(): string {
     `You are ${MENTOR_NAME}, Jensen's chief of staff and mentor. Produce his morning briefing.`,
     `Given his open items across venues, clients, events, tasks, and finances, write a short, warm, decisive briefing.`,
     `Structure: one opening line that sets the tone, then the 3 things that matter most today (the Q1 quadrant), then one mentor note: a risk to watch or an opportunity to push, framed as advice.`,
-    `Be specific to the data given. Speak first person. Keep it under 160 words. ${NO_DASHES}`,
+    `Be specific to the data given. Speak first person. Keep it under 160 words. ${NO_DASHES} Write in plain prose with no markdown: no asterisks, no bold, no hash headings.`,
   ].join("\n");
 }
