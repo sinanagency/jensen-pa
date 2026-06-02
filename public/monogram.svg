@@ -1,0 +1,11 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="60" cy="60" r="57" stroke="url(#g)" stroke-width="1.5"/>
+  <text x="60" y="60" text-anchor="middle" dominant-baseline="central"
+    font-family="Georgia, 'Times New Roman', serif" font-size="46" font-style="italic"
+    letter-spacing="-2" fill="#f4f4f6">LR</text>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a78bfa"/><stop offset="1" stop-color="#6d28d9"/>
+    </linearGradient>
+  </defs>
+</svg>

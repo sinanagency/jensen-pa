@@ -1,0 +1,27 @@
+{
+  "name": "jensen-pa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "La Rencontre — a private AI chief of staff and mentor for Jensen. Entity-first PA for a multi-venue F&B consultancy, with a grounded mentor chat, document brain, document generation, and a UAE-aware finance engine.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sparticuz/chromium": "^147.0.0",
+    "framer-motion": "^11.3.0",
+    "lucide-react": "^0.417.0",
+    "next": "14.2.5",
+    "puppeteer-core": "^24.43.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,2 @@
+{ "name": "La Rencontre", "short_name": "Rencontre", "start_url": "/", "display": "standalone",
+  "background_color": "#0a0a0c", "theme_color": "#0a0a0c", "icons": [{ "src": "/monogram.svg", "sizes": "any", "type": "image/svg+xml" }] }
