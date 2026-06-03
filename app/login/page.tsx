@@ -14,8 +14,7 @@ export default function LoginPage() {
     e.preventDefault();
     setBusy(true); setError("");
     const res = await fetch("/api/auth", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
+      method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ password }),
     });
     const data = await res.json().catch(() => ({}));
@@ -24,66 +23,53 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="login">
-      <div className="login-stage">
-        <div className="aura a1" /><div className="aura a2" />
-        <motion.div
-          className="orb stage-orb"
-          animate={{ scale: [1, 1.05, 1], opacity: [0.9, 1, 0.9] }}
-          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-          className="stage-copy"
-        >
-          <img src="/wordmark.svg" alt="La Rencontre" className="stage-word" />
-          <h2>Good to see you.<br /><span className="accent">Let us run today.</span></h2>
-          <p>Your chief of staff has been keeping watch. Sign in and I will show you what matters.</p>
-        </motion.div>
-        <div className="stage-foot">Private workspace · La Rencontre Hospitality</div>
-      </div>
+    <div className="lr-login">
+      <img className="bg" src="/login-3d.png" alt="" />
+      <div className="veil" />
 
-      <div className="login-aside">
-        <motion.form
-          onSubmit={submit} className="login-card card"
-          initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <img src="/monogram.svg" alt="" width={44} height={44} />
-          <h1>Welcome back</h1>
-          <p className="muted" style={{ marginTop: 6, fontSize: 14 }}>Enter your passphrase to continue.</p>
-          <label style={{ display: "block", margin: "22px 0 8px" }}>Passphrase</label>
+      <motion.div
+        className="stage"
+        initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <motion.img
+          src="/larencontre-mark.png" alt="" className="mark"
+          initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+        />
+        <div className="word"><span>LA</span><span>RENCONTRE</span></div>
+        <div className="tag">Hospitality, run by one assistant.</div>
+
+        <form onSubmit={submit} className="card">
+          <label>Passphrase</label>
           <input
             type="password" value={password} autoFocus autoComplete="current-password"
             onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••"
           />
-          <button className="btn purple full" type="submit" disabled={busy} style={{ marginTop: 18 }}>
-            {busy ? "Opening…" : "Enter"}
-          </button>
+          <button type="submit" disabled={busy}>{busy ? "Opening…" : "Enter"}</button>
           {error && <div className="err">{error}</div>}
-          <div className="login-foot">Holds confidential business data. Do not share access.</div>
-        </motion.form>
-      </div>
+        </form>
+        <div className="foot">Private workspace · La Rencontre</div>
+      </motion.div>
 
       <style>{`
-        .login { display: grid; grid-template-columns: 1.15fr 1fr; min-height: 100vh; }
-        .login-stage { position: relative; overflow: hidden; display: flex; flex-direction: column;
-          justify-content: center; padding: 64px; background: radial-gradient(120% 120% at 20% 10%, #16121f 0%, #0a0a0c 55%); }
-        .aura { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.5; }
-        .a1 { width: 460px; height: 460px; background: rgba(139,92,246,0.35); top: -120px; left: -80px; }
-        .a2 { width: 380px; height: 380px; background: rgba(109,40,217,0.30); bottom: -120px; right: -60px; }
-        .stage-orb { width: 86px; height: 86px; margin-bottom: 30px; }
-        .stage-copy { position: relative; z-index: 2; max-width: 460px; }
-        .stage-word { width: 320px; max-width: 70%; margin-bottom: 30px; opacity: 0.96; }
-        .stage-copy h2 { font-family: var(--font-display); font-size: 38px; line-height: 1.08; letter-spacing: -0.02em; }
-        .stage-copy p { color: var(--ink-2); margin-top: 16px; font-size: 16px; line-height: 1.6; max-width: 400px; }
-        .stage-foot { position: absolute; bottom: 36px; left: 64px; font-size: 12px; color: var(--faint); letter-spacing: 0.04em; z-index: 2; }
-        .login-aside { display: flex; align-items: center; justify-content: center; padding: 40px; background: var(--bg); }
-        .login-card { width: 100%; max-width: 380px; padding: 36px 32px; }
-        .login-card h1 { font-size: 28px; margin-top: 18px; }
-        .login-foot { margin-top: 18px; font-size: 11.5px; color: var(--faint); }
-        @media (max-width: 900px) { .login { grid-template-columns: 1fr; } .login-stage { display: none; } }
+        .lr-login{position:fixed;inset:0;overflow:hidden;display:grid;place-items:center;background:#08070a;color:#fff;font-family:var(--font-body,system-ui)}
+        .bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:saturate(118%) brightness(1.14);z-index:0}
+        .veil{position:absolute;inset:0;z-index:1;background:radial-gradient(42% 46% at 50% 46%,rgba(8,7,10,.74),rgba(8,7,10,.32) 70%,rgba(8,7,10,.12))}
+        .stage{position:relative;z-index:2;text-align:center;width:min(420px,90vw)}
+        .mark{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 8px 30px rgba(167,139,250,.4));margin-bottom:20px}
+        .word{display:flex;flex-direction:column;line-height:.96;font-family:Georgia,'Times New Roman',serif;font-weight:400;letter-spacing:.22em;font-size:30px;color:#f4f2f7}
+        .word span:last-child{font-size:26px;letter-spacing:.18em;color:#cfc9d8}
+        .tag{margin-top:16px;color:#a9a2b6;font-size:13.5px;letter-spacing:.02em}
+        .card{margin-top:34px;text-align:left;background:rgba(20,18,26,.55);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:22px;backdrop-filter:blur(16px)}
+        .card label{font-size:12px;color:#9a93a8;letter-spacing:.04em;text-transform:uppercase}
+        .card input{width:100%;margin-top:9px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;color:#fff;padding:13px 14px;font-size:15px;outline:none;transition:border-color .2s,box-shadow .2s}
+        .card input:focus{border-color:rgba(167,139,250,.6);box-shadow:0 0 0 3px rgba(167,139,250,.16)}
+        .card button{width:100%;margin-top:16px;height:48px;border:0;border-radius:12px;color:#fff;font-weight:600;font-size:15px;cursor:pointer;
+          background:linear-gradient(135deg,#7c6bb0,#5b4b8a);box-shadow:0 14px 34px rgba(124,107,176,.35);transition:transform .18s,box-shadow .18s}
+        .card button:hover{transform:translateY(-1px);box-shadow:0 18px 44px rgba(124,107,176,.5)}
+        .err{margin-top:12px;color:#f3a5a5;font-size:13px}
+        .foot{margin-top:20px;font-size:11.5px;color:#6f6880;letter-spacing:.04em}
       `}</style>
     </div>
   );
