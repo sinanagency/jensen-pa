@@ -77,21 +77,25 @@ body {
   text-rendering: optimizeLegibility;
   min-height: 100vh;
   position: relative;
-  background-color: #07060a;
+  /* LIFTED CHARCOAL: warm, faintly purple charcoal base, not a flat void. */
+  background-color: #100e16;
   background-attachment: fixed;
 }
-/* the login's 3D environment, brought inside as a fixed cinematic backdrop */
+/* lifted-charcoal glow + the login's 3D environment as a subtle ambient backdrop */
 body::before {
   content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background: url("/login-3d.png") center top / cover no-repeat;
-  opacity: 0.28; filter: saturate(115%);
+  background:
+    radial-gradient(1200px 620px at 50% -10%, rgba(124,107,176,0.22), transparent 62%),
+    radial-gradient(900px 500px at 92% 4%, rgba(91,75,138,0.16), transparent 60%),
+    url("/login-3d.png") center top / cover no-repeat;
+  opacity: 0.6; filter: saturate(112%);
 }
-/* legibility veil over the 3D: darker at the very top for the nav, lighter and open in the working area */
+/* light veil: lifts the whole surface so it reads charcoal, not black, while keeping nav + footer legible */
 body::after {
   content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(7,6,10,0.86) 0%, rgba(7,6,10,0.6) 16%, rgba(7,6,10,0.72) 60%, rgba(7,6,10,0.9) 100%),
-    radial-gradient(1100px 520px at 50% -8%, rgba(124,107,176,0.14), transparent 60%);
+    linear-gradient(180deg, rgba(16,14,22,0.62) 0%, rgba(16,14,22,0.34) 18%, rgba(16,14,22,0.46) 60%, rgba(16,14,22,0.72) 100%),
+    radial-gradient(1100px 520px at 50% -8%, rgba(169,159,208,0.10), transparent 60%);
 }
 /* keep real content above the ambient layers */
 .appframe, .login { position: relative; z-index: 1; }
@@ -115,11 +119,11 @@ em.accent, .grad { color: var(--purple-2); font-style: normal; }
   --ink: #16171d; --ink-2: #41454f; --muted: #71757f; --faint: #9aa0aa;
   --line: rgba(18, 20, 28, 0.10); --line-2: rgba(18, 20, 28, 0.18);
   --purple-2: #5b4b8a; --purple-soft: rgba(124, 107, 176, 0.12);
-  background: #f5f6f9;
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: var(--radius);
   color: var(--ink);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 1);
   transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
 }
 .card input, .card select, .card textarea {
@@ -135,7 +139,7 @@ em.accent, .grad { color: var(--purple-2); font-style: normal; }
 .card:hover { transform: translateY(-2px); box-shadow: 0 24px 58px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.9); }
 a.card { cursor: pointer; }
 a.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
-.card.feature { background: linear-gradient(180deg, #ffffff, #edeff6); border-color: rgba(124, 107, 176, 0.3); }
+.card.feature { background: linear-gradient(180deg, #ffffff, #f6f7fb); border-color: rgba(124, 107, 176, 0.28); }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -162,7 +166,10 @@ a.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .pill.accent { background: var(--purple-soft); border-color: var(--purple-line); color: var(--purple-2); }
 
 /* ---------- inputs ---------- */
-.input, input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="date"], input[type="time"], select, textarea {
+/* NOTE: include typeless <input> (input:not([type])) — a bare <input> defaults to
+   type=text but is NOT matched by input[type="text"], which left such fields
+   unstyled and rendering inline beside their labels. This catches them. */
+.input, input:not([type]), input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="date"], input[type="time"], input[type="search"], input[type="tel"], select, textarea {
   width: 100%; background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.12);
   border-radius: 13px; color: var(--ink); padding: 13px 15px; font-size: 14.5px;
   outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
@@ -174,7 +181,10 @@ a.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 }
 .input:focus, input:focus, textarea:focus { border-color: var(--purple-line); box-shadow: 0 0 0 3px var(--purple-soft); }
 input::placeholder, textarea::placeholder { color: var(--faint); }
-label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
+/* labels ALWAYS sit above their field (the protocol), never inline beside it */
+label { display: block; font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 7px; }
+/* opt-out for inline labels (checkbox rows etc.) */
+label.inline { display: inline-flex; text-transform: none; letter-spacing: normal; margin-bottom: 0; }
 
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
@@ -253,6 +263,16 @@ label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .fade-up { animation: fadeUp 0.5s var(--ease) both; }
+
+/* ghost "add" card to fill a grid row and invite a new entry */
+.add-ghost {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 120px; border-radius: var(--radius); cursor: pointer;
+  border: 1.5px dashed var(--purple-line); background: rgba(124,107,176,0.06);
+  color: var(--purple-2); font-family: inherit; font-weight: 600; font-size: 13.5px;
+  transition: all 0.18s var(--ease);
+}
+.add-ghost:hover { background: rgba(124,107,176,0.12); border-color: var(--purple); transform: translateY(-2px); }
 
 /* scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }

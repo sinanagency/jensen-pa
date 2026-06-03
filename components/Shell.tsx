@@ -5,19 +5,20 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid, MessageCircle, Building2, CheckSquare, Wallet, Library,
-  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft, ScrollText, Mail, ShoppingBag, StickyNote, User, SlidersHorizontal,
+  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft, ScrollText, Mail, ShoppingBag, StickyNote, User, SlidersHorizontal, BookOpen, Mic,
 } from "lucide-react";
 import CommandPalette from "@/components/CommandPalette";
+import Logo from "@/components/Logo";
 
 const ICONS: Record<string, any> = {
   today: LayoutGrid, mentor: MessageCircle, portfolio: Building2, tasks: CheckSquare,
   finance: Wallet, brain: Library, generate: FileText, calendar: Calendar, legal: ScrollText, mail: Mail, store: ShoppingBag,
-  notes: StickyNote, contacts: User,
+  notes: StickyNote, contacts: User, journal: BookOpen, meetings: Mic,
 };
 
 const PILLS = [
   { href: "/", label: "Today", icon: "today" },
-  { href: "/mentor", label: "Mentor", icon: "mentor" },
+  { href: "/mentor", label: "Concierge", icon: "mentor" },
   { href: "/mail", label: "Mail", icon: "mail" },
   { href: "/portfolio", label: "Portfolio", icon: "portfolio" },
 ];
@@ -30,9 +31,10 @@ const GROUPS = [
     { href: "/contacts", label: "Contacts", icon: "contacts" },
   ]},
   { group: "Studio", items: [
-    { href: "/meetings", label: "Meetings", icon: "calendar" },
+    { href: "/meetings", label: "Meetings", icon: "meetings" },
     { href: "/brain", label: "Documents", icon: "brain" },
     { href: "/notes", label: "Notes", icon: "notes" },
+    { href: "/journal", label: "Journal", icon: "journal" },
     { href: "/generate", label: "Generate", icon: "generate" },
     { href: "/legal", label: "Legal", icon: "legal" },
   ]},
@@ -75,7 +77,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       <header className="topnav">
         <div className="topnav-inner">
           <Link href="/" className="brand">
-            <img src="/larencontre-mark.png" alt="" width={26} height={26} style={{ objectFit: "contain" }} />
+            <Logo variant="mark" size={30} />
             <span className="brand-name">LA RENCONTRE</span>
           </Link>
 
@@ -134,7 +136,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       <main className="main">{children}</main>
 
-      {path !== "/mentor" && <Link href="/mentor" className="orb float" aria-label="Talk to your mentor" />}
+      {path !== "/mentor" && <Link href="/mentor" className="orb float" aria-label="Talk to your concierge" />}
       <CommandPalette />
     </div>
   );

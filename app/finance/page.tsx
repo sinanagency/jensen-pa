@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
 import { FinanceRecord, uid } from "@/lib/store";
 import { UAE_TAX, vatFromNet, corporateTax, aed } from "@/lib/tax";
-import { Plus, Trash2, TrendingUp, TrendingDown, Receipt } from "lucide-react";
+import { dropFile } from "@/lib/drop";
+import { Plus, Trash2, TrendingUp, TrendingDown, Receipt, Upload, Loader2, CheckCircle2 } from "lucide-react";
 
 export default function FinancePage() {
   const { db, mutate } = useDB();
@@ -16,6 +17,25 @@ export default function FinancePage() {
   const [vatApplies, setVatApplies] = useState<boolean>(true);
   const [entityId, setEntityId] = useState<string>("");
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+
+  // drop-to-populate
+  const [dropping, setDropping] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [dropMsg, setDropMsg] = useState<string>("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const dropDepth = useRef(0);
+
+  async function handleFiles(files: FileList) {
+    if (!files.length) return;
+    setDropping(true); setDropMsg("");
+    let last = "";
+    for (const f of Array.from(files)) {
+      const r = await dropFile(f, mutate);
+      last = r.ok ? r.summary : `Could not read ${f.name}. ${r.error || ""}`;
+    }
+    setDropMsg(last); setDropping(false);
+    setTimeout(() => setDropMsg(""), 7000);
+  }
 
   if (!db) return <Shell><div className="muted">Loading…</div></Shell>;
 
@@ -198,6 +218,29 @@ export default function FinancePage() {
           </button>
         </div>
       </div>
+
+      {/* Drop zone: drop a receipt or invoice and I log it with VAT */}
+      <div
+        className="card fade-up"
+        onDragEnter={(e) => { e.preventDefault(); dropDepth.current++; setDragOver(true); }}
+        onDragOver={(e) => e.preventDefault()}
+        onDragLeave={(e) => { e.preventDefault(); dropDepth.current--; if (dropDepth.current <= 0) setDragOver(false); }}
+        onDrop={(e) => { e.preventDefault(); dropDepth.current = 0; setDragOver(false); if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files); }}
+        onClick={() => fileRef.current?.click()}
+        style={{
+          padding: 20, marginBottom: 16, cursor: "pointer", textAlign: "center",
+          border: `1.5px dashed ${dragOver ? "var(--purple)" : "rgba(124,107,176,0.34)"}`,
+          background: dragOver ? "rgba(124,107,176,0.10)" : "#ffffff",
+        }}
+      >
+        <input ref={fileRef} type="file" multiple hidden accept="image/*,.pdf,.csv,.xlsx,.xls,.docx,.txt" onChange={(e) => { if (e.target.files) handleFiles(e.target.files); e.currentTarget.value = ""; }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "var(--purple)", fontWeight: 600 }}>
+          {dropping ? <><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> Reading and logging…</> : <><Upload size={18} /> Drop a receipt or invoice, I log it with VAT</>}
+        </div>
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>PDF, photo, or spreadsheet. I read the amount, date, and VAT and add the record.</div>
+        {dropMsg && <div style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "var(--ink-2)", background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.35)", borderRadius: 10, padding: "8px 12px" }}><CheckCircle2 size={15} style={{ color: "var(--success)" }} /> {dropMsg}</div>}
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* Tax position card + Records: side by side on wide, stacked on narrow */}
       <div className="grid cols-2 fade-up" style={{ alignItems: "start", marginBottom: 16 }}>

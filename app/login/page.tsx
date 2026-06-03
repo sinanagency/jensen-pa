@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import Logo from "@/components/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,13 +33,15 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
       >
-        <motion.img
-          src="/larencontre-mark.png" alt="" className="mark"
+        <motion.div
+          className="mark"
           initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-        />
+        >
+          <Logo variant="mark" size={80} />
+        </motion.div>
         <div className="word"><span>LA RENCONTRE</span><span className="portal">PORTAL</span></div>
-        <div className="tag">Your chief of staff. Run the whole house from one place.</div>
+        <div className="tag">Your private concierge. Run the whole house from one place.</div>
 
         <form onSubmit={submit} className="card">
           <label>Passphrase</label>
@@ -58,7 +61,7 @@ export default function LoginPage() {
         .bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:saturate(118%) brightness(1.14);z-index:0}
         .veil{position:absolute;inset:0;z-index:1;background:radial-gradient(42% 46% at 50% 46%,rgba(8,7,10,.74),rgba(8,7,10,.32) 70%,rgba(8,7,10,.12))}
         .stage{position:relative;z-index:2;text-align:center;width:min(420px,90vw)}
-        .mark{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 8px 30px rgba(167,139,250,.4));margin-bottom:20px}
+        .mark{display:inline-flex;margin-bottom:20px;filter:drop-shadow(0 10px 34px rgba(167,139,250,.45))}
         .word{display:flex;flex-direction:column;align-items:center;line-height:1.0;font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;letter-spacing:.16em;font-size:clamp(44px,7vw,72px);color:#f6f4fa}
         .word .portal{font-size:clamp(15px,2.2vw,20px);letter-spacing:.55em;font-weight:500;color:#b3aac6;margin-top:10px;font-family:-apple-system,system-ui,sans-serif;text-indent:.55em}
         .tag{margin-top:16px;color:#a9a2b6;font-size:13.5px;letter-spacing:.02em}

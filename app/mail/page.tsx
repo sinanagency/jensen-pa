@@ -100,11 +100,12 @@ export default function MailPage() {
   if (status === "out") {
     return (
       <Shell>
-        <div className="page-hero fade-up"><div className="eyebrow">Mail</div><h1>Connect your mailbox.</h1></div>
-        <p className="muted" style={{ marginTop: -10, marginBottom: 18, maxWidth: 600 }}>
+        <div className="mail-connect fade-up">
+        <div className="page-hero" style={{ textAlign: "center", marginBottom: 8 }}><div className="eyebrow">Mail</div><h1>Connect your mailbox.</h1></div>
+        <p className="muted" style={{ marginBottom: 22, maxWidth: 520, textAlign: "center" }}>
           Read and reply to your email here and from WhatsApp, with attachments. Use an app password, not your login password. Your credentials are encrypted and never shared.
         </p>
-        <div className="card feature" style={{ padding: 22, maxWidth: 520 }}>
+        <div className="card feature" style={{ padding: 24, width: "100%", maxWidth: 480, textAlign: "left" }}>
           <label>Provider</label>
           <div style={{ display: "flex", gap: 8, margin: "8px 0 14px", flexWrap: "wrap" }}>
             {PRESETS.map((p) => <button key={p.id} className={`pill ${provider === p.id ? "accent" : ""}`} onClick={() => setProvider(p.id)} style={{ cursor: "pointer", height: 32 }}>{p.label}</button>)}
@@ -127,7 +128,8 @@ export default function MailPage() {
             Outlook and Gmail require an app password from your account security settings. We validate by signing in once.
           </div>
         </div>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}} .mail-connect{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 230px)}`}</style>
       </Shell>
     );
   }

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, Inter } from "next/font/google";
+import { Space_Grotesk, Inter, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 
 const grotesk = Space_Grotesk({
@@ -12,6 +12,13 @@ const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-inter",
+  display: "swap",
+});
+// Serif for the La Rencontre emblem + wordmark, the hospitality-luxe identity.
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["500", "600"],
+  variable: "--font-serif",
   display: "swap",
 });
 
@@ -29,7 +36,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${grotesk.variable} ${inter.variable}`}>
+    <html lang="en" className={`${grotesk.variable} ${inter.variable} ${cormorant.variable}`}>
       <body>{children}</body>
     </html>
   );

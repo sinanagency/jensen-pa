@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
 import { Entity, EntityKind, uid } from "@/lib/store";
@@ -30,6 +30,7 @@ export default function Portfolio() {
 
   // Selected entity for detail panel
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   if (!db) return <Shell><div className="muted">Loading…</div></Shell>;
 
@@ -125,7 +126,7 @@ export default function Portfolio() {
     );
   }
 
-  function Section({ label, items }: { label: string; items: Entity[] }) {
+  function Section({ label, items, addKind }: { label: string; items: Entity[]; addKind: EntityKind }) {
     if (items.length === 0) return null;
     return (
       <div style={{ marginBottom: 28 }}>
@@ -137,6 +138,13 @@ export default function Portfolio() {
         </div>
         <div className="grid cols-3">
           {items.map((e: Entity) => <EntityCard key={e.id} e={e} />)}
+          <button
+            className="add-ghost"
+            onClick={() => { setKind(addKind); formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+            aria-label={`Add ${KIND_LABELS[addKind]}`}
+          >
+            <Plus size={18} /> Add {KIND_LABELS[addKind].toLowerCase()}
+          </button>
         </div>
       </div>
     );
@@ -163,7 +171,7 @@ export default function Portfolio() {
       </div>
 
       {/* Add form */}
-      <div className="card" style={{ padding: 22, marginBottom: 28 }}>
+      <div ref={formRef} className="card" style={{ padding: 22, marginBottom: 28 }}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Add to portfolio</div>
 
         {/* Kind selector */}
@@ -216,9 +224,9 @@ export default function Portfolio() {
         </div>
       )}
 
-      <Section label="Venues" items={venues} />
-      <Section label="Clients" items={clients} />
-      <Section label="Events" items={events} />
+      <Section label="Venues" items={venues} addKind="venue" />
+      <Section label="Clients" items={clients} addKind="client" />
+      <Section label="Events" items={events} addKind="event" />
 
       {/* Detail panel */}
       {selected && (

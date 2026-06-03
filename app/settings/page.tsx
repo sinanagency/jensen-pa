@@ -24,7 +24,7 @@ export default function Settings() {
     <Shell>
       <div className="page-hero fade-up"><div className="eyebrow">Settings</div><h1>How I work for you.</h1></div>
       <p className="muted" style={{ marginTop: -10, marginBottom: 18, maxWidth: 620 }}>
-        Tell your mentor how you like to work. It shapes how I prioritise, how I speak to you, and what I always keep in mind.
+        Tell your concierge how you like to work. It shapes how I prioritise, how I speak to you, and what I always keep in mind.
       </p>
 
       <div className="grid cols-2">
@@ -34,13 +34,13 @@ export default function Settings() {
             <div style={{ fontWeight: 600 }}>Your preferences</div>
           </div>
           <label>How you like to work</label>
-          <textarea className="input" rows={3} value={p.workStyle} onChange={(e) => set("workStyle", e.target.value)} placeholder="e.g. Mornings for deep work, batch calls in the afternoon, keep me out of small decisions." style={{ margin: "8px 0 14px" }} />
+          <textarea className="input" rows={3} value={p.workStyle} onChange={(e) => set("workStyle", e.target.value)} placeholder="e.g. Mornings for deep work, batch calls in the afternoon, keep me out of small decisions." style={{ marginBottom: 14 }} />
           <label>Tone you want from me</label>
-          <input value={p.tone} onChange={(e) => set("tone", e.target.value)} placeholder="e.g. Direct, warm, no fluff." style={{ margin: "8px 0 14px" }} />
+          <input className="input" value={p.tone} onChange={(e) => set("tone", e.target.value)} placeholder="e.g. Direct, warm, no fluff." style={{ marginBottom: 14 }} />
           <label>Working hours and focus time</label>
-          <input value={p.hours} onChange={(e) => set("hours", e.target.value)} placeholder="e.g. 8am to 7pm Dubai, Fridays light." style={{ margin: "8px 0 14px" }} />
+          <input className="input" value={p.hours} onChange={(e) => set("hours", e.target.value)} placeholder="e.g. 8am to 7pm Dubai, Fridays light." style={{ marginBottom: 14 }} />
           <label>Anything I should always honour</label>
-          <textarea className="input" rows={3} value={p.extra} onChange={(e) => set("extra", e.target.value)} placeholder="e.g. Never commit me past 8pm. Always copy my partner on venue contracts." style={{ margin: "8px 0 14px" }} />
+          <textarea className="input" rows={3} value={p.extra} onChange={(e) => set("extra", e.target.value)} placeholder="e.g. Never commit me past 8pm. Always copy my partner on venue contracts." style={{ marginBottom: 14 }} />
           <button className="btn purple" onClick={save}><Save size={15} /> {flash ? "Saved" : "Save preferences"}</button>
         </div>
 
