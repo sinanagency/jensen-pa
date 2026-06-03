@@ -68,6 +68,7 @@ export type DB = {
   events: CalEvent[];
   chat: ChatTurn[];
   goals: string[];
+  legalBlueprint?: string;
   onboarded: boolean;
 };
 

@@ -12,7 +12,13 @@ const TYPES: Record<string, string> = {
   sop: "a standard operating procedures outline for a hospitality venue",
   cost: "a cost strategy and margin optimization brief",
   letter: "a professional letter or formal note",
+  nda: "a mutual non disclosure agreement, with clear clauses and signature blocks",
+  service: "a services agreement between La Rencontre and a client, with scope, fees, term, and signature blocks",
+  consultancy: "a consultancy agreement for an F&B engagement, with deliverables, phases, fees, and signature blocks",
+  engagement: "a formal engagement letter confirming scope and terms with a client",
 };
+
+const LEGAL = new Set(["nda", "service", "consultancy", "engagement"]);
 
 function brandedHtml(title: string, subtitle: string, bodyHtml: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
@@ -50,9 +56,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "title and details required" }, { status: 400 });
     }
 
+    const isLegal = LEGAL.has(type);
     const body = await askClaude({
       system: [
-        "You are a senior F&B hospitality consultant at La Rencontre writing a client-ready document.",
+        isLegal
+          ? "You are drafting a legal document on behalf of La Rencontre (Dubai, UAE). Use clear defined terms, numbered clauses, and signature blocks. Default governing law to the Emirate of Dubai and the UAE unless told otherwise. Include a short note that it is a draft for review and not a substitute for legal advice."
+          : "You are a senior F&B hospitality consultant at La Rencontre writing a client-ready document.",
         `Write ${kind}. Output ONLY the document body as clean semantic HTML using h2, p, ul, ol, and table tags. No <html>, <head>, or <body> wrapper, no markdown, no code fences.`,
         "Be specific, confident, and commercially sharp. Use clear section headings. Where useful include a simple table (for pricing, phases, or margins).",
         NO_DASHES,

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
-import { DB, searchBrain } from "@/lib/store";
+import { DB } from "@/lib/store";
+import { searchDocs } from "@/lib/idb";
 import { Send } from "lucide-react";
 
 const SUGGESTIONS = [
@@ -28,7 +29,6 @@ export default function Mentor() {
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs]);
 
   async function ragContext(query: string): Promise<string> {
-    if (!db || db.docs.length === 0) return "";
     try {
       const res = await fetch("/api/brain", {
         method: "POST", headers: { "content-type": "application/json" },
@@ -36,7 +36,7 @@ export default function Mentor() {
       });
       const { embedding } = await res.json();
       if (!embedding) return "";
-      const hits = searchBrain(db, embedding, 5).filter((h) => h.score > 0.2);
+      const hits = (await searchDocs(embedding, 5)).filter((h) => h.score > 0.2);
       return hits.map((h) => `[${h.title}] ${h.text}`).join("\n\n");
     } catch { return ""; }
   }
@@ -77,7 +77,7 @@ export default function Mentor() {
 
   return (
     <Shell>
-      <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 150px)", minHeight: 420 }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 150px)", minHeight: 420, maxWidth: 860, margin: "0 auto", width: "100%" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, paddingBottom: 14, borderBottom: "1px solid var(--line)" }}>
           <div className="orb sm" />
           <div>
@@ -114,9 +114,9 @@ export default function Mentor() {
           ))}
         </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); send(input); }} style={{ display: "flex", gap: 10, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
-          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message your mentor…" autoFocus disabled={busy} />
-          <button className="btn purple" type="submit" disabled={busy || !input.trim()} style={{ width: 52, padding: 0 }}><Send size={18} /></button>
+        <form onSubmit={(e) => { e.preventDefault(); send(input); }} style={{ display: "flex", gap: 10, paddingTop: 14, borderTop: "1px solid var(--line)", alignItems: "center" }}>
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message your mentor…" autoFocus disabled={busy} style={{ flex: 1, minWidth: 0, height: 48 }} />
+          <button className="btn purple" type="submit" disabled={busy || !input.trim()} style={{ width: 48, height: 48, padding: 0, flex: "none", borderRadius: 14 }}><Send size={18} /></button>
         </form>
       </div>
     </Shell>

@@ -51,6 +51,33 @@ export async function askClaude(opts: CallOpts): Promise<string> {
   return (data?.content?.[0]?.text || "").trim();
 }
 
+// Vision OCR: read an image (a photographed or scanned invoice, a menu, a card)
+// into clean text so it can live in the document brain. Returns "" on failure.
+export async function readImage(base64: string, mediaType: string): Promise<string> {
+  try {
+    const res = await fetch(API, {
+      method: "POST",
+      headers: { "x-api-key": key(), "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model: SONNET,
+        max_tokens: 1500,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+            { type: "text", text: "Transcribe everything readable in this document or image into clean text. If it is an invoice or receipt, capture vendor, date, line items, amounts, totals, and any VAT or tax. Output only the transcribed content, no commentary." },
+          ],
+        }],
+      }),
+    });
+    if (!res.ok) return "";
+    const data = await res.json();
+    return (data?.content?.[0]?.text || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 // JSON helper for tool-like extraction.
 export async function claudeJSON<T = any>(system: string, user: string, maxTokens = 1500): Promise<T | null> {
   const text = await askClaude({

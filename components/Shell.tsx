@@ -5,12 +5,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid, MessageCircle, Building2, CheckSquare, Wallet, Library,
-  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft,
+  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft, ScrollText,
 } from "lucide-react";
 
 const ICONS: Record<string, any> = {
   today: LayoutGrid, mentor: MessageCircle, portfolio: Building2, tasks: CheckSquare,
-  finance: Wallet, brain: Library, generate: FileText, calendar: Calendar,
+  finance: Wallet, brain: Library, generate: FileText, calendar: Calendar, legal: ScrollText,
 };
 
 const PILLS = [
@@ -27,6 +27,7 @@ const GROUPS = [
   { group: "Studio", items: [
     { href: "/brain", label: "Documents", icon: "brain" },
     { href: "/generate", label: "Generate", icon: "generate" },
+    { href: "/legal", label: "Legal", icon: "legal" },
   ]},
 ];
 
@@ -124,7 +125,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       <main className="main">{children}</main>
 
-      <Link href="/mentor" className="orb float" aria-label="Talk to your mentor" />
+      {path !== "/mentor" && <Link href="/mentor" className="orb float" aria-label="Talk to your mentor" />}
     </div>
   );
 }

@@ -58,8 +58,8 @@
   --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.6);
   --glow-purple: 0 0 40px rgba(139, 92, 246, 0.25);
 
-  --font-display: "SF Pro Display", -apple-system, system-ui, "Inter", "Segoe UI", sans-serif;
-  --font-body: -apple-system, system-ui, "SF Pro Text", "Inter", "Segoe UI", sans-serif;
+  --font-display: var(--font-fraunces), "Fraunces", Georgia, "Times New Roman", serif;
+  --font-body: var(--font-inter), -apple-system, system-ui, "Segoe UI", sans-serif;
   --z-nav: 50; --z-dock: 300; --z-modal: 500; --z-toast: 600;
 }
 
@@ -74,12 +74,31 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   min-height: 100vh;
-  /* ambient: two faint purple auras bleeding from corners over black */
+  position: relative;
+  /* ambient: layered aurora glows over near-black, with a subtle vignette */
+  background-color: var(--bg);
   background-image:
-    radial-gradient(900px 600px at 12% -5%, rgba(139, 92, 246, 0.10), transparent 60%),
-    radial-gradient(800px 700px at 100% 8%, rgba(139, 92, 246, 0.06), transparent 55%);
+    radial-gradient(1100px 720px at 8% -8%, rgba(139, 92, 246, 0.16), transparent 58%),
+    radial-gradient(900px 760px at 102% 4%, rgba(124, 58, 237, 0.12), transparent 55%),
+    radial-gradient(700px 620px at 50% 118%, rgba(91, 33, 182, 0.12), transparent 60%),
+    radial-gradient(1200px 1000px at 50% 50%, rgba(255, 255, 255, 0.015), transparent 70%);
   background-attachment: fixed;
 }
+/* fine film grain so the black has texture, not flatness. Very low opacity. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+}
+/* one soft drifting glow blob for depth */
+body::after {
+  content: ""; position: fixed; z-index: 0; pointer-events: none;
+  width: 60vw; height: 60vw; left: 60%; top: 30%;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.10), transparent 62%);
+  filter: blur(40px); animation: drift 26s ease-in-out infinite alternate;
+}
+@keyframes drift { from { transform: translate(-4%, -3%) scale(1); } to { transform: translate(6%, 5%) scale(1.12); } }
+/* keep real content above the ambient layers */
+.appframe, .login { position: relative; z-index: 1; }
 
 ::selection { background: var(--purple-soft); color: #fff; }
 a { color: inherit; text-decoration: none; }
@@ -104,6 +123,8 @@ em.accent, .grad { color: var(--purple-2); font-style: normal; }
   transition: border-color 0.3s var(--ease), transform 0.3s var(--ease), background 0.3s var(--ease);
 }
 .card:hover { border-color: var(--line-2); }
+a.card { cursor: pointer; }
+a.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .card.feature {
   background:
     linear-gradient(158deg, rgba(139, 92, 246, 0.16) 0%, rgba(139, 92, 246, 0.04) 60%),
