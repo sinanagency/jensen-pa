@@ -4,9 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
-import { DB, Task } from "@/lib/store";
+import { DB } from "@/lib/store";
 import { aed } from "@/lib/tax";
-import { Building2, Users, PartyPopper, ArrowRight, Sparkles, RefreshCw } from "lucide-react";
+import {
+  Building2, Users, PartyPopper, Wallet, CheckSquare, RefreshCw, ArrowRight,
+  MessageCircle, Mail, Library, FileText, Calendar,
+} from "lucide-react";
 
 function buildContext(db: DB): string {
   const open = db.tasks.filter((t) => !t.done);
@@ -14,126 +17,159 @@ function buildContext(db: DB): string {
   const income = db.finance.filter((f) => f.kind === "income").reduce((s, f) => s + f.amount, 0);
   const expense = db.finance.filter((f) => f.kind === "expense").reduce((s, f) => s + f.amount, 0);
   return [
-    `Goals: ${db.goals.join("; ") || "none set"}`,
+    `Goals: ${db.goals.join("; ") || "none"}`,
     `Venues: ${db.entities.filter((e) => e.kind === "venue").map((e) => e.name).join(", ")}`,
     `Clients: ${db.entities.filter((e) => e.kind === "client").map((e) => e.name).join(", ")}`,
     `Events: ${db.entities.filter((e) => e.kind === "event").map((e) => e.name).join(", ")}`,
-    `Urgent + important (Q1):\n${byQ(1).join("\n") || "none"}`,
-    `Important not urgent (Q2):\n${byQ(2).join("\n") || "none"}`,
-    `Net this period: ${aed(income - expense)} (income ${aed(income)}, expense ${aed(expense)})`,
-    `Upcoming: ${db.events.slice(0, 3).map((e) => `${e.title} (${e.date})`).join(", ")}`,
+    `Q1 urgent+important:\n${byQ(1).join("\n") || "none"}`,
+    `Net this period: ${aed(income - expense)}`,
   ].join("\n");
 }
 
 export default function Today() {
   const { db, mutate } = useDB();
-  const [brief, setBrief] = useState<string>("");
+  const [brief, setBrief] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function loadBrief(force = false) {
+  async function loadBrief() {
     if (!db) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/brief", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ context: buildContext(db) }),
-      });
+      const res = await fetch("/api/brief", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ context: buildContext(db) }) });
       const data = await res.json();
       if (data.brief) { setBrief(data.brief); sessionStorage.setItem("lr-brief", data.brief); }
-    } catch { /* keep silent on dashboard */ } finally { setLoading(false); }
+    } catch {} finally { setLoading(false); }
   }
-
   useEffect(() => {
     if (!db) return;
-    const cached = sessionStorage.getItem("lr-brief");
-    if (cached) setBrief(cached);
-    else loadBrief();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const c = sessionStorage.getItem("lr-brief");
+    if (c) setBrief(c); else loadBrief();
+    // eslint-disable-next-line
   }, [!!db]);
 
   if (!db) return <Shell><div className="muted">Loading…</div></Shell>;
 
-  const q1 = db.tasks.filter((t) => !t.done && t.quadrant === 1).slice(0, 4);
-  const income = db.finance.filter((f) => f.kind === "income").reduce((s, f) => s + f.amount, 0);
-  const expense = db.finance.filter((f) => f.kind === "expense").reduce((s, f) => s + f.amount, 0);
   const venues = db.entities.filter((e) => e.kind === "venue");
   const clients = db.entities.filter((e) => e.kind === "client");
   const events = db.entities.filter((e) => e.kind === "event");
+  const income = db.finance.filter((f) => f.kind === "income").reduce((s, f) => s + f.amount, 0);
+  const expense = db.finance.filter((f) => f.kind === "expense").reduce((s, f) => s + f.amount, 0);
+  const q1 = db.tasks.filter((t) => !t.done && t.quadrant === 1);
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
+  const tiles = [
+    { label: "Do first", value: q1.length, sub: "urgent + important", icon: CheckSquare, href: "/tasks" },
+    { label: "Venues", value: venues.length, sub: venues.map((v) => v.name).join(", ") || "none", icon: Building2, href: "/portfolio" },
+    { label: "Clients", value: clients.length, sub: clients.map((c) => c.name).join(", ") || "none", icon: Users, href: "/portfolio" },
+    { label: "Events", value: events.length, sub: events.map((e) => e.name).join(", ") || "none", icon: PartyPopper, href: "/portfolio" },
+  ];
+  const modules = [
+    { label: "Mentor", icon: MessageCircle, href: "/mentor" },
+    { label: "Mail", icon: Mail, href: "/mail" },
+    { label: "Documents", icon: Library, href: "/brain" },
+    { label: "Generate", icon: FileText, href: "/generate" },
+    { label: "Calendar", icon: Calendar, href: "/calendar" },
+  ];
+
   return (
     <Shell>
-      <div className="page-hero fade-up">
-        <div className="eyebrow">{greet}, Jensen</div>
-        <h1>Here is what matters today.</h1>
-      </div>
-
-      {/* Mentor brief — feature card */}
-      <div className="card feature fade-up" style={{ padding: 24, marginBottom: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-          <div className="orb sm" />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Your briefing</div>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>From Rencontre, your chief of staff</div>
-          </div>
-          <button className="btn ghost sm" onClick={() => loadBrief(true)} disabled={loading}>
-            <RefreshCw size={14} /> {loading ? "Thinking…" : "Refresh"}
-          </button>
+      {/* header: greeting + HUD */}
+      <div className="dash-head fade-up">
+        <div>
+          <div className="eyebrow">{greet}, Jensen</div>
+          <h1>Here is what matters today.</h1>
         </div>
-        <div style={{ whiteSpace: "pre-wrap", fontSize: 14.5, lineHeight: 1.66, color: "var(--ink-2)" }}>
-          {brief || (loading ? "Reading your day…" : "Open your briefing to see today at a glance.")}
-        </div>
-        <Link href="/mentor" className="btn purple sm" style={{ marginTop: 16 }}>
-          <Sparkles size={14} /> Talk it through
-        </Link>
+        <div className="hud"><div className="hud-ring" /><span>READY</span></div>
       </div>
 
-      <div className="grid cols-3" style={{ marginBottom: 18 }}>
-        <RollCard icon={<Building2 size={18} />} label="Venues" value={venues.length} href="/portfolio" sub={venues.map((v) => v.name).join(", ")} />
-        <RollCard icon={<Users size={18} />} label="Clients" value={clients.length} href="/portfolio" sub={clients.map((c) => c.name).join(", ")} />
-        <RollCard icon={<PartyPopper size={18} />} label="Events" value={events.length} href="/portfolio" sub={events.map((e) => e.name).join(", ")} />
-      </div>
-
-      <div className="grid cols-2">
-        <div className="card" style={{ padding: 22 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontWeight: 600 }}>Do first <span className="pill" style={{ marginLeft: 8 }}>Q1 · urgent + important</span></div>
-            <Link href="/tasks" className="muted" style={{ fontSize: 13 }}>All tasks →</Link>
+      {/* insight strip: the mentor briefing */}
+      <div className="card insight fade-up">
+        <div className="orb sm" style={{ flex: "none" }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 4 }}>Rencontre, your chief of staff</div>
+          <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--ink-2)", whiteSpace: "pre-wrap" }}>
+            {brief || (loading ? "Reading your day…" : "Open your briefing.")}
           </div>
-          {q1.length === 0 && <div className="muted" style={{ fontSize: 14 }}>Nothing urgent. Protect your Q2 time.</div>}
-          {q1.map((t) => (
-            <label key={t.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", borderTop: "1px solid var(--line)", cursor: "pointer" }}>
-              <input type="checkbox" checked={t.done} onChange={() => mutate((d) => { const x = d.tasks.find((y) => y.id === t.id); if (x) x.done = !x.done; })} style={{ width: 18, height: 18, marginTop: 1, accentColor: "var(--purple)" }} />
-              <span style={{ fontSize: 14.5 }}>{t.title}</span>
-            </label>
+        </div>
+        <button className="btn ghost sm" onClick={loadBrief} disabled={loading} style={{ flex: "none" }}><RefreshCw size={13} /> {loading ? "…" : "Refresh"}</button>
+      </div>
+
+      {/* bento: stat tiles (2/3) + priority feed (1/3) */}
+      <div className="bento">
+        <div className="tiles">
+          {tiles.map((t) => (
+            <Link key={t.label} href={t.href} className="card tile">
+              <div className="tile-top"><span className="tile-label">{t.label}</span><span className="chip"><t.icon size={15} /></span></div>
+              <div className="tile-val">{t.value}</div>
+              <div className="tile-sub">{t.sub}</div>
+            </Link>
           ))}
         </div>
 
-        <div className="card" style={{ padding: 22 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Net this period</div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 38, letterSpacing: "-0.02em" }} className={income - expense >= 0 ? "accent" : ""}>
-            {aed(income - expense)}
-          </div>
-          <div style={{ display: "flex", gap: 18, marginTop: 14, fontSize: 13 }}>
+        <div className="card feed">
+          <div className="feed-head"><span>Do first</span><Link href="/tasks" className="muted" style={{ fontSize: 12.5 }}>All →</Link></div>
+          {q1.length === 0 && <div className="muted" style={{ fontSize: 13.5, padding: "8px 0" }}>Nothing urgent. Protect your focus time.</div>}
+          {q1.slice(0, 6).map((t) => (
+            <label key={t.id} className="feed-row">
+              <input type="checkbox" checked={t.done} onChange={() => mutate((d) => { const x = d.tasks.find((y) => y.id === t.id); if (x) x.done = !x.done; })} />
+              <span>{t.title}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* finance strip + module tiles */}
+      <div className="bento2">
+        <div className="card fin">
+          <div className="tile-label">Net this period</div>
+          <div className="fin-val accent">{aed(income - expense)}</div>
+          <div style={{ display: "flex", gap: 20, marginTop: 10, fontSize: 12.5 }}>
             <div><div className="muted">Income</div><div style={{ color: "var(--success)" }}>{aed(income)}</div></div>
             <div><div className="muted">Expense</div><div style={{ color: "var(--danger)" }}>{aed(expense)}</div></div>
           </div>
-          <Link href="/finance" className="btn ghost sm" style={{ marginTop: 18 }}>Open finance <ArrowRight size={14} /></Link>
+          <Link href="/finance" className="btn ghost sm" style={{ marginTop: 14 }}>Open finance <ArrowRight size={13} /></Link>
+        </div>
+        <div className="mods">
+          {modules.map((m) => (
+            <Link key={m.label} href={m.href} className="card mod">
+              <span className="chip"><m.icon size={16} /></span>
+              <span>{m.label}</span>
+            </Link>
+          ))}
         </div>
       </div>
-    </Shell>
-  );
-}
 
-function RollCard({ icon, label, value, sub, href }: { icon: React.ReactNode; label: string; value: number; sub: string; href: string }) {
-  return (
-    <Link href={href} className="card" style={{ padding: 20, display: "block" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", marginBottom: 10 }}>
-        {icon}<span style={{ fontSize: 13 }}>{label}</span>
-      </div>
-      <div style={{ fontFamily: "var(--font-display)", fontSize: 32 }}>{value}</div>
-      <div className="faint" style={{ fontSize: 12, marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub || "Nothing yet"}</div>
-    </Link>
+      <style>{`
+        .dash-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+        .dash-head h1{margin-top:6px}
+        .hud{display:flex;flex-direction:column;align-items:center;gap:6px}
+        .hud-ring{width:64px;height:64px;border-radius:50%;border:1.5px solid var(--purple-line);position:relative;
+          box-shadow:0 0 30px var(--purple-glow), inset 0 0 22px rgba(124,107,176,.18)}
+        .hud-ring::after{content:"";position:absolute;inset:11px;border-radius:50%;border:1px solid rgba(255,255,255,.12);
+          background:radial-gradient(circle at 40% 35%, rgba(169,159,208,.5), rgba(124,107,176,.12) 60%, transparent)}
+        .hud span{font-size:9.5px;letter-spacing:.28em;color:var(--purple-2)}
+        .insight{display:flex;gap:14px;align-items:center;padding:16px 18px;margin-bottom:16px}
+        .bento{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px}
+        .tiles{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+        .tile{padding:18px;display:block}
+        .tile-top{display:flex;align-items:center;justify-content:space-between}
+        .tile-label{font-size:12.5px;color:var(--muted)}
+        .chip{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--purple-soft);color:var(--purple-2);border:1px solid var(--purple-line)}
+        .tile-val{font-family:var(--font-display);font-size:34px;margin-top:12px;line-height:1}
+        .tile-sub{font-size:11.5px;color:var(--faint);margin-top:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .feed{padding:18px;display:flex;flex-direction:column}
+        .feed-head{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px;margin-bottom:6px}
+        .feed-row{display:flex;gap:11px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line);font-size:13.8px;cursor:pointer}
+        .feed-row input{width:17px;height:17px;margin-top:1px;accent-color:var(--purple)}
+        .bento2{display:grid;grid-template-columns:1fr 2fr;gap:14px}
+        .fin{padding:18px}
+        .fin-val{font-family:var(--font-display);font-size:30px;margin-top:8px}
+        .mods{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+        .mod{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:18px 8px;font-size:13px;color:var(--ink-2)}
+        .mod .chip{width:38px;height:38px;border-radius:11px}
+        @media(max-width:900px){.bento,.bento2{grid-template-columns:1fr}.tiles{grid-template-columns:1fr 1fr}.mods{grid-template-columns:repeat(3,1fr)}.dash-head .hud{display:none}}
+      `}</style>
+    </Shell>
   );
 }

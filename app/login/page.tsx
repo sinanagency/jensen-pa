@@ -38,7 +38,7 @@ export default function LoginPage() {
           transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         />
         <div className="word"><span>LA RENCONTRE</span><span className="portal">PORTAL</span></div>
-        <div className="tag">Hospitality, run by one assistant.</div>
+        <div className="tag">Your chief of staff. Run the whole house from one place.</div>
 
         <form onSubmit={submit} className="card">
           <label>Passphrase</label>
