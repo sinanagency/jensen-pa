@@ -109,25 +109,33 @@ h1 { font-size: clamp(28px, 4vw, 44px); line-height: 1.05; }
 em.accent, .grad { color: var(--purple-2); font-style: normal; }
 
 /* ---------- glass card ---------- */
+/* LIGHT cards on the dark 3D shell. Re-scope text vars inside a card so children flip to dark automatically. */
 .card {
   position: relative;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  --ink: #16171d; --ink-2: #41454f; --muted: #71757f; --faint: #9aa0aa;
+  --line: rgba(18, 20, 28, 0.10); --line-2: rgba(18, 20, 28, 0.18);
+  --purple-2: #5b4b8a; --purple-soft: rgba(124, 107, 176, 0.12);
+  background: #f5f6f9;
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: var(--radius);
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 8px 30px rgba(0,0,0,0.35);
-  transition: border-color 0.25s var(--ease), transform 0.25s var(--ease), background 0.25s var(--ease);
+  color: var(--ink);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
 }
-.card:hover { border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.085); }
+.card .input, .card input[type="text"], .card input[type="password"], .card input[type="email"],
+.card input[type="number"], .card input[type="date"], .card input[type="time"], .card select, .card textarea {
+  background: #ffffff; border: 1px solid rgba(18, 20, 28, 0.16); color: var(--ink); box-shadow: none;
+}
+.card .input:focus, .card input:focus, .card select:focus, .card textarea:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(124,107,176,0.18); }
+.card .btn.ghost { background: #ffffff; border: 1px solid rgba(18,20,28,0.16); color: var(--ink); }
+.card .pill { background: rgba(18,20,28,0.05); border: 1px solid rgba(18,20,28,0.12); color: var(--ink-2); }
+.card .pill.accent { background: rgba(124,107,176,0.12); border-color: rgba(124,107,176,0.3); color: var(--purple); }
+.card .chip { background: rgba(124,107,176,0.12); border: 1px solid rgba(124,107,176,0.28); color: var(--purple); }
+.card .accent { color: var(--purple); }
+.card:hover { transform: translateY(-2px); box-shadow: 0 24px 58px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.9); }
 a.card { cursor: pointer; }
 a.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
-.card.feature {
-  background:
-    linear-gradient(158deg, rgba(139, 92, 246, 0.16) 0%, rgba(139, 92, 246, 0.04) 60%),
-    var(--glass-2);
-  border-color: var(--purple-line);
-}
+.card.feature { background: linear-gradient(180deg, #ffffff, #edeff6); border-color: rgba(124, 107, 176, 0.3); }
 
 /* ---------- buttons ---------- */
 .btn {
