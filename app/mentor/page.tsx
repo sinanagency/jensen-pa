@@ -77,7 +77,7 @@ export default function Mentor() {
 
   return (
     <Shell>
-      <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 56px)" }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 150px)", minHeight: 420 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, paddingBottom: 14, borderBottom: "1px solid var(--line)" }}>
           <div className="orb sm" />
           <div>
