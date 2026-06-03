@@ -5,12 +5,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid, MessageCircle, Building2, CheckSquare, Wallet, Library,
-  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft, ScrollText, Mail,
+  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft, ScrollText, Mail, ShoppingBag,
 } from "lucide-react";
 
 const ICONS: Record<string, any> = {
   today: LayoutGrid, mentor: MessageCircle, portfolio: Building2, tasks: CheckSquare,
-  finance: Wallet, brain: Library, generate: FileText, calendar: Calendar, legal: ScrollText, mail: Mail,
+  finance: Wallet, brain: Library, generate: FileText, calendar: Calendar, legal: ScrollText, mail: Mail, store: ShoppingBag,
 };
 
 const PILLS = [
@@ -24,6 +24,7 @@ const GROUPS = [
     { href: "/tasks", label: "Tasks", icon: "tasks" },
     { href: "/calendar", label: "Calendar", icon: "calendar" },
     { href: "/finance", label: "Finance", icon: "finance" },
+    { href: "/shopify", label: "Store", icon: "store" },
   ]},
   { group: "Studio", items: [
     { href: "/brain", label: "Documents", icon: "brain" },
