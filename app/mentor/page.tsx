@@ -15,7 +15,15 @@ const SUGGESTIONS = [
 ];
 
 function entitySummary(db: DB): string {
-  return db.entities.map((e) => `${e.kind}: ${e.name}${e.status ? ` (${e.status})` : ""}`).join("\n");
+  const ents = db.entities.map((e) => `${e.kind}: ${e.name}${e.status ? ` (${e.status})` : ""}`).join("\n");
+  const p = db.prefs || {};
+  const prefs = [
+    p.workStyle && `How he works: ${p.workStyle}`,
+    p.tone && `Tone he prefers: ${p.tone}`,
+    p.hours && `Working hours / focus: ${p.hours}`,
+    p.extra && `Always honour: ${p.extra}`,
+  ].filter(Boolean).join("\n");
+  return [prefs && `HIS PREFERENCES:\n${prefs}`, ents && `ENTITIES:\n${ents}`].filter(Boolean).join("\n\n");
 }
 
 export default function Mentor() {
@@ -27,6 +35,13 @@ export default function Mentor() {
 
   useEffect(() => { if (db && msgs.length === 0) setMsgs(db.chat.map((c) => ({ role: c.role, content: c.content }))); /* eslint-disable-next-line */ }, [!!db]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs]);
+  // Handoff from the command palette ("Ask the mentor: …").
+  useEffect(() => {
+    if (!db) return;
+    const ask = sessionStorage.getItem("lr-ask");
+    if (ask) { sessionStorage.removeItem("lr-ask"); send(ask); }
+    /* eslint-disable-next-line */
+  }, [!!db]);
 
   async function ragContext(query: string): Promise<string> {
     try {

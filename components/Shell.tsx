@@ -5,12 +5,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid, MessageCircle, Building2, CheckSquare, Wallet, Library,
-  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft, ScrollText, Mail, ShoppingBag,
+  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft, ScrollText, Mail, ShoppingBag, StickyNote, User, SlidersHorizontal,
 } from "lucide-react";
+import CommandPalette from "@/components/CommandPalette";
 
 const ICONS: Record<string, any> = {
   today: LayoutGrid, mentor: MessageCircle, portfolio: Building2, tasks: CheckSquare,
   finance: Wallet, brain: Library, generate: FileText, calendar: Calendar, legal: ScrollText, mail: Mail, store: ShoppingBag,
+  notes: StickyNote, contacts: User,
 };
 
 const PILLS = [
@@ -25,9 +27,11 @@ const GROUPS = [
     { href: "/calendar", label: "Calendar", icon: "calendar" },
     { href: "/finance", label: "Finance", icon: "finance" },
     { href: "/shopify", label: "Store", icon: "store" },
+    { href: "/contacts", label: "Contacts", icon: "contacts" },
   ]},
   { group: "Studio", items: [
     { href: "/brain", label: "Documents", icon: "brain" },
+    { href: "/notes", label: "Notes", icon: "notes" },
     { href: "/generate", label: "Generate", icon: "generate" },
     { href: "/legal", label: "Legal", icon: "legal" },
   ]},
@@ -104,9 +108,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="nav-right">
-            <Link href="/mentor" className="omnibox" title="Ask your mentor">
-              <Search size={15} /> <span>Ask anything…</span>
-            </Link>
+            <button className="omnibox" title="Search or ask (Cmd K)" onClick={() => window.dispatchEvent(new Event("open-cmdk"))}>
+              <Search size={15} /> <span>Search or ask…</span> <kbd style={{ fontFamily: "inherit", background: "var(--glass-2)", border: "1px solid var(--line)", borderRadius: 6, padding: "1px 6px", fontSize: 11, color: "var(--muted)" }}>⌘K</kbd>
+            </button>
             <div className="dropwrap" ref={avRef}>
               <button className="avatar" onClick={() => setAvOpen(!avOpen)} title="Account">J</button>
               {avOpen && (
@@ -115,6 +119,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                     <div style={{ fontSize: 13.5, fontWeight: 600 }}>Jensen</div>
                     <div style={{ fontSize: 11.5, color: "var(--faint)" }}>Founder · La Rencontre</div>
                   </div>
+                  <Link href="/settings" onClick={() => setAvOpen(false)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", color: "var(--ink-2)", padding: "9px 11px", borderRadius: 11, fontSize: 13.5 }}>
+                    <SlidersHorizontal size={15} /> Settings
+                  </Link>
                   <button onClick={logout} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: 0, color: "var(--ink-2)", padding: "9px 11px", borderRadius: 11, fontSize: 13.5, fontFamily: "inherit" }}>
                     <LogOut size={15} /> Sign out
                   </button>
@@ -128,6 +135,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       <main className="main">{children}</main>
 
       {path !== "/mentor" && <Link href="/mentor" className="orb float" aria-label="Talk to your mentor" />}
+      <CommandPalette />
     </div>
   );
 }

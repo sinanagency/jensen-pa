@@ -60,12 +60,46 @@ export type CalEvent = {
 
 export type ChatTurn = { role: "user" | "assistant"; content: string; ts: number };
 
+export type NoteKind = "note" | "journal" | "idea" | "link";
+export type Note = {
+  id: string;
+  kind: NoteKind;
+  title?: string;
+  body: string;
+  url?: string;
+  entityId?: string;
+  pinned?: boolean;
+  createdAt: number;
+};
+
+export type Contact = {
+  id: string;
+  name: string;
+  company?: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  notes?: string;
+  entityId?: string;
+  createdAt: number;
+};
+
+export type Prefs = {
+  workStyle?: string; // how he likes to work
+  tone?: string;      // how the mentor should speak to him
+  hours?: string;     // working hours / focus time
+  extra?: string;     // anything else to always honour
+};
+
 export type DB = {
   entities: Entity[];
   tasks: Task[];
   docs: BrainDoc[];
   finance: FinanceRecord[];
   events: CalEvent[];
+  notes: Note[];
+  contacts: Contact[];
+  prefs: Prefs;
   chat: ChatTurn[];
   goals: string[];
   legalBlueprint?: string;
@@ -75,7 +109,7 @@ export type DB = {
 const KEY = "larencontre.db.v1";
 
 function empty(): DB {
-  return { entities: [], tasks: [], docs: [], finance: [], events: [], chat: [], goals: [], onboarded: false };
+  return { entities: [], tasks: [], docs: [], finance: [], events: [], notes: [], contacts: [], prefs: {}, chat: [], goals: [], onboarded: false };
 }
 
 export function load(): DB {
@@ -159,7 +193,7 @@ function seed(): DB {
     { id: uid(), title: "Al Habtoor steering call", entityId: clients[0].id, date: isoIn(1), time: "11:00", createdAt: now },
   ];
   return {
-    entities: all, tasks, docs: [], finance, events: events2, chat: [],
+    entities: all, tasks, docs: [], finance, events: events2, notes: [], contacts: [], prefs: {}, chat: [],
     goals: ["Land 3 new venue clients this quarter", "Get Cordré open by Q1", "Replace the freelancer stack"],
     onboarded: false,
   };
