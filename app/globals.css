@@ -28,12 +28,14 @@
   --muted: #8a8a96;      /* tertiary / labels */
   --faint: #5e5e68;      /* faintest, still AA on black */
 
-  /* purple — the single accent. Used sparingly. */
-  --purple: #8b5cf6;
-  --purple-2: #a78bfa;
-  --purple-soft: rgba(139, 92, 246, 0.14);
-  --purple-line: rgba(139, 92, 246, 0.30);
-  --purple-glow: rgba(139, 92, 246, 0.35);
+  /* mild purple — the accent. Muted, lux, never neon. */
+  --purple: #7c6bb0;
+  --purple-2: #a99fd0;
+  --purple-soft: rgba(124, 107, 176, 0.16);
+  --purple-line: rgba(124, 107, 176, 0.34);
+  --purple-glow: rgba(124, 107, 176, 0.30);
+  /* gray he is serving */
+  --gray-surface: rgba(255, 255, 255, 0.045);
 
   /* status (kept low-chroma to sit in the dark theme) */
   --success: #34d399;
@@ -75,13 +77,15 @@ body {
   text-rendering: optimizeLegibility;
   min-height: 100vh;
   position: relative;
-  /* ambient: layered aurora glows over near-black, with a subtle vignette */
-  background-color: var(--bg);
+  /* command-center backdrop: a faint perspective grid + soft mild-purple glow over near-black */
+  background-color: #08070a;
   background-image:
-    radial-gradient(1100px 720px at 8% -8%, rgba(139, 92, 246, 0.16), transparent 58%),
-    radial-gradient(900px 760px at 102% 4%, rgba(124, 58, 237, 0.12), transparent 55%),
-    radial-gradient(700px 620px at 50% 118%, rgba(91, 33, 182, 0.12), transparent 60%),
-    radial-gradient(1200px 1000px at 50% 50%, rgba(255, 255, 255, 0.015), transparent 70%);
+    radial-gradient(1000px 700px at 12% -6%, rgba(124, 107, 176, 0.16), transparent 56%),
+    radial-gradient(900px 760px at 100% 6%, rgba(124, 107, 176, 0.10), transparent 55%),
+    radial-gradient(900px 700px at 50% 116%, rgba(124, 107, 176, 0.10), transparent 60%),
+    linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+  background-size: auto, auto, auto, 54px 54px, 54px 54px;
   background-attachment: fixed;
 }
 /* fine film grain so the black has texture, not flatness. Very low opacity. */
@@ -114,15 +118,18 @@ em.accent, .grad { color: var(--purple-2); font-style: normal; }
 
 /* ---------- glass card ---------- */
 .card {
-  background: var(--glass);
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.018)),
+    rgba(14, 13, 18, 0.55);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  box-shadow: var(--shadow-sm);
-  transition: border-color 0.3s var(--ease), transform 0.3s var(--ease), background 0.3s var(--ease);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.05);
+  transition: border-color 0.3s var(--ease), transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
 }
-.card:hover { border-color: var(--line-2); }
+.card:hover { border-color: var(--purple-line); box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.07); }
 a.card { cursor: pointer; }
 a.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .card.feature {

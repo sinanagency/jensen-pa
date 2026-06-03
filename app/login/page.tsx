@@ -37,7 +37,7 @@ export default function LoginPage() {
           initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         />
-        <div className="word"><span>LA</span><span>RENCONTRE</span></div>
+        <div className="word"><span>LA RENCONTRE</span><span className="portal">PORTAL</span></div>
         <div className="tag">Hospitality, run by one assistant.</div>
 
         <form onSubmit={submit} className="card">
@@ -53,13 +53,14 @@ export default function LoginPage() {
       </motion.div>
 
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap');
         .lr-login{position:fixed;inset:0;overflow:hidden;display:grid;place-items:center;background:#08070a;color:#fff;font-family:var(--font-body,system-ui)}
         .bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:saturate(118%) brightness(1.14);z-index:0}
         .veil{position:absolute;inset:0;z-index:1;background:radial-gradient(42% 46% at 50% 46%,rgba(8,7,10,.74),rgba(8,7,10,.32) 70%,rgba(8,7,10,.12))}
         .stage{position:relative;z-index:2;text-align:center;width:min(420px,90vw)}
         .mark{width:74px;height:74px;object-fit:contain;filter:drop-shadow(0 8px 30px rgba(167,139,250,.4));margin-bottom:20px}
-        .word{display:flex;flex-direction:column;line-height:.96;font-family:Georgia,'Times New Roman',serif;font-weight:400;letter-spacing:.22em;font-size:30px;color:#f4f2f7}
-        .word span:last-child{font-size:26px;letter-spacing:.18em;color:#cfc9d8}
+        .word{display:flex;flex-direction:column;align-items:center;line-height:1.0;font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;letter-spacing:.16em;font-size:clamp(44px,7vw,72px);color:#f6f4fa}
+        .word .portal{font-size:clamp(15px,2.2vw,20px);letter-spacing:.55em;font-weight:500;color:#b3aac6;margin-top:10px;font-family:-apple-system,system-ui,sans-serif;text-indent:.55em}
         .tag{margin-top:16px;color:#a9a2b6;font-size:13.5px;letter-spacing:.02em}
         .card{margin-top:34px;text-align:left;background:rgba(20,18,26,.55);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:22px;backdrop-filter:blur(16px)}
         .card label{font-size:12px;color:#9a93a8;letter-spacing:.04em;text-transform:uppercase}
