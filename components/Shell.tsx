@@ -30,6 +30,7 @@ const GROUPS = [
     { href: "/contacts", label: "Contacts", icon: "contacts" },
   ]},
   { group: "Studio", items: [
+    { href: "/meetings", label: "Meetings", icon: "calendar" },
     { href: "/brain", label: "Documents", icon: "brain" },
     { href: "/notes", label: "Notes", icon: "notes" },
     { href: "/generate", label: "Generate", icon: "generate" },
@@ -73,10 +74,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <div className="appframe">
       <header className="topnav">
         <div className="topnav-inner">
-          <button className="iconbtn" onClick={() => router.back()} title="Back"><ChevronLeft size={18} /></button>
           <Link href="/" className="brand">
-            <img src="/monogram.svg" alt="" width={28} height={28} />
-            <span className="brand-name">La Rencontre</span>
+            <img src="/larencontre-mark.png" alt="" width={26} height={26} style={{ objectFit: "contain" }} />
+            <span className="brand-name">LA RENCONTRE</span>
           </Link>
 
           <nav className="navpills" ref={ref}>
