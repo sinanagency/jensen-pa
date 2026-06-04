@@ -67,44 +67,69 @@ export default function InboxPage() {
       </p>
       {err && <div className="card" style={{ padding: 12, marginBottom: 12, color: "var(--danger)" }}>{err}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
+      <div className="quad-grid">
         {QUADS.map(({ q, title, sub, accent }) => {
           const items = byQuad(q);
           return (
-            <div key={q} className="card" style={{ padding: 16, borderTop: `2px solid ${accent}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14.5 }}>Q{q} · {title}</div>
-                  <div className="faint" style={{ fontSize: 11.5 }}>{sub}</div>
+            <div key={q} className="card quad" style={{ borderTop: `2px solid ${accent}` }}>
+              <div className="quad-head">
+                <div style={{ minWidth: 0 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>Q{q} · {title}</span>
+                  <span className="faint" style={{ fontSize: 10.5, marginLeft: 6 }}>{sub}</span>
                 </div>
-                <span className="pill" style={{ height: 22 }}>{items.length}</span>
+                <span className="pill" style={{ height: 20, fontSize: 11 }}>{items.length}</span>
               </div>
 
-              {items.length === 0 && <div className="faint" style={{ fontSize: 12.5, padding: "8px 0" }}>Clear.</div>}
-
-              {items.map((m) => (
-                <div key={m.id} style={{ borderTop: "1px solid var(--line)", padding: "9px 0" }}>
-                  <div style={{ display: "flex", gap: 8, justifyContent: "space-between", cursor: "pointer" }}
-                    onClick={() => setOpenId(openId === m.id ? null : m.id)}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.subject || "(no subject)"}</div>
-                      <div className="faint" style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from} · {m.accountEmail}</div>
-                      {m.summary && <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{m.summary}</div>}
+              <div className="quad-list">
+                {items.length === 0 && <div className="faint" style={{ fontSize: 11.5, padding: "6px 8px" }}>Clear.</div>}
+                {items.map((m) => (
+                  <div key={m.id}>
+                    <div className="mrow" onClick={() => setOpenId(openId === m.id ? null : m.id)}>
+                      <span className="mdot" data-reply={m.needsReply ? "true" : "false"} />
+                      <span className="msubj">{m.subject || "(no subject)"}</span>
+                      <span className="mwho">{senderName(m.from)}</span>
                     </div>
-                    {m.needsReply && <span className="pill accent" style={{ height: 20, alignSelf: "flex-start", flex: "none" }}>Reply</span>}
+                    {openId === m.id && (
+                      <div className="mdetail">
+                        <div className="faint" style={{ fontSize: 11, marginBottom: 6 }}>
+                          {m.from} · {m.accountEmail}{m.summary ? ` — ${m.summary}` : ""}
+                        </div>
+                        <ReplyBox m={m} onDone={() => setOpenId(null)} />
+                      </div>
+                    )}
                   </div>
-                  {openId === m.id && <ReplyBox m={m} onDone={() => setOpenId(null)} />}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           );
         })}
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}
         .btn.ghost{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--fg, #f6f6f8)}
+        .quad-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+        @media (max-width:760px){.quad-grid{grid-template-columns:1fr}}
+        .quad{padding:0;overflow:hidden;display:flex;flex-direction:column}
+        .quad-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 14px 9px}
+        .quad-list{overflow-y:auto;max-height:clamp(190px,33vh,300px);padding:0 6px 8px}
+        .quad-list::-webkit-scrollbar{width:6px}
+        .quad-list::-webkit-scrollbar-thumb{background:rgba(120,120,140,.28);border-radius:3px}
+        .mrow{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:8px;cursor:pointer}
+        .mrow:hover{background:rgba(124,107,176,.10)}
+        .mdot{width:6px;height:6px;border-radius:50%;flex:none;background:rgba(18,20,28,.22)}
+        .mdot[data-reply="true"]{background:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.16)}
+        .msubj{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .mwho{font-size:11px;color:#8a8a96;flex:none;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .mdetail{padding:4px 8px 10px}
       `}</style>
     </Shell>
   );
+}
+
+function senderName(from: string): string {
+  if (!from) return "";
+  // strip an email in angle brackets, drop quotes, take the display name
+  const name = from.replace(/<[^>]*>/, "").replace(/["']/g, "").trim() || from;
+  return name.split(/\s+/).slice(0, 2).join(" ");
 }
 
 function ReplyBox({ m, onDone }: { m: Mail; onDone: () => void }) {
