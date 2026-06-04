@@ -5,7 +5,7 @@
 "use client";
 
 import { DB, uid } from "./store";
-import { addDoc, uid as docUid } from "./idb";
+import { addDoc, uid as docUid } from "./docs-client";
 
 export type DropResult = { ok: boolean; summary: string; destination?: string; error?: string };
 type Mutate = (fn: (d: DB) => void) => void;

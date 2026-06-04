@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
-import { Doc, addDoc, allDocs, deleteDoc, searchDocs, uid } from "@/lib/idb";
+import { Doc, addDoc, allDocs, deleteDoc, searchDocs, uid } from "@/lib/docs-client";
 import { UploadCloud, FileText, Trash2, Search, Loader2, Image as ImageIcon, Receipt, ScrollText, Download } from "lucide-react";
 
 const MAX_BYTES = 4 * 1024 * 1024; // 4MB per file (v1, client + serverless limit)
@@ -176,11 +176,11 @@ export default function Brain() {
         {docs.length === 0 && <div className="muted" style={{ fontSize: 14, padding: "10px 0" }}>No documents yet. Drop your first file above.</div>}
         {docs.map((d) => (
           <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderTop: "1px solid var(--line)" }}>
-            <span style={{ color: "var(--purple-2)" }}>{kindIcon(d.kind)}</span>
+            <span style={{ color: "var(--purple-2)" }}>{kindIcon(d.kind || "document")}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title}</div>
               <div className="faint" style={{ fontSize: 11.5 }}>
-                {d.kind}{entityName(d.entityId) ? ` · ${entityName(d.entityId)}` : ""} · {(d.size / 1024).toFixed(0)} KB · {d.chunks.length} chunk{d.chunks.length === 1 ? "" : "s"}
+                {d.kind}{entityName(d.entityId) ? ` · ${entityName(d.entityId)}` : ""} · {((d.size || 0) / 1024).toFixed(0)} KB · saved to brain
               </div>
             </div>
             {d.dataUrl && <a href={d.dataUrl} download={d.fileName} className="iconbtn" title="Download" onClick={(e) => e.stopPropagation()}><Download size={15} /></a>}

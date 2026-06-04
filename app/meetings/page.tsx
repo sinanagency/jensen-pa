@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
 import { uid as taskUid } from "@/lib/store";
-import { Doc, addDoc, allDocs, deleteDoc, searchDocs, uid } from "@/lib/idb";
+import { Doc, addDoc, allDocs, deleteDoc, searchDocs, uid } from "@/lib/docs-client";
 import { Mic, Square, Loader2, Search, Trash2, CheckCircle2, ListChecks, Pencil, FileEdit, Sparkles } from "lucide-react";
 
 type MeetingResult = { summary: string; decisions: string[]; tasks: { title: string; quadrant: number }[] };

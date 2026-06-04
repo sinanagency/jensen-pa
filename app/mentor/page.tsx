@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
 import { DB } from "@/lib/store";
-import { searchDocs } from "@/lib/idb";
+import { searchDocs } from "@/lib/docs-client";
 import { dropFile } from "@/lib/drop";
 import { Send, Upload, Loader2, CheckCircle2 } from "lucide-react";
 
