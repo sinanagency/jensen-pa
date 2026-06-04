@@ -15,8 +15,18 @@ const API = "https://api.anthropic.com/v1/messages";
 export type Turn = { role: "user" | "assistant"; content: any };
 export type Sender = { name: string; role: "owner" | "admin" };
 
-async function buildSystem(lastUser: string, sender?: Sender, channel?: string): Promise<string> {
+async function buildSystem(lastUser: string, sender?: Sender, onboarding = false, channel?: string): Promise<string> {
   const s = sender || { name: "Jensen", role: "owner" as const };
+  if (onboarding) {
+    return [
+      `You are Rencontre, the private concierge and chief of staff for La Rencontre, a luxury F&B hospitality consultancy in Dubai. Speak in the first person, warm, sharp, discreet, calm.`,
+      `You are CURRENTLY speaking with ${s.name}, the founder and principal you serve. Address him as ${s.name}.`,
+      `IMPORTANT, YOU ARE IN ONBOARDING. You are not switched on to run his operations yet. In this phase your ONLY job is to listen and learn. Warmly invite him to tell you everything: his goals, his venues, clients and events, what he wants you to take off his plate, how he likes to work, what is on his mind, what would make his life easier. Ask thoughtful follow ups. Make him feel genuinely heard.`,
+      `You CANNOT take actions yet. Do NOT claim to create, schedule, send, record, or file anything, and do NOT promise to do tasks. If he asks you to DO something, acknowledge it warmly, tell him you have noted it and are capturing everything so you will handle it the moment you are switched on, and that you are still being set up for him. Never pretend to have done something.`,
+      `Keep it human and conversational, never a form or a checklist. Everything he shares with you now is being captured so you are ready for him when you go live.`,
+      NO_DASHES,
+    ].join("\n\n");
+  }
   const waFormat =
     channel === "whatsapp"
       ? `FORMAT FOR WHATSAPP: keep replies short and scannable (a few lines). Use WhatsApp formatting ONLY: *single asterisks* for bold, _underscores_ for italics. Never use markdown headings (#), never use **double asterisks**, never use tables. Bullets as "• ".`
@@ -54,21 +64,21 @@ async function buildSystem(lastUser: string, sender?: Sender, channel?: string):
   ].filter(Boolean).join("\n\n");
 }
 
-async function callRaw(system: string, messages: Turn[], maxTokens = 1800) {
+async function callRaw(system: string, messages: Turn[], maxTokens = 1800, withTools = true) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("ANTHROPIC_API_KEY not set");
-  const tools = TOOLS.map((t, i) => (i === TOOLS.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t));
+  const body: any = {
+    model: SONNET,
+    max_tokens: maxTokens,
+    temperature: 0.4,
+    system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+    messages,
+  };
+  if (withTools) body.tools = TOOLS.map((t, i) => (i === TOOLS.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t));
   const res = await fetch(API, {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({
-      model: SONNET,
-      max_tokens: maxTokens,
-      temperature: 0.4,
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-      tools,
-      messages,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return res.json();
@@ -79,42 +89,54 @@ export type ConciergeResult = { reply: string; toolsUsed: string[] };
 export async function runConcierge(input: { messages: { role: "user" | "assistant"; content: string }[]; channel?: string; sender?: Sender }): Promise<ConciergeResult> {
   const history = input.messages.filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-16);
   const lastUser = [...history].reverse().find((m) => m.role === "user")?.content || "";
-  const system = await buildSystem(lastUser, input.sender, input.channel);
+  // Onboarding gate: until prefs.onboarding is explicitly turned off, the OWNER
+  // (Jensen) gets a listen-only welcome — no tools, no actions, just gather his
+  // goals/needs. The admin (Taona) always runs at full power so he can build/test.
+  const prefs = await ops.getPrefs().catch(() => ({} as any));
+  const onboarding = ((input.sender?.role ?? "owner") === "owner") && prefs?.onboarding !== false;
+  const system = await buildSystem(lastUser, input.sender, onboarding, input.channel);
 
   const convo: Turn[] = history.map((m) => ({ role: m.role, content: m.content }));
   const runs: { name: string; ok: boolean }[] = [];
   let reply = "";
 
-  for (let i = 0; i < 6; i++) {
-    const data = await callRaw(system, convo);
+  if (onboarding) {
+    // Listen-only: one conversational turn, tools disabled, nothing executed.
+    const data = await callRaw(system, convo, 1000, false);
     const blocks: any[] = data.content || [];
-    const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
-    const toolUses = blocks.filter((b) => b.type === "tool_use");
-    if (text) reply = text;
-    if (data.stop_reason !== "tool_use" || toolUses.length === 0) break;
+    reply = blocks.filter((b) => b.type === "text").map((b) => b.text).join("").trim()
+      || `I'm here, ${input.sender?.name || "Jensen"}. Tell me everything you'd want me to take off your plate and how you like to work. I'm capturing all of it so I'm ready the moment we go live.`;
+  } else {
+    for (let i = 0; i < 6; i++) {
+      const data = await callRaw(system, convo);
+      const blocks: any[] = data.content || [];
+      const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+      const toolUses = blocks.filter((b) => b.type === "tool_use");
+      if (text) reply = text;
+      if (data.stop_reason !== "tool_use" || toolUses.length === 0) break;
 
-    convo.push({ role: "assistant", content: blocks });
-    const toolResults: any[] = [];
-    for (const tu of toolUses) {
-      const r = await runAction(tu.name, tu.input || {});
-      runs.push({ name: tu.name, ok: r.ok });
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: tu.id,
-        content: JSON.stringify(r.ok ? r.result : { error: r.error }).slice(0, 6000),
-        is_error: !r.ok,
-      });
+      convo.push({ role: "assistant", content: blocks });
+      const toolResults: any[] = [];
+      for (const tu of toolUses) {
+        const r = await runAction(tu.name, tu.input || {});
+        runs.push({ name: tu.name, ok: r.ok });
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: JSON.stringify(r.ok ? r.result : { error: r.error }).slice(0, 6000),
+          is_error: !r.ok,
+        });
+      }
+      convo.push({ role: "user", content: toolResults });
     }
-    convo.push({ role: "user", content: toolResults });
+    if (!reply) reply = "Done.";
+
+    // anti-fake-done check (only when actions were possible)
+    try {
+      const v = await verifyReply(reply, runs);
+      if (!v.ok) reply += `\n\n(Honest note: I could not fully confirm that action just now. Tell me to retry if needed.)`;
+    } catch { /* fail-open */ }
   }
-
-  if (!reply) reply = "Done.";
-
-  // anti-fake-done check
-  try {
-    const v = await verifyReply(reply, runs);
-    if (!v.ok) reply += `\n\n(Honest note: I could not fully confirm that action just now. Tell me to retry if needed.)`;
-  } catch { /* fail-open */ }
 
   // persist to the shared chat log + capture durable facts (non-blocking best-effort)
   const ch = input.channel || "portal";

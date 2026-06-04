@@ -5,6 +5,7 @@
 
 import { pbkdf2Sync, randomBytes, timingSafeEqual as tEq, randomUUID } from "node:crypto";
 import { kvGet, kvSet } from "./db";
+import { readSubject } from "./auth";
 
 export type Role = "admin" | "owner";
 export type Account = {
@@ -57,6 +58,16 @@ export async function findAccount(identifier: string): Promise<Account | null> {
 
 export function toSafe(a: Account): SafeAccount {
   return { id: a.id, name: a.name, email: a.email, role: a.role };
+}
+
+// Resolve the concierge sender ({name, role}) from a session token's subject
+// (the account id), so the portal knows WHO is talking — same shape as the
+// WhatsApp whoIs(). Returns undefined if not resolvable (caller defaults to owner).
+export async function senderFromToken(token?: string): Promise<{ name: string; role: Role } | undefined> {
+  const sub = readSubject(token);
+  if (!sub) return undefined;
+  const a = (await getAccounts()).find((x) => x.id === sub);
+  return a ? { name: a.name, role: a.role } : undefined;
 }
 
 export async function hasOwner(): Promise<boolean> {
