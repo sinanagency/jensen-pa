@@ -48,6 +48,12 @@ export async function kvGet<T = any>(key: string, fallback: T): Promise<T> {
   return (res.data?.value as T) ?? fallback;
 }
 export async function kvSet(key: string, value: any): Promise<void> {
+  // null/undefined = unset → remove the key (kv.value is NOT NULL; absence reads back as the fallback)
+  if (value === null || value === undefined) {
+    const del = await admin().from("kv").delete().eq("key", key);
+    if (del.error) throw new Error(`kv unset ${key}: ${del.error.message}`);
+    return;
+  }
   const res = await admin().from("kv").upsert({ key, value, updated_at: Date.now() });
   if (res.error) throw new Error(`kv set ${key}: ${res.error.message}`);
 }
