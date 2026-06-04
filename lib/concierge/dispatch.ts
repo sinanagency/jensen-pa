@@ -6,6 +6,7 @@ import { recall, rememberFact, queryMemory } from "./brain";
 import { vatFromNet, corporateTax } from "../tax";
 import { askClaude, NO_DASHES, SONNET } from "../anthropic";
 import { dubaiToday, dubaiNow } from "../time";
+import { ordersContext } from "../shopify";
 
 type Result = any;
 
@@ -113,7 +114,7 @@ export async function runAction(name: string, input: any): Promise<{ ok: boolean
       case "update_prefs": { const cur = await ops.getPrefs(); result = await ops.setPrefs({ ...cur, ...input }); break; }
       case "set_goals": result = await ops.setGoals(input.goals); break;
       // store
-      case "store_summary": result = { connected: false, note: "Shopify not connected yet. Connect it under Store in the portal." }; break;
+      case "store_summary": { const summary = await ordersContext(); result = summary ? { connected: true, summary } : { connected: false, note: "Shopify store not reachable or not configured." }; break; }
       default: return { ok: false, error: `unknown tool ${name}` };
     }
     return { ok: true, result };

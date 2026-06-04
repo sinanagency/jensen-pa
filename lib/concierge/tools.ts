@@ -77,7 +77,7 @@ export const TOOLS: Tool[] = [
   { name: "set_goals", description: "Set Jensen's goals list.", input_schema: obj({ goals: { type: "array", items: { type: "string" } } }, ["goals"]) },
 
   // ---- Store ----
-  { name: "store_summary", description: "Shopify store revenue and order count (if connected).", input_schema: obj({}) },
+  { name: "store_summary", description: "Live Upaya Shopify data: order count, revenue, and recent orders with customer, items, fulfillment status and tracking. Use for any question about orders, sales, revenue, customers, or deliveries.", input_schema: obj({}) },
 ];
 
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
