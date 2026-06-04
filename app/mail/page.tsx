@@ -104,11 +104,11 @@ export default function MailPage() {
         <div className="mail-connect fade-up">
         <div className="page-hero" style={{ textAlign: "center", marginBottom: 8 }}><div className="eyebrow">Mail</div><h1>Connect your mailboxes.</h1></div>
         <p className="muted" style={{ marginBottom: 22, maxWidth: 520, textAlign: "center" }}>
-          Connect Outlook and Zoho with one click. Sign in, accept, done. You can add as many mailboxes as you like, and they all flow into your one inbox.
+          Add your mailboxes below. Type the email and password for each, and they all flow into your one inbox, sorted into four quadrants. Add as many as you like.
         </p>
         <MailboxOAuth />
-        <details open style={{ maxWidth: 480, width: "100%", marginTop: 18 }}>
-          <summary className="faint" style={{ cursor: "pointer", fontSize: 12.5 }}>Or connect with email + password (your larencontre.ae mailbox, Outlook app-password, Gmail)</summary>
+        <details style={{ maxWidth: 480, width: "100%", marginTop: 18 }}>
+          <summary className="faint" style={{ cursor: "pointer", fontSize: 12.5 }}>Advanced: open a single mailbox in a classic reader</summary>
         <div className="card feature" style={{ padding: 24, width: "100%", maxWidth: 480, textAlign: "left" }}>
           <label>Provider</label>
           <div style={{ display: "flex", gap: 8, margin: "8px 0 14px", flexWrap: "wrap" }}>
