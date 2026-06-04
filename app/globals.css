@@ -23,10 +23,10 @@
   --edge: rgba(255, 255, 255, 0.05);
 
   /* type */
-  --ink: #f4f4f6;        /* primary text, soft white */
-  --ink-2: #c4c4cc;      /* secondary */
-  --muted: #8a8a96;      /* tertiary / labels */
-  --faint: #5e5e68;      /* faintest, still AA on black */
+  --ink: #f6f6f8;        /* primary text, soft white */
+  --ink-2: #cfcfd6;      /* secondary */
+  --muted: #aeaeba;      /* tertiary / labels — lifted for legibility over the video bg */
+  --faint: #84848f;      /* faintest, still readable over the bg */
 
   /* mild purple — the accent. Muted, lux, never neon. */
   --purple: #7c6bb0;
@@ -86,8 +86,7 @@ body::before {
   content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
     radial-gradient(1200px 620px at 50% -10%, rgba(124,107,176,0.22), transparent 62%),
-    radial-gradient(900px 500px at 92% 4%, rgba(91,75,138,0.16), transparent 60%),
-    url("/login-3d.png") center top / cover no-repeat;
+    radial-gradient(900px 500px at 92% 4%, rgba(91,75,138,0.16), transparent 60%);
   opacity: 0.6; filter: saturate(112%);
 }
 /* light veil: lifts the whole surface so it reads charcoal, not black, while keeping nav + footer legible */
@@ -99,6 +98,13 @@ body::after {
 }
 /* keep real content above the ambient layers */
 .appframe, .login { position: relative; z-index: 1; }
+
+/* low-poly brand video behind the whole app. Sits under body::after (the veil)
+   and under content (z-index 1), so the loop reads as living texture in the
+   margins while every card and line of text stays fully legible on top. */
+.app-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: #0a0a0c url("/login-bg-poster.jpg") center / cover no-repeat; }
+.app-bg > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { .app-bg > video { display: none; } }
 
 ::selection { background: var(--purple-soft); color: #fff; }
 a { color: inherit; text-decoration: none; }

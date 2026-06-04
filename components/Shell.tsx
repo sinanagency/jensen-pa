@@ -74,6 +74,12 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <>
+      <div className="app-bg" aria-hidden>
+        <video autoPlay muted loop playsInline poster="/login-bg-poster.jpg">
+          <source src="/login-bg.mp4" type="video/mp4" />
+        </video>
+      </div>
     <div className="appframe">
       <header className="topnav">
         <div className="topnav-inner">
@@ -140,5 +146,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       {path !== "/mentor" && <Link href="/mentor" className="orb float" aria-label="Talk to your concierge" />}
       <CommandPalette />
     </div>
+    </>
   );
 }
