@@ -210,8 +210,8 @@ label.inline { display: inline-flex; text-transform: none; letter-spacing: norma
   transition: all 0.16s var(--ease); white-space: nowrap; }
 .navpill .ico { display: grid; place-items: center; color: var(--muted); }
 .navpill:hover { background: var(--glass-2); color: var(--ink); }
-.navpill.active { background: var(--purple-soft); color: var(--purple-2); box-shadow: inset 0 0 0 1px var(--purple-line); }
-.navpill.active .ico { color: var(--purple-2); }
+.navpill.active { background: rgba(124,107,176,0.26); color: #e7e1f7; box-shadow: inset 0 0 0 1px rgba(124,107,176,0.5); }
+.navpill.active .ico { color: #cdc3ee; }
 .navpill .caret { opacity: 0.6; margin-left: -2px; }
 
 .dropwrap { position: relative; }

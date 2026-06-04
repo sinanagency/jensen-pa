@@ -39,7 +39,7 @@ function KindPill({ kind }: { kind: NoteKind }) {
   return (
     <span
       className="pill"
-      style={{ background: colors[kind], color: "var(--ink)", fontSize: 11, padding: "2px 8px" }}
+      style={{ background: colors[kind], color: "#fff", border: "none", fontSize: 11, padding: "2px 8px" }}
     >
       {KIND_LABELS[kind]}
     </span>
@@ -277,7 +277,7 @@ export default function NotesPage() {
             className="input"
             value={entityId}
             onChange={(e) => setEntityId(e.target.value)}
-            style={{ marginBottom: 14, height: 38 }}
+            style={{ marginBottom: 14 }}
           >
             <option value="">No entity</option>
             {db.entities.map((e) => (
