@@ -15,8 +15,12 @@ const API = "https://api.anthropic.com/v1/messages";
 export type Turn = { role: "user" | "assistant"; content: any };
 export type Sender = { name: string; role: "owner" | "admin" };
 
-async function buildSystem(lastUser: string, sender?: Sender): Promise<string> {
+async function buildSystem(lastUser: string, sender?: Sender, channel?: string): Promise<string> {
   const s = sender || { name: "Jensen", role: "owner" as const };
+  const waFormat =
+    channel === "whatsapp"
+      ? `FORMAT FOR WHATSAPP: keep replies short and scannable (a few lines). Use WhatsApp formatting ONLY: *single asterisks* for bold, _underscores_ for italics. Never use markdown headings (#), never use **double asterisks**, never use tables. Bullets as "• ".`
+      : "";
   const speaking =
     s.role === "admin"
       ? `You are CURRENTLY speaking with ${s.name}, the admin and architect who built and oversees you (not Jensen). Address him as ${s.name}. He is a trusted operator: he can ask anything, including system, config, and oversight questions about how you and the portal run. When he asks you to do something in Jensen's world, do it on Jensen's behalf.`
@@ -41,6 +45,7 @@ async function buildSystem(lastUser: string, sender?: Sender): Promise<string> {
     `Current time in Dubai: ${dubaiNow()} (it is ${dayPart()}). Always reason in Dubai time.`,
     `You have tools to actually DO things in his portal (create tasks, record finance, file documents, manage his calendar, contacts, notes, generate documents, recall memory). USE them. Read freely. Take write actions when he asks. Never claim you did something unless the tool returned success. For sending email or messaging other people, draft it and ask him to confirm first.`,
     NO_DASHES,
+    waFormat,
     `JENSEN'S WORLD (venues / clients / events):\n${entitiesText}`,
     `HIS PREFERENCES: ${prefsText}`,
     `HIS GOALS:\n${goalsText}`,
@@ -74,7 +79,7 @@ export type ConciergeResult = { reply: string; toolsUsed: string[] };
 export async function runConcierge(input: { messages: { role: "user" | "assistant"; content: string }[]; channel?: string; sender?: Sender }): Promise<ConciergeResult> {
   const history = input.messages.filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-16);
   const lastUser = [...history].reverse().find((m) => m.role === "user")?.content || "";
-  const system = await buildSystem(lastUser, input.sender);
+  const system = await buildSystem(lastUser, input.sender, input.channel);
 
   const convo: Turn[] = history.map((m) => ({ role: m.role, content: m.content }));
   const runs: { name: string; ok: boolean }[] = [];
