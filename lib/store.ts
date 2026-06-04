@@ -165,7 +165,7 @@ function scheduleSync() {
   syncTimer = setTimeout(() => {
     if (!cache) return;
     fetch("/api/state", {
-      method: "PUT",
+      method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(cache),
     }).catch(() => {});

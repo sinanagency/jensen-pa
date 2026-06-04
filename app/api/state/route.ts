@@ -6,7 +6,8 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 // GET  -> full small-state snapshot (entities/tasks/finance/events/notes/contacts/prefs/goals/chat/...)
-// PUT  -> replace that snapshot (portal save). Docs are a separate resource (/api/docs).
+// POST -> replace that snapshot (portal save). Docs are a separate resource (/api/docs).
+//         (POST not PUT: Vercel's edge 405s PUT on this project; POST is universal.)
 export async function GET() {
   if (!isConfigured()) return NextResponse.json({ error: "server state not configured" }, { status: 503 });
   try {
@@ -16,7 +17,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(req: NextRequest) {
+export async function POST(req: NextRequest) {
   if (!isConfigured()) return NextResponse.json({ error: "server state not configured" }, { status: 503 });
   try {
     const db = (await req.json()) as DB;
