@@ -7,10 +7,12 @@ import { freshToken, listAccounts } from "./mail-accounts";
 import { zohoApiHost, Provider } from "./oauth";
 
 export type UMailSummary = {
-  id: string; accountId: string; accountEmail: string; provider: Provider;
+  id: string; accountId: string; accountEmail: string; provider: Provider | "imap";
   from: string; fromEmail: string; subject: string; date: string; snippet: string;
   seen: boolean; attachments: number;
 };
+
+export const IMAP_ACCOUNT = "imap";
 export type UMailFull = UMailSummary & { text: string; to: string; messageId?: string };
 
 const SEP = "::";

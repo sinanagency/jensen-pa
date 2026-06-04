@@ -9,6 +9,7 @@ type Full = Summary & { text: string; to: string; messageId?: string; attachment
 type Out = { filename: string; content: string; contentType?: string };
 
 const PRESETS = [
+  { id: "larencontre", label: "La Rencontre (larencontre.ae)" },
   { id: "outlook", label: "Outlook / Microsoft 365" },
   { id: "gmail", label: "Gmail / Workspace" },
   { id: "custom", label: "Custom IMAP / SMTP" },
@@ -19,7 +20,7 @@ export default function MailPage() {
   const [email, setEmail] = useState("");
 
   // connect form
-  const [provider, setProvider] = useState("outlook");
+  const [provider, setProvider] = useState("larencontre");
   const [pass, setPass] = useState("");
   const [imapHost, setImapHost] = useState(""); const [smtpHost, setSmtpHost] = useState("");
   const [connecting, setConnecting] = useState(false);
@@ -106,8 +107,8 @@ export default function MailPage() {
           Connect Outlook and Zoho with one click. Sign in, accept, done. You can add as many mailboxes as you like, and they all flow into your one inbox.
         </p>
         <MailboxOAuth />
-        <details style={{ maxWidth: 480, width: "100%", marginTop: 18 }}>
-          <summary className="faint" style={{ cursor: "pointer", fontSize: 12.5 }}>Advanced: connect another provider with an app password</summary>
+        <details open style={{ maxWidth: 480, width: "100%", marginTop: 18 }}>
+          <summary className="faint" style={{ cursor: "pointer", fontSize: 12.5 }}>Or connect with email + password (your larencontre.ae mailbox, Outlook app-password, Gmail)</summary>
         <div className="card feature" style={{ padding: 24, width: "100%", maxWidth: 480, textAlign: "left" }}>
           <label>Provider</label>
           <div style={{ display: "flex", gap: 8, margin: "8px 0 14px", flexWrap: "wrap" }}>

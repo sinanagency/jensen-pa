@@ -6,7 +6,7 @@ import Shell from "@/components/Shell";
 import { RefreshCw, Loader2, Plug, Send, CornerUpLeft, Check } from "lucide-react";
 
 type Mail = {
-  id: string; accountId: string; accountEmail: string; provider: "microsoft" | "zoho";
+  id: string; accountId: string; accountEmail: string; provider: "microsoft" | "zoho" | "imap";
   from: string; fromEmail: string; subject: string; date: string; seen: boolean; attachments: number;
   important: boolean; urgent: boolean; needsReply: boolean; quadrant: 1 | 2 | 3 | 4; summary: string; draft: string;
 };
