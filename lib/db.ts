@@ -145,19 +145,9 @@ async function syncTable(table: string, rows: any[]) {
   if (del.error) throw new Error(`${table} delete: ${del.error.message}`);
 }
 
-// Portal chat is replace-all for now (single user, brain not yet writing
-// concurrently). Switches to append-only when the WhatsApp brain lands.
-async function syncChat(chat: ChatTurn[]) {
-  const db = admin();
-  const del = await db.from("chat_messages").delete().neq("id", -1);
-  if (del.error) throw new Error(`chat delete: ${del.error.message}`);
-  if (chat.length) {
-    const ins = await db.from("chat_messages").insert(
-      chat.map((c) => ({ role: c.role, content: c.content, channel: "portal", ts: c.ts }))
-    );
-    if (ins.error) throw new Error(`chat insert: ${ins.error.message}`);
-  }
-}
+// NOTE: chat is append-only (one-brain). It lives in chat_messages, written by
+// appendChat from runConcierge for BOTH portal and WhatsApp. The snapshot save
+// must NOT replace-all chat, or it would wipe the other channel's messages.
 
 export async function replaceState(next: DB): Promise<void> {
   await Promise.all([
@@ -167,7 +157,6 @@ export async function replaceState(next: DB): Promise<void> {
     syncTable("events", next.events.map(fromEvent)),
     syncTable("notes", next.notes.map(fromNote)),
     syncTable("contacts", next.contacts.map(fromContact)),
-    syncChat(next.chat ?? []),
     kvSet("prefs", next.prefs ?? {}),
     kvSet("goals", next.goals ?? []),
     kvSet("legalBlueprint", next.legalBlueprint ?? null),

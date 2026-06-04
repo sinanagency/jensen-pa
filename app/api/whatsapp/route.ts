@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendWhatsApp, waConfigured, ownerNumber } from "@/lib/whatsapp";
-import { decryptCreds } from "@/lib/mailbox";
-import { listInbox, readMessage, sendMail } from "@/lib/mail-ops";
+import { sendWhatsApp, ownerNumber } from "@/lib/whatsapp";
+import { runConcierge } from "@/lib/concierge/loop";
+import { getChat, kvGet, kvSet } from "@/lib/db";
+import { addServerDoc } from "@/lib/docs-server";
+import { readImage } from "@/lib/anthropic";
+import { extractTextFromBuffer } from "@/lib/extract-text";
+import { embed, chunk } from "@/lib/openai";
 
 export const runtime = "nodejs";
-export const maxDuration = 45;
+export const maxDuration = 120;
+
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 // Meta webhook verification handshake.
 export async function GET(req: NextRequest) {
@@ -15,56 +21,85 @@ export async function GET(req: NextRequest) {
   return new Response("forbidden", { status: 403 });
 }
 
-// Inbound message: read or reply to mail from WhatsApp.
-// Commands: "inbox" (latest), "read <n>", "reply <n> <text>".
+// Best-effort dedupe so Meta retries don't double-process a message.
+async function seen(id: string): Promise<boolean> {
+  try {
+    const arr = await kvGet<string[]>("wa_seen", []);
+    if (arr.includes(id)) return true;
+    await kvSet("wa_seen", [...arr.slice(-199), id]);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function downloadMedia(mediaId: string): Promise<{ buf: Buffer; mime: string; base64: string } | null> {
+  try {
+    const token = process.env.WHATSAPP_TOKEN;
+    const meta = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json());
+    if (!meta?.url) return null;
+    const bin = await fetch(meta.url, { headers: { Authorization: `Bearer ${token}` } });
+    const buf = Buffer.from(await bin.arrayBuffer());
+    return { buf, mime: meta.mime_type || "application/octet-stream", base64: buf.toString("base64") };
+  } catch {
+    return null;
+  }
+}
+
+async function recentHistory(): Promise<{ role: "user" | "assistant"; content: string }[]> {
+  try {
+    const chat = await getChat(12);
+    return chat.map((c) => ({ role: c.role, content: c.content }));
+  } catch {
+    return [];
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    const from = msg?.from;
-    const text: string = msg?.text?.body?.trim() || "";
-    if (!from || !text) return NextResponse.json({ ok: true });
+    const from: string = msg?.from || "";
+    if (!from || !msg?.id) return NextResponse.json({ ok: true });
+    if (await seen(msg.id)) return NextResponse.json({ ok: true });
 
+    // owner gate: only Jensen drives the concierge
     const owner = ownerNumber();
     if (owner && from !== owner.replace(/[^0-9]/g, "")) {
       await sendWhatsApp(from, "This assistant is private.");
       return NextResponse.json({ ok: true });
     }
 
-    const creds = await decryptCreds(process.env.LR_MAIL_CREDS);
-    if (!creds) {
-      await sendWhatsApp(from, "Your mailbox is not linked for WhatsApp yet. Connect it in the portal under Mail, then link it for WhatsApp.");
+    const history = await recentHistory();
+    const media = msg.image || msg.document || msg.video || null;
+    const caption: string = msg.image?.caption || msg.document?.caption || "";
+
+    // ---- media: download, read, file into the portal via the brain ----
+    if (media) {
+      const dl = await downloadMedia(media.id);
+      if (!dl) { await sendWhatsApp(from, "I couldn't fetch that file from WhatsApp. Try sending it again."); return NextResponse.json({ ok: true }); }
+      let text = "";
+      if (dl.mime.startsWith("image/")) text = await readImage(dl.base64, dl.mime);
+      else text = (await extractTextFromBuffer(dl.buf, dl.mime, media.filename || "document")) || "";
+      if (!text.trim()) { await sendWhatsApp(from, "I saved your file but couldn't read text from it. If it's a photo, a clearer shot helps."); return NextResponse.json({ ok: true }); }
+
+      const id = uid();
+      const title = (media.filename || caption || "WhatsApp upload").replace(/\.[a-z0-9]+$/i, "").slice(0, 80) || "WhatsApp upload";
+      let chunks: { text: string; embedding: number[] }[] = [];
+      try { const parts = chunk(text); const vecs = parts.length ? await embed(parts) : []; chunks = parts.map((t, i) => ({ text: t, embedding: vecs[i] })); } catch { /* no embedder: keyword only */ }
+      await addServerDoc({ id, title, fileName: media.filename || "whatsapp-upload", mime: dl.mime, kind: "document", text, chunks, createdAt: Date.now() });
+
+      const prompt = `I just sent you a document over WhatsApp${caption ? ` with the note: "${caption}"` : ""}. It is now in the brain (document id "${id}", title "${title}"). Its content:\n\n${text.slice(0, 4000)}\n\nFile it: call file_document to put it in the right folder (finance, legal, identity, contracts, clients, venues, events, menus, branding, reports, general). If it is an invoice or receipt, also record_finance using the amounts shown (never invent a number). Then tell me in one or two lines what you filed and where.`;
+      const { reply } = await runConcierge({ messages: [...history, { role: "user", content: prompt }], channel: "whatsapp" });
+      await sendWhatsApp(from, reply);
       return NextResponse.json({ ok: true });
     }
 
-    const lower = text.toLowerCase();
-    if (lower === "inbox" || lower === "mail") {
-      const list = await listInbox(creds, 7);
-      const lines = list.map((m, i) => `${i + 1}. ${m.from}: ${m.subject}${m.attachments ? " 📎" : ""}`);
-      await sendWhatsApp(from, lines.length ? `Your latest mail:\n\n${lines.join("\n")}\n\nReply "read 1" to open one.` : "Your inbox is empty.");
-    } else if (lower.startsWith("read ")) {
-      const n = Number(lower.split(" ")[1]);
-      const list = await listInbox(creds, 7);
-      const pick = list[n - 1];
-      if (!pick) await sendWhatsApp(from, "I could not find that one. Send \"inbox\" to see the list.");
-      else {
-        const full = await readMessage(creds, pick.uid);
-        await sendWhatsApp(from, `From ${full.from}\nSubject: ${full.subject}\n\n${full.text.slice(0, 1200)}\n\nReply "reply ${n} your message" to respond.`);
-      }
-    } else if (lower.startsWith("reply ")) {
-      const rest = text.slice(6);
-      const n = Number(rest.split(" ")[0]);
-      const replyText = rest.slice(String(n).length).trim();
-      const list = await listInbox(creds, 7);
-      const pick = list[n - 1];
-      if (!pick || !replyText) await sendWhatsApp(from, 'Use: reply <number> <your message>.');
-      else {
-        const r = await sendMail(creds, { to: pick.fromEmail, subject: `Re: ${pick.subject}`, text: replyText });
-        await sendWhatsApp(from, r.ok ? `Sent your reply to ${pick.from}.` : `I could not send it: ${r.error}`);
-      }
-    } else {
-      await sendWhatsApp(from, 'I can help with your mail. Try "inbox", "read 1", or "reply 1 your message".');
-    }
+    // ---- plain text: full concierge ----
+    const text = (msg.text?.body || "").trim();
+    if (!text) return NextResponse.json({ ok: true });
+    const { reply } = await runConcierge({ messages: [...history, { role: "user", content: text }], channel: "whatsapp" });
+    await sendWhatsApp(from, reply || "I'm here.");
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 200 });
