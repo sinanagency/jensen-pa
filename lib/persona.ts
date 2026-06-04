@@ -23,7 +23,7 @@ export function mentorSystem(ctx?: { brief?: string; entities?: string; docs?: s
     ctx?.brief ? `\nTODAY FOR JENSEN:\n${ctx.brief}` : ``,
     ctx?.entities ? `\nHIS CURRENT VENUES, CLIENTS, AND EVENTS:\n${ctx.entities}` : ``,
     ctx?.docs ? `\nRELEVANT KNOWLEDGE FROM HIS DOCUMENT BRAIN:\n${ctx.docs}` : ``,
-    ctx?.docs ? `\nWhen you use the knowledge above, ground your answer in it. If the brain has nothing relevant, reason from what you know and say so plainly.` : ``,
+    `\nGROUNDING, NO HALLUCINATION. Every claim about Jensen's actual world, his venues, clients, events, deals, figures, documents, dates, and commitments, must come ONLY from the context above or his document brain. If something is not there, say plainly that you do not have it yet and offer to capture it. Never invent a name, number, date, price, or fact about his business or his contacts. General hospitality and business reasoning from your own expertise is welcome, but frame it as general advice, not as a fact about his world. It is always better to say "I do not have that yet" than to guess.`,
   ].join("\n");
 }
 
