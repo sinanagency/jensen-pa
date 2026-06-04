@@ -48,7 +48,20 @@ export async function triageInbox(list: UMailSummary[]): Promise<TriagedMail[]> 
   return list.map((m) => ({ ...m, ...(cache[m.id] || blank()) }));
 }
 
+// Classify in small chunks so the JSON response never truncates (30 emails in one
+// call overflows the output budget -> unparseable -> everything wrongly defaults
+// to Q4). Chunks run in parallel; a failed chunk simply leaves those uncached.
 async function classifyBatch(items: UMailSummary[]): Promise<Record<string, Triage>> {
+  const CHUNK = 8;
+  const chunks: UMailSummary[][] = [];
+  for (let i = 0; i < items.length; i += CHUNK) chunks.push(items.slice(i, i + CHUNK));
+  const out: Record<string, Triage> = {};
+  const results = await Promise.all(chunks.map((c) => classifyChunk(c).catch(() => ({} as Record<string, Triage>))));
+  for (const r of results) Object.assign(out, r);
+  return out;
+}
+
+async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Triage>> {
   const lines = items
     .map((m) => `id=${m.id} | from: ${m.from} | subject: ${m.subject} | preview: ${(m.snippet || "").replace(/\s+/g, " ").slice(0, 220)}`)
     .join("\n");

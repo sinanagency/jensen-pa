@@ -6,7 +6,10 @@ const DAY = 86_400;
 const TTL = 30 * DAY;
 
 function secret(): string {
-  return process.env.SESSION_SECRET || process.env.APP_PASSWORD || "larencontre-dev-secret";
+  const s = process.env.SESSION_SECRET || process.env.APP_PASSWORD;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET is not set: refusing to sign sessions with a default key.");
+  return "larencontre-dev-only-do-not-use-in-prod";
 }
 
 async function hmac(data: string): Promise<string> {

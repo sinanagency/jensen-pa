@@ -42,20 +42,38 @@ const toContact = (r: any): Contact => ({ id: r.id, name: r.name, company: r.com
 const fromContact = (c: Contact) => ({ id: c.id, name: c.name, company: c.company ?? null, role: c.role ?? null, email: c.email ?? null, phone: c.phone ?? null, notes: c.notes ?? null, entity_id: c.entityId ?? null, created_at: c.createdAt });
 
 // ---- key-value singletons ----
+// These go through raw PostgREST (fetch), NOT supabase-js. The supabase-js client
+// was observed returning EMPTY results for an existing row in some serverless
+// bundles (the realtime client init misbehaves when bundled alongside imapflow/
+// nodemailer), while a raw REST read of the identical row returns correctly. kv
+// backs auth accounts, mailboxes and prefs, so it must be deterministic.
+function sbHeaders(): Record<string, string> {
+  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SECRET_KEY || "";
+  return { apikey: key, Authorization: `Bearer ${key}`, "content-type": "application/json" };
+}
+function sbRest(path: string): string {
+  return `${process.env.SUPABASE_URL}/rest/v1/${path}`;
+}
+
 export async function kvGet<T = any>(key: string, fallback: T): Promise<T> {
-  const res = await admin().from("kv").select("value").eq("key", key).maybeSingle();
-  if (res.error) throw new Error(`kv get ${key}: ${res.error.message}`);
-  return (res.data?.value as T) ?? fallback;
+  const r = await fetch(sbRest(`kv?key=eq.${encodeURIComponent(key)}&select=value`), { headers: sbHeaders(), cache: "no-store" });
+  if (!r.ok) throw new Error(`kv get ${key}: ${r.status} ${(await r.text()).slice(0, 200)}`);
+  const rows = await r.json();
+  return (rows?.[0]?.value as T) ?? fallback;
 }
 export async function kvSet(key: string, value: any): Promise<void> {
   // null/undefined = unset → remove the key (kv.value is NOT NULL; absence reads back as the fallback)
   if (value === null || value === undefined) {
-    const del = await admin().from("kv").delete().eq("key", key);
-    if (del.error) throw new Error(`kv unset ${key}: ${del.error.message}`);
+    const r = await fetch(sbRest(`kv?key=eq.${encodeURIComponent(key)}`), { method: "DELETE", headers: sbHeaders() });
+    if (!r.ok) throw new Error(`kv unset ${key}: ${r.status} ${(await r.text()).slice(0, 200)}`);
     return;
   }
-  const res = await admin().from("kv").upsert({ key, value, updated_at: Date.now() });
-  if (res.error) throw new Error(`kv set ${key}: ${res.error.message}`);
+  const r = await fetch(sbRest(`kv?on_conflict=key`), {
+    method: "POST",
+    headers: { ...sbHeaders(), Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([{ key, value, updated_at: Date.now() }]),
+  });
+  if (!r.ok) throw new Error(`kv set ${key}: ${r.status} ${(await r.text()).slice(0, 200)}`);
 }
 
 // Never mask a DB error: surface the real Postgres message instead of returning

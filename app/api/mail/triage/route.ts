@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     ]);
     const combined = [...oauth, ...imap].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     const messages = await triageInbox(combined);
-    return NextResponse.json({ messages });
+    return NextResponse.json({ messages }, { headers: { "cache-control": "no-store" } });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 502 });
   }

@@ -23,7 +23,10 @@ export const PRESETS: Record<string, { imapHost: string; imapPort: number; smtpH
 };
 
 async function aesKey(): Promise<CryptoKey> {
-  const secret = process.env.SESSION_SECRET || process.env.APP_PASSWORD || "larencontre-dev-secret";
+  const secret = process.env.SESSION_SECRET || process.env.APP_PASSWORD
+    || (process.env.NODE_ENV === "production"
+      ? (() => { throw new Error("SESSION_SECRET is not set: refusing to encrypt credentials with a default key."); })()
+      : "larencontre-dev-only-do-not-use-in-prod");
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
   return crypto.subtle.importKey("raw", hash, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
