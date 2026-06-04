@@ -43,32 +43,38 @@ const fromContact = (c: Contact) => ({ id: c.id, name: c.name, company: c.compan
 
 // ---- key-value singletons ----
 export async function kvGet<T = any>(key: string, fallback: T): Promise<T> {
-  const { data } = await admin().from("kv").select("value").eq("key", key).maybeSingle();
-  return (data?.value as T) ?? fallback;
+  const res = await admin().from("kv").select("value").eq("key", key).maybeSingle();
+  if (res.error) throw new Error(`kv get ${key}: ${res.error.message}`);
+  return (res.data?.value as T) ?? fallback;
 }
 export async function kvSet(key: string, value: any): Promise<void> {
-  await admin().from("kv").upsert({ key, value, updated_at: Date.now() });
+  const res = await admin().from("kv").upsert({ key, value, updated_at: Date.now() });
+  if (res.error) throw new Error(`kv set ${key}: ${res.error.message}`);
+}
+
+// Never mask a DB error: surface the real Postgres message instead of returning
+// empty/no-op (which previously made a failed write look like a 200 success).
+function chk<T>(res: { data: T; error: any }, where: string): T {
+  if (res.error) throw new Error(`${where}: ${res.error.message || res.error}`);
+  return res.data;
 }
 
 // ---- chat log (one-brain: portal + whatsapp share this) ----
 export async function appendChat(turn: ChatTurn & { channel?: string }): Promise<void> {
-  await admin().from("chat_messages").insert({ role: turn.role, content: turn.content, channel: turn.channel ?? "portal", ts: turn.ts });
+  const res = await admin().from("chat_messages").insert({ role: turn.role, content: turn.content, channel: turn.channel ?? "portal", ts: turn.ts });
+  if (res.error) throw new Error(`chat insert: ${res.error.message}`);
 }
 export async function getChat(limit = 100): Promise<ChatTurn[]> {
-  const { data } = await admin().from("chat_messages").select("role,content,ts").order("ts", { ascending: true }).limit(limit);
+  const data = chk(await admin().from("chat_messages").select("role,content,ts").order("ts", { ascending: true }).limit(limit), "chat select");
   return (data ?? []).map((r: any) => ({ role: r.role, content: r.content, ts: Number(r.ts) }));
 }
 
 // ---- assemble the full small-state snapshot the portal expects ----
 export async function assembleState(): Promise<DB> {
   const db = admin();
+  const sel = (t: string) => db.from(t).select("*").order("created_at", { ascending: true });
   const [entities, tasks, finance, events, notes, contacts, chat, prefs, goals, legalBlueprint, onboarded] = await Promise.all([
-    db.from("entities").select("*").order("created_at", { ascending: true }),
-    db.from("tasks").select("*").order("created_at", { ascending: true }),
-    db.from("finance").select("*").order("created_at", { ascending: true }),
-    db.from("events").select("*").order("created_at", { ascending: true }),
-    db.from("notes").select("*").order("created_at", { ascending: true }),
-    db.from("contacts").select("*").order("created_at", { ascending: true }),
+    sel("entities"), sel("tasks"), sel("finance"), sel("events"), sel("notes"), sel("contacts"),
     getChat(200),
     kvGet<Prefs>("prefs", {}),
     kvGet<string[]>("goals", []),
@@ -76,13 +82,13 @@ export async function assembleState(): Promise<DB> {
     kvGet<boolean>("onboarded", false),
   ]);
   return {
-    entities: (entities.data ?? []).map(toEntity),
-    tasks: (tasks.data ?? []).map(toTask),
+    entities: (chk(entities, "entities") ?? []).map(toEntity),
+    tasks: (chk(tasks, "tasks") ?? []).map(toTask),
     docs: [], // docs live in their own server resource (large, see lib/docs server ops)
-    finance: (finance.data ?? []).map(toFinance),
-    events: (events.data ?? []).map(toEvent),
-    notes: (notes.data ?? []).map(toNote),
-    contacts: (contacts.data ?? []).map(toContact),
+    finance: (chk(finance, "finance") ?? []).map(toFinance),
+    events: (chk(events, "events") ?? []).map(toEvent),
+    notes: (chk(notes, "notes") ?? []).map(toNote),
+    contacts: (chk(contacts, "contacts") ?? []).map(toContact),
     prefs, chat, goals, legalBlueprint, onboarded,
   };
 }
@@ -90,25 +96,29 @@ export async function assembleState(): Promise<DB> {
 // ---- replace the small-state snapshot (portal save). Upsert present, delete absent. ----
 async function syncTable(table: string, rows: any[]) {
   const db = admin();
-  if (rows.length) await db.from(table).upsert(rows);
+  if (rows.length) {
+    const up = await db.from(table).upsert(rows);
+    if (up.error) throw new Error(`${table} upsert: ${up.error.message}`);
+  }
   const ids = rows.map((r) => r.id);
   // delete rows no longer present in the snapshot
-  if (ids.length) {
-    await db.from(table).delete().not("id", "in", `(${ids.map((i) => `"${i}"`).join(",")})`);
-  } else {
-    await db.from(table).delete().neq("id", "__never__"); // table emptied → clear all
-  }
+  const del = ids.length
+    ? await db.from(table).delete().not("id", "in", `(${ids.map((i) => `"${i}"`).join(",")})`)
+    : await db.from(table).delete().neq("id", "__never__"); // table emptied → clear all
+  if (del.error) throw new Error(`${table} delete: ${del.error.message}`);
 }
 
 // Portal chat is replace-all for now (single user, brain not yet writing
 // concurrently). Switches to append-only when the WhatsApp brain lands.
 async function syncChat(chat: ChatTurn[]) {
   const db = admin();
-  await db.from("chat_messages").delete().neq("id", -1);
+  const del = await db.from("chat_messages").delete().neq("id", -1);
+  if (del.error) throw new Error(`chat delete: ${del.error.message}`);
   if (chat.length) {
-    await db.from("chat_messages").insert(
+    const ins = await db.from("chat_messages").insert(
       chat.map((c) => ({ role: c.role, content: c.content, channel: "portal", ts: c.ts }))
     );
+    if (ins.error) throw new Error(`chat insert: ${ins.error.message}`);
   }
 }
 

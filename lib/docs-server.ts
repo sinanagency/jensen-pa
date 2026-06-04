@@ -23,21 +23,27 @@ const vec = (e: number[]) => `[${e.join(",")}]`;
 
 export async function addServerDoc(doc: ServerDoc): Promise<void> {
   const db = admin();
-  await db.from("docs").upsert({
+  const up = await db.from("docs").upsert({
     id: doc.id, title: doc.title, file_name: doc.fileName ?? null, mime: doc.mime ?? null,
     kind: doc.kind ?? "document", entity_id: doc.entityId ?? null, content: doc.text ?? "",
     size: doc.size ?? 0, data_url: doc.dataUrl ?? null, created_at: doc.createdAt,
   });
-  await db.from("doc_chunks").delete().eq("doc_id", doc.id);
+  if (up.error) throw new Error(`docs upsert: ${up.error.message}`);
+  const delc = await db.from("doc_chunks").delete().eq("doc_id", doc.id);
+  if (delc.error) throw new Error(`doc_chunks delete: ${delc.error.message}`);
   const rows = (doc.chunks || [])
     .filter((c) => c.embedding?.length)
     .map((c, i) => ({ doc_id: doc.id, idx: i, text: c.text, embedding: vec(c.embedding), created_at: doc.createdAt }));
-  if (rows.length) await db.from("doc_chunks").insert(rows);
+  if (rows.length) {
+    const ins = await db.from("doc_chunks").insert(rows);
+    if (ins.error) throw new Error(`doc_chunks insert: ${ins.error.message}`);
+  }
 }
 
 export async function listServerDocs(): Promise<ServerDoc[]> {
-  const { data } = await admin().from("docs").select("*").order("created_at", { ascending: false });
-  return (data ?? []).map((r: any) => ({
+  const res = await admin().from("docs").select("*").order("created_at", { ascending: false });
+  if (res.error) throw new Error(`docs select: ${res.error.message}`);
+  return (res.data ?? []).map((r: any) => ({
     id: r.id, title: r.title, fileName: r.file_name ?? "", mime: r.mime ?? "", kind: r.kind ?? "document",
     entityId: r.entity_id ?? undefined, text: r.content ?? "", size: Number(r.size ?? 0),
     dataUrl: r.data_url ?? undefined, createdAt: Number(r.created_at), chunks: [],
@@ -45,7 +51,8 @@ export async function listServerDocs(): Promise<ServerDoc[]> {
 }
 
 export async function deleteServerDoc(id: string): Promise<void> {
-  await admin().from("docs").delete().eq("id", id); // doc_chunks cascade
+  const res = await admin().from("docs").delete().eq("id", id); // doc_chunks cascade
+  if (res.error) throw new Error(`docs delete: ${res.error.message}`);
 }
 
 export async function searchServerDocs(embedding: number[], k = 5): Promise<{ title: string; text: string; score: number }[]> {
