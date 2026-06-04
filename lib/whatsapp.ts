@@ -26,3 +26,13 @@ export async function sendWhatsApp(to: string, body: string): Promise<boolean> {
 export function ownerNumber(): string | null {
   return process.env.OWNER_WHATSAPP || null;
 }
+
+// Multi-owner gate: OWNER_WHATSAPP may be a comma-separated list (e.g. Jensen +
+// Taona). A sender is allowed if their digits match any entry. If unset, allow
+// all (no gate). Returns true when the sender may drive the concierge.
+export function isOwner(from: string): boolean {
+  const raw = process.env.OWNER_WHATSAPP;
+  if (!raw) return true;
+  const fromDigits = (from || "").replace(/[^0-9]/g, "");
+  return raw.split(",").map((n) => n.replace(/[^0-9]/g, "")).filter(Boolean).includes(fromDigits);
+}

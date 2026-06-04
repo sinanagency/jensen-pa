@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendWhatsApp, ownerNumber } from "@/lib/whatsapp";
+import { sendWhatsApp, isOwner } from "@/lib/whatsapp";
 import { runConcierge } from "@/lib/concierge/loop";
 import { kvGet, kvSet } from "@/lib/db";
 import * as ops from "@/lib/concierge/ops";
@@ -62,9 +62,8 @@ export async function POST(req: NextRequest) {
     if (!from || !msg?.id) return NextResponse.json({ ok: true });
     if (await seen(msg.id)) return NextResponse.json({ ok: true });
 
-    // owner gate: only Jensen drives the concierge
-    const owner = ownerNumber();
-    if (owner && from !== owner.replace(/[^0-9]/g, "")) {
+    // owner gate: Jensen (and Taona) drive the concierge; anyone else is refused
+    if (!isOwner(from)) {
       await sendWhatsApp(from, "This assistant is private.");
       return NextResponse.json({ ok: true });
     }
