@@ -1,6 +1,8 @@
-// Client-side store (localStorage). Entity-first data model. This is the v1
-// persistence: it genuinely persists across refresh per browser. Server-side
-// multi-device sync is the documented next step (a Supabase project).
+// Client store. As of the Supabase migration this is a thin, server-backed cache:
+// state lives in Supabase (see lib/db.ts) so the WhatsApp brain and the portal
+// share one source of truth. This module keeps an in-memory cache + a localStorage
+// MIRROR (instant first paint + offline fallback) and debounce-syncs writes to
+// /api/state. hydrate() pulls the authoritative snapshot from the server.
 "use client";
 
 import { cosine } from "./openai";
@@ -85,10 +87,10 @@ export type Contact = {
 };
 
 export type Prefs = {
-  workStyle?: string; // how he likes to work
-  tone?: string;      // how the mentor should speak to him
-  hours?: string;     // working hours / focus time
-  extra?: string;     // anything else to always honour
+  workStyle?: string;
+  tone?: string;
+  hours?: string;
+  extra?: string;
 };
 
 export type DB = {
@@ -106,27 +108,75 @@ export type DB = {
   onboarded: boolean;
 };
 
-const KEY = "larencontre.db.v1";
+const KEY = "larencontre.db.v1"; // local mirror for fast paint + offline fallback
 
-function empty(): DB {
+export function empty(): DB {
   return { entities: [], tasks: [], docs: [], finance: [], events: [], notes: [], contacts: [], prefs: {}, chat: [], goals: [], onboarded: false };
 }
 
+let cache: DB | null = null;
+let serverOK = true;
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+
+function mirror() {
+  if (typeof window === "undefined" || !cache) return;
+  try { localStorage.setItem(KEY, JSON.stringify(cache)); } catch {}
+}
+function dispatch() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("lr-db-change"));
+}
+
+// Synchronous read: returns the cache, seeding it from the localStorage mirror on
+// first call so the UI paints instantly before hydrate() returns from the server.
 export function load(): DB {
-  if (typeof window === "undefined") return empty();
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) { const s = seed(); save(s); return s; }
-    return { ...empty(), ...JSON.parse(raw) };
-  } catch {
-    return empty();
+  if (cache) return cache;
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) { const parsed = JSON.parse(raw) as Partial<DB>; cache = { ...empty(), ...parsed }; return cache; }
+    } catch {}
   }
+  cache = empty();
+  return cache;
+}
+
+// Pull the authoritative snapshot from the server and replace the cache.
+export async function hydrate(): Promise<DB> {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    if (r.ok) {
+      const db = (await r.json()) as DB;
+      cache = { ...empty(), ...db };
+      serverOK = true;
+      mirror();
+      dispatch();
+      return cache;
+    }
+    if (r.status === 503) serverOK = false; // not configured -> stay local
+  } catch {
+    serverOK = false; // offline -> stay local
+  }
+  return load();
+}
+
+function scheduleSync() {
+  if (!serverOK || typeof window === "undefined") return;
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    if (!cache) return;
+    fetch("/api/state", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(cache),
+    }).catch(() => {});
+  }, 500);
 }
 
 export function save(db: DB) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(KEY, JSON.stringify(db));
-  window.dispatchEvent(new Event("lr-db-change"));
+  cache = db;
+  mirror();
+  dispatch();
+  scheduleSync();
 }
 
 export function update(fn: (db: DB) => void): DB {
@@ -140,7 +190,8 @@ export function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-// Local RAG: rank stored chunks against a query embedding.
+// Legacy in-memory RAG over db.docs. Docs now live server-side (pgvector); the
+// mentor uses lib/idb.searchDocs (server). Kept for any local-only callers.
 export function searchBrain(db: DB, queryEmbedding: number[], k = 5): { text: string; title: string; score: number }[] {
   const hits: { text: string; title: string; score: number }[] = [];
   for (const doc of db.docs) {
@@ -150,57 +201,4 @@ export function searchBrain(db: DB, queryEmbedding: number[], k = 5): { text: st
     }
   }
   return hits.sort((a, b) => b.score - a.score).slice(0, k);
-}
-
-// A small, realistic seed so the platform is alive on first open and demos well.
-function seed(): DB {
-  const now = Date.now();
-  const e = (kind: EntityKind, name: string, subtitle: string, status: string): Entity => ({
-    id: uid(), kind, name, subtitle, status, createdAt: now,
-  });
-  const venues = [
-    e("venue", "Marina Social House", "Rooftop lounge, Dubai Marina", "Open · managed"),
-    e("venue", "Cordré", "Modern French bistro, DIFC", "Concept phase"),
-  ];
-  const clients = [
-    e("client", "Al Habtoor Group", "Multi-venue F&B revamp", "Active engagement"),
-    e("client", "Khalifa Hospitality", "New opening, Downtown", "Proposal sent"),
-  ];
-  const events = [
-    e("event", "The Khalifa Wedding", "500 guests, Atlantis Royal, Nov", "Planning"),
-    e("event", "Cordré Launch Dinner", "Press + investors, Sep", "Concept"),
-  ];
-  const all = [...venues, ...clients, ...events];
-  const t = (title: string, quadrant: Quadrant, entityId?: string): Task => ({
-    id: uid(), title, quadrant, entityId, done: false, createdAt: now,
-  });
-  const tasks: Task[] = [
-    t("Send Khalifa Hospitality the revised concept deck", 1, clients[1].id),
-    t("Confirm caterer for the Khalifa Wedding", 1, events[0].id),
-    t("Review Marina Social House October P&L", 1, venues[0].id),
-    t("Draft Cordré menu engineering doc", 2, venues[1].id),
-    t("Build Q4 target list of venues to pitch", 2),
-    t("Reply to supplier quote emails", 3),
-    t("Renew trade license (expires in 6 weeks)", 1),
-  ];
-  const finance: FinanceRecord[] = [
-    { id: uid(), entityId: venues[0].id, kind: "income", amount: 42000, vatApplies: true, label: "Marina mgmt retainer (Oct)", date: "2026-10-01", createdAt: now },
-    { id: uid(), entityId: clients[0].id, kind: "income", amount: 85000, vatApplies: true, label: "Al Habtoor revamp phase 1", date: "2026-09-20", createdAt: now },
-    { id: uid(), kind: "expense", amount: 12000, vatApplies: true, label: "Freelance design + content", date: "2026-10-05", createdAt: now },
-  ];
-  const events2: CalEvent[] = [
-    { id: uid(), title: "Khalifa Wedding site visit", entityId: events[0].id, date: isoIn(3), time: "16:00", createdAt: now },
-    { id: uid(), title: "Al Habtoor steering call", entityId: clients[0].id, date: isoIn(1), time: "11:00", createdAt: now },
-  ];
-  return {
-    entities: all, tasks, docs: [], finance, events: events2, notes: [], contacts: [], prefs: {}, chat: [],
-    goals: ["Land 3 new venue clients this quarter", "Get Cordré open by Q1", "Replace the freelancer stack"],
-    onboarded: false,
-  };
-}
-
-function isoIn(days: number): string {
-  const d = new Date(2026, 5, 2);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
 }

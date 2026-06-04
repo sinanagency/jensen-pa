@@ -1,8 +1,7 @@
-// Document store backed by IndexedDB. localStorage caps at ~5MB, far too small
-// for "drop all my files". IndexedDB gives hundreds of MB, so the document brain
-// lives here: original file, extracted text, and embeddings. The mentor reads
-// from here for RAG. Server-side multi-device sync (Supabase + storage) is the
-// documented next step.
+// Document brain — now server-backed (Supabase + pgvector) via /api/docs.
+// The name is kept for import stability; it no longer touches IndexedDB. The
+// mentor and the WhatsApp brain (next phase) hit the same server store, so
+// document recall is shared, not per-browser.
 "use client";
 
 export type DocChunk = { text: string; embedding: number[] };
@@ -20,76 +19,48 @@ export type Doc = {
   createdAt: number;
 };
 
-const DB_NAME = "larencontre";
-const STORE = "docs";
-
-function open(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === "undefined") return reject(new Error("no indexedDB"));
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
 function emit() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event("lr-docs-change"));
 }
 
 export async function addDoc(doc: Doc): Promise<void> {
-  const db = await open();
-  await new Promise<void>((res, rej) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(doc);
-    tx.oncomplete = () => res();
-    tx.onerror = () => rej(tx.error);
+  await fetch("/api/docs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(doc),
   });
   emit();
 }
 
 export async function allDocs(): Promise<Doc[]> {
-  const db = await open();
-  const docs = await new Promise<Doc[]>((res, rej) => {
-    const tx = db.transaction(STORE, "readonly");
-    const r = tx.objectStore(STORE).getAll();
-    r.onsuccess = () => res(r.result as Doc[]);
-    r.onerror = () => rej(r.error);
-  });
-  return docs.sort((a, b) => b.createdAt - a.createdAt);
+  try {
+    const r = await fetch("/api/docs", { cache: "no-store" });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.docs || []).map((d: any) => ({ ...d, chunks: d.chunks || [] })) as Doc[];
+  } catch {
+    return [];
+  }
 }
 
 export async function deleteDoc(id: string): Promise<void> {
-  const db = await open();
-  await new Promise<void>((res, rej) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).delete(id);
-    tx.oncomplete = () => res();
-    tx.onerror = () => rej(tx.error);
-  });
+  await fetch(`/api/docs?id=${encodeURIComponent(id)}`, { method: "DELETE" });
   emit();
 }
 
-function cosine(a: number[], b: number[]): number {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
-  if (!na || !nb) return 0;
-  return dot / (Math.sqrt(na) * Math.sqrt(nb));
-}
-
 export async function searchDocs(queryEmbedding: number[], k = 5): Promise<{ title: string; text: string; score: number }[]> {
-  const docs = await allDocs();
-  const hits: { title: string; text: string; score: number }[] = [];
-  for (const d of docs) {
-    for (const c of d.chunks || []) {
-      if (!c.embedding?.length) continue;
-      hits.push({ title: d.title, text: c.text, score: cosine(queryEmbedding, c.embedding) });
-    }
+  try {
+    const r = await fetch("/api/docs/search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ embedding: queryEmbedding, k }),
+    });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return j.hits || [];
+  } catch {
+    return [];
   }
-  return hits.sort((a, b) => b.score - a.score).slice(0, k);
 }
 
 export function uid(): string {
