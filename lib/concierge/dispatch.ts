@@ -78,7 +78,7 @@ export async function runAction(name: string, input: any): Promise<{ ok: boolean
       case "search_documents": { const r = await recall(input.query, { docK: 8, factK: 0 }); result = r.docs; break; }
       case "list_documents": result = await ops.listDocs(input); break;
       case "file_document": result = await ops.fileDocument(input); break;
-      case "delete_document": { const { deleteServerDoc } = await import("../docs-server"); await deleteServerDoc(input.id); result = { deleted: input.id }; break; }
+      case "delete_document": result = await ops.deleteDoc(input.id); break;
       // generation
       case "generate_document": result = { type: input.type, draft: await askClaude({ system: GEN_SYS(input.type), messages: [{ role: "user", content: input.brief }], model: SONNET, maxTokens: 2200 }) }; break;
       case "generate_legal": { const bp = await ops.getBlueprint(); result = { type: input.type, draft: await askClaude({ system: LEGAL_SYS(input.type, bp), messages: [{ role: "user", content: input.brief }], model: SONNET, maxTokens: 2400 }) }; break; }

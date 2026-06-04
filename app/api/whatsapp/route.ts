@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendWhatsApp, ownerNumber } from "@/lib/whatsapp";
 import { runConcierge } from "@/lib/concierge/loop";
-import { getChat, kvGet, kvSet } from "@/lib/db";
-import { addServerDoc } from "@/lib/docs-server";
+import { kvGet, kvSet } from "@/lib/db";
+import * as ops from "@/lib/concierge/ops";
 import { readImage } from "@/lib/anthropic";
 import { extractTextFromBuffer } from "@/lib/extract-text";
 import { embed, chunk } from "@/lib/openai";
@@ -48,8 +48,7 @@ async function downloadMedia(mediaId: string): Promise<{ buf: Buffer; mime: stri
 
 async function recentHistory(): Promise<{ role: "user" | "assistant"; content: string }[]> {
   try {
-    const chat = await getChat(12);
-    return chat.map((c) => ({ role: c.role, content: c.content }));
+    return await ops.chatRecent(12);
   } catch {
     return [];
   }
@@ -87,7 +86,7 @@ export async function POST(req: NextRequest) {
       const title = (media.filename || caption || "WhatsApp upload").replace(/\.[a-z0-9]+$/i, "").slice(0, 80) || "WhatsApp upload";
       let chunks: { text: string; embedding: number[] }[] = [];
       try { const parts = chunk(text); const vecs = parts.length ? await embed(parts) : []; chunks = parts.map((t, i) => ({ text: t, embedding: vecs[i] })); } catch { /* no embedder: keyword only */ }
-      await addServerDoc({ id, title, fileName: media.filename || "whatsapp-upload", mime: dl.mime, kind: "document", text, chunks, createdAt: Date.now() });
+      await ops.addDoc({ id, title, fileName: media.filename || "whatsapp-upload", mime: dl.mime, kind: "document", text, chunks, createdAt: Date.now() });
 
       const prompt = `I just sent you a document over WhatsApp${caption ? ` with the note: "${caption}"` : ""}. It is now in the brain (document id "${id}", title "${title}"). Its content:\n\n${text.slice(0, 4000)}\n\nFile it: call file_document to put it in the right folder (finance, legal, identity, contracts, clients, venues, events, menus, branding, reports, general). If it is an invoice or receipt, also record_finance using the amounts shown (never invent a number). Then tell me in one or two lines what you filed and where.`;
       const { reply } = await runConcierge({ messages: [...history, { role: "user", content: prompt }], channel: "whatsapp" });

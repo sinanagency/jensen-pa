@@ -7,7 +7,6 @@ import { TOOLS } from "./tools";
 import { runAction } from "./dispatch";
 import { verifyReply } from "./verify";
 import { recall, captureSalience } from "./brain";
-import { appendChat } from "../db";
 import * as ops from "./ops";
 import { dubaiNow, dayPart } from "../time";
 
@@ -107,8 +106,8 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
   // persist to the shared chat log + capture durable facts (non-blocking best-effort)
   const ch = input.channel || "portal";
   try {
-    if (lastUser) await appendChat({ role: "user", content: lastUser, ts: Date.now(), channel: ch });
-    await appendChat({ role: "assistant", content: reply, ts: Date.now(), channel: ch });
+    if (lastUser) await ops.chatAppend("user", lastUser, ch);
+    await ops.chatAppend("assistant", reply, ch);
   } catch { /* ignore log failure */ }
   captureSalience(lastUser, reply).catch(() => {});
 
