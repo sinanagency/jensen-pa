@@ -211,13 +211,20 @@ export default function MailPage() {
   );
 }
 
-// ---------- OAuth multi-account connect ----------
-type OAuthAccount = { id: string; provider: "microsoft" | "zoho"; email: string; createdAt: number };
+// ---------- multi-account connect (IMAP email+password + OAuth) ----------
+type OAuthAccount = { id: string; provider: "microsoft" | "zoho" | "imap"; email: string; createdAt: number };
 
 function MailboxOAuth() {
   const [accounts, setAccounts] = useState<OAuthAccount[]>([]);
   const [cfg, setCfg] = useState<{ microsoft: boolean; zoho: boolean }>({ microsoft: false, zoho: false });
   const [loaded, setLoaded] = useState(false);
+
+  // email+password add form (cPanel / larencontre.ae)
+  const [iemail, setIemail] = useState("");
+  const [ipass, setIpass] = useState("");
+  const [ipreset, setIpreset] = useState("larencontre");
+  const [ibusy, setIbusy] = useState(false);
+  const [ierr, setIerr] = useState("");
 
   async function refresh() {
     const r = await fetch("/api/mail/accounts").then((x) => x.json()).catch(() => ({}));
@@ -232,12 +239,22 @@ function MailboxOAuth() {
     refresh();
   }
 
-  const provLabel = (p: string) => (p === "microsoft" ? "Outlook / Microsoft 365" : "Zoho Mail");
+  async function addImap() {
+    setIbusy(true); setIerr("");
+    const r = await fetch("/api/mail/imap/connect", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: ipreset, email: iemail, pass: ipass }),
+    }).then((x) => x.json()).catch(() => ({ error: "Network error." }));
+    setIbusy(false);
+    if (r.ok) { setIemail(""); setIpass(""); refresh(); } else setIerr(r.error || "Could not connect.");
+  }
+
+  const provLabel = (p: string) => (p === "microsoft" ? "Outlook / Microsoft 365" : p === "zoho" ? "Zoho Mail" : "Email + password");
 
   return (
     <div className="card" style={{ padding: 20, width: "100%", maxWidth: 480, textAlign: "left" }}>
       {accounts.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 16 }}>
           <label>Connected mailboxes</label>
           {accounts.map((a) => (
             <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 0", borderTop: "1px solid var(--line)" }}>
@@ -251,23 +268,32 @@ function MailboxOAuth() {
         </div>
       )}
 
-      <label>Add a mailbox</label>
+      <label>Add a mailbox (email + password)</label>
+      <div style={{ display: "flex", gap: 8, margin: "8px 0", flexWrap: "wrap" }}>
+        {[{ id: "larencontre", l: "larencontre.ae" }, { id: "outlook", l: "Outlook" }, { id: "gmail", l: "Gmail" }, { id: "custom", l: "Other" }].map((p) => (
+          <button key={p.id} className={`pill ${ipreset === p.id ? "accent" : ""}`} style={{ cursor: "pointer", height: 30 }} onClick={() => setIpreset(p.id)}>{p.l}</button>
+        ))}
+      </div>
+      <input value={iemail} onChange={(e) => setIemail(e.target.value)} placeholder="jensen@larencontre.ae" autoComplete="off" style={{ marginBottom: 8 }} />
+      <input type="password" value={ipass} onChange={(e) => setIpass(e.target.value)} placeholder="mailbox password" autoComplete="off" style={{ marginBottom: 10 }} />
+      <button className="btn purple" onClick={addImap} disabled={ibusy || !iemail || !ipass} style={{ justifyContent: "center", width: "100%" }}>
+        {ibusy ? "Connecting…" : "Connect mailbox"}
+      </button>
+      {ierr && <div className="err" style={{ marginTop: 8 }}>{ierr}</div>}
+      <div className="faint" style={{ fontSize: 11.5, marginTop: 8 }}>Add jensen@ and info@ the same way. They all flow into one inbox.</div>
+
+      <div style={{ borderTop: "1px solid var(--line)", margin: "16px 0 12px" }} />
+      <label>Or sign in with a provider</label>
       <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-        <a className="btn purple" href="/api/mail/oauth/start?provider=microsoft"
-          style={{ pointerEvents: cfg.microsoft ? "auto" : "none", opacity: cfg.microsoft ? 1 : 0.5, justifyContent: "center" }}>
-          Continue with Microsoft
+        <a className="btn ghost" href="/api/mail/oauth/start?provider=microsoft"
+          style={{ pointerEvents: cfg.microsoft ? "auto" : "none", opacity: cfg.microsoft ? 1 : 0.45, justifyContent: "center" }}>
+          Continue with Microsoft{loaded && !cfg.microsoft ? " (soon)" : ""}
         </a>
-        <a className="btn purple" href="/api/mail/oauth/start?provider=zoho"
-          style={{ pointerEvents: cfg.zoho ? "auto" : "none", opacity: cfg.zoho ? 1 : 0.5, justifyContent: "center" }}>
-          Continue with Zoho
+        <a className="btn ghost" href="/api/mail/oauth/start?provider=zoho"
+          style={{ pointerEvents: cfg.zoho ? "auto" : "none", opacity: cfg.zoho ? 1 : 0.45, justifyContent: "center" }}>
+          Continue with Zoho{loaded && !cfg.zoho ? " (soon)" : ""}
         </a>
       </div>
-      {loaded && (!cfg.microsoft || !cfg.zoho) && (
-        <div className="faint" style={{ fontSize: 11.5, marginTop: 12 }}>
-          {(!cfg.microsoft && !cfg.zoho) ? "Sign-in is being switched on. One moment." :
-            !cfg.microsoft ? "Microsoft sign-in is being switched on." : "Zoho sign-in is being switched on."}
-        </div>
-      )}
     </div>
   );
 }

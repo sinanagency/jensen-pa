@@ -3,8 +3,9 @@
 // triage and reply UI never care whether a message lives in Microsoft 365 or
 // Zoho. A unified message id is `${accountId}::${providerLocalId}`. Server-only.
 
-import { freshToken, listAccounts } from "./mail-accounts";
+import { freshToken, listAccounts, imapCreds, accountProvider } from "./mail-accounts";
 import { zohoApiHost, Provider } from "./oauth";
+import { listInbox as imapList, readMessage as imapRead, sendMail as imapSend } from "./mail-ops";
 
 export type UMailSummary = {
   id: string; accountId: string; accountEmail: string; provider: Provider | "imap";
@@ -118,10 +119,21 @@ async function zoSend(token: string, fromEmail: string, to: string, subject: str
 }
 
 // ---------- unified dispatch ----------
+function imapToSummary(accountId: string, accountEmail: string, m: any): UMailSummary {
+  return {
+    id: packId(accountId, String(m.uid)), accountId, accountEmail, provider: "imap",
+    from: m.from, fromEmail: m.fromEmail, subject: m.subject, date: m.date, snippet: m.snippet, seen: m.seen, attachments: m.attachments,
+  };
+}
+
 export async function aggregateInbox(perAccount = 15): Promise<UMailSummary[]> {
   const accounts = await listAccounts();
   const batches = await Promise.all(accounts.map(async (a) => {
     try {
+      if (a.provider === "imap") {
+        const creds = await imapCreds(a.id);
+        return (await imapList(creds, perAccount)).map((m) => imapToSummary(a.id, a.email, m));
+      }
       const t = await freshToken(a.id);
       return a.provider === "microsoft"
         ? await msList(a.id, a.email, t.accessToken, perAccount)
@@ -133,14 +145,26 @@ export async function aggregateInbox(perAccount = 15): Promise<UMailSummary[]> {
 
 export async function readUnified(id: string): Promise<UMailFull> {
   const { accountId, local } = unpackId(id);
-  const t = await freshToken(accountId);
   const a = (await listAccounts()).find((x) => x.id === accountId);
+  if (a?.provider === "imap") {
+    const creds = await imapCreds(accountId);
+    const m: any = await imapRead(creds, Number(local));
+    return { ...imapToSummary(accountId, a.email, m), text: m.text || "", to: m.to || "", messageId: m.messageId };
+  }
+  const t = await freshToken(accountId);
   return t.provider === "microsoft"
     ? msRead(accountId, a?.email || t.email, t.accessToken, local)
     : zoRead(accountId, a?.email || t.email, t.accessToken, local);
 }
 
 export async function sendUnified(accountId: string, to: string, subject: string, text: string): Promise<void> {
+  const kind = await accountProvider(accountId);
+  if (kind === "imap") {
+    const creds = await imapCreds(accountId);
+    const r = await imapSend(creds, { to, subject, text });
+    if (!r.ok) throw new Error(r.error || "Could not send.");
+    return;
+  }
   const t = await freshToken(accountId);
   return t.provider === "microsoft" ? msSend(t.accessToken, to, subject, text) : zoSend(t.accessToken, t.email, to, subject, text);
 }
