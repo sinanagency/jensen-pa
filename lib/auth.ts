@@ -18,9 +18,21 @@ async function hmac(data: string): Promise<string> {
   return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=+$/, "");
 }
 
-export async function mintToken(): Promise<string> {
+// url-safe base64 (works in both Edge and Node via Web APIs)
+function b64url(s: string): string {
+  return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function unb64url(s: string): string {
+  const pad = s.length % 4 ? "=".repeat(4 - (s.length % 4)) : "";
+  return decodeURIComponent(escape(atob(s.replace(/-/g, "+").replace(/_/g, "/") + pad)));
+}
+
+// Token format: v2.<exp>.<subjectB64>.<sig> — subject is the account id, so the
+// server knows WHO is logged in (multi-user) while the signature still gates access.
+export async function mintToken(sub = ""): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + TTL;
-  const body = `v1.${exp}`;
+  const sub64 = b64url(sub);
+  const body = `v2.${exp}.${sub64}`;
   const sig = await hmac(body);
   return `${body}.${sig}`;
 }
@@ -28,12 +40,20 @@ export async function mintToken(): Promise<string> {
 export async function verifyToken(token: string | undefined): Promise<boolean> {
   if (!token) return false;
   const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  const [v, exp, sig] = parts;
-  if (v !== "v1") return false;
+  if (parts.length !== 4) return false;
+  const [v, exp, sub64, sig] = parts;
+  if (v !== "v2") return false;
   if (Number(exp) < Math.floor(Date.now() / 1000)) return false;
-  const expected = await hmac(`${v}.${exp}`);
+  const expected = await hmac(`${v}.${exp}.${sub64}`);
   return timingSafeEqual(sig, expected);
+}
+
+// Pull the account id out of a token (verify separately if it matters).
+export function readSubject(token: string | undefined): string | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 4) return null;
+  try { return unb64url(parts[2]); } catch { return null; }
 }
 
 export function checkPassword(input: string): boolean {

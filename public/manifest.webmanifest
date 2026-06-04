@@ -1,2 +1,6 @@
 { "name": "La Rencontre", "short_name": "Rencontre", "start_url": "/", "display": "standalone",
-  "background_color": "#0a0a0c", "theme_color": "#0a0a0c", "icons": [{ "src": "/monogram.svg", "sizes": "any", "type": "image/svg+xml" }] }
+  "background_color": "#0a0a0c", "theme_color": "#0a0a0c",
+  "icons": [
+    { "src": "/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ] }
