@@ -269,6 +269,24 @@ label.inline { display: inline-flex; text-transform: none; letter-spacing: norma
 .orb.sm { width: 30px; height: 30px; }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* charts (ported from Nisria, recolored to La Rencontre purple) */
+.barchart { display: flex; align-items: flex-end; gap: 10px; height: 150px; padding-top: 24px; }
+.barchart.tall { height: 220px; padding-top: 30px; }
+.barchart.labelled { padding-top: 30px; }
+.barcol { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; justify-content: flex-end; position: relative; }
+.bar { width: 100%; max-width: 44px; border-radius: 9px 9px 7px 7px; background: rgba(124,107,176,0.28); transition: height 0.7s var(--ease); }
+.barchart.tall .bar { max-width: 56px; }
+.barcol.hi .bar { background: var(--purple); }
+.barcol .blabel { font-size: 11px; color: var(--muted); }
+.barval { font-size: 11px; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+.barcol.hi .barval { color: #5b4b8a; }
+.bartip { position: absolute; top: -22px; background: var(--ink); color: #fff; font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 7px; white-space: nowrap; }
+.bartip::after { content: ""; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); border: 4px solid transparent; border-top-color: var(--ink); }
+.gauge { position: relative; width: 132px; height: 132px; }
+.gauge .gtext { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+.gauge .gval { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: -0.02em; }
+.gauge .glabel { font-size: 10.5px; color: var(--muted); }
 .fade-up { animation: fadeUp 0.5s var(--ease) both; }
 
 /* ghost "add" card to fill a grid row and invite a new entry */
