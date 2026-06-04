@@ -13,8 +13,14 @@ import { dubaiNow, dayPart } from "../time";
 const API = "https://api.anthropic.com/v1/messages";
 
 export type Turn = { role: "user" | "assistant"; content: any };
+export type Sender = { name: string; role: "owner" | "admin" };
 
-async function buildSystem(lastUser: string): Promise<string> {
+async function buildSystem(lastUser: string, sender?: Sender): Promise<string> {
+  const s = sender || { name: "Jensen", role: "owner" as const };
+  const speaking =
+    s.role === "admin"
+      ? `You are CURRENTLY speaking with ${s.name}, the admin and architect who built and oversees you (not Jensen). Address him as ${s.name}. He is a trusted operator: he can ask anything, including system, config, and oversight questions about how you and the portal run. When he asks you to do something in Jensen's world, do it on Jensen's behalf.`
+      : `You are CURRENTLY speaking with ${s.name}, the founder and principal you serve. Address him as ${s.name}.`;
   const [ents, prefs, goals, rec] = await Promise.all([
     ops.listEntities({}).catch(() => []),
     ops.getPrefs().catch(() => ({})),
@@ -28,8 +34,10 @@ async function buildSystem(lastUser: string): Promise<string> {
   const docsText = rec.docs.length ? rec.docs.map((d) => `- [${d.title}] ${d.text.slice(0, 220)}`).join("\n") : "";
 
   return [
-    `You are Rencontre, the private concierge and chief of staff for Jensen, founder of La Rencontre, a luxury F&B hospitality consultancy in Dubai. Speak in the first person, warm, sharp, discreet. You serve only Jensen.`,
-    `Your job: keep his whole world in order so nothing slips. Sort everything by Covey's matrix (Q1 urgent+important = queue for him; Q2 important = protect & schedule; Q3 urgent-not-important = handle; Q4 = drop). He should wake to a clean board.`,
+    `You are Rencontre, the private concierge and chief of staff for La Rencontre, a luxury F&B hospitality consultancy in Dubai. Speak in the first person, warm, sharp, discreet.`,
+    `WHO IS WHO: Jensen is the founder and principal you serve, the whole portal is his world. Taona is the admin and architect who built and oversees you; treat Taona as a trusted operator with full access. Always know which of them you are talking to and never confuse one for the other.`,
+    speaking,
+    `Your job: keep Jensen's whole world in order so nothing slips. Sort everything by Covey's matrix (Q1 urgent+important = queue for him; Q2 important = protect & schedule; Q3 urgent-not-important = handle; Q4 = drop). He should wake to a clean board.`,
     `Current time in Dubai: ${dubaiNow()} (it is ${dayPart()}). Always reason in Dubai time.`,
     `You have tools to actually DO things in his portal (create tasks, record finance, file documents, manage his calendar, contacts, notes, generate documents, recall memory). USE them. Read freely. Take write actions when he asks. Never claim you did something unless the tool returned success. For sending email or messaging other people, draft it and ask him to confirm first.`,
     NO_DASHES,
@@ -63,10 +71,10 @@ async function callRaw(system: string, messages: Turn[], maxTokens = 1800) {
 
 export type ConciergeResult = { reply: string; toolsUsed: string[] };
 
-export async function runConcierge(input: { messages: { role: "user" | "assistant"; content: string }[]; channel?: string }): Promise<ConciergeResult> {
+export async function runConcierge(input: { messages: { role: "user" | "assistant"; content: string }[]; channel?: string; sender?: Sender }): Promise<ConciergeResult> {
   const history = input.messages.filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-16);
   const lastUser = [...history].reverse().find((m) => m.role === "user")?.content || "";
-  const system = await buildSystem(lastUser);
+  const system = await buildSystem(lastUser, input.sender);
 
   const convo: Turn[] = history.map((m) => ({ role: m.role, content: m.content }));
   const runs: { name: string; ok: boolean }[] = [];

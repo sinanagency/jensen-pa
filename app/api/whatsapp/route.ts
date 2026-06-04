@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendWhatsApp, isOwner } from "@/lib/whatsapp";
+import { sendWhatsApp, isOwner, whoIs } from "@/lib/whatsapp";
 import { runConcierge } from "@/lib/concierge/loop";
 import { kvGet, kvSet } from "@/lib/db";
 import * as ops from "@/lib/concierge/ops";
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    const sender = whoIs(from);
     const history = await recentHistory();
     const media = msg.image || msg.document || msg.video || null;
     const caption: string = msg.image?.caption || msg.document?.caption || "";
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
       await ops.addDoc({ id, title, fileName: media.filename || "whatsapp-upload", mime: dl.mime, kind: "document", text, chunks, createdAt: Date.now() });
 
       const prompt = `I just sent you a document over WhatsApp${caption ? ` with the note: "${caption}"` : ""}. It is now in the brain (document id "${id}", title "${title}"). Its content:\n\n${text.slice(0, 4000)}\n\nFile it: call file_document to put it in the right folder (finance, legal, identity, contracts, clients, venues, events, menus, branding, reports, general). If it is an invoice or receipt, also record_finance using the amounts shown (never invent a number). Then tell me in one or two lines what you filed and where.`;
-      const { reply } = await runConcierge({ messages: [...history, { role: "user", content: prompt }], channel: "whatsapp" });
+      const { reply } = await runConcierge({ messages: [...history, { role: "user", content: prompt }], channel: "whatsapp", sender });
       await sendWhatsApp(from, reply);
       return NextResponse.json({ ok: true });
     }
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
     // ---- plain text: full concierge ----
     const text = (msg.text?.body || "").trim();
     if (!text) return NextResponse.json({ ok: true });
-    const { reply } = await runConcierge({ messages: [...history, { role: "user", content: text }], channel: "whatsapp" });
+    const { reply } = await runConcierge({ messages: [...history, { role: "user", content: text }], channel: "whatsapp", sender });
     await sendWhatsApp(from, reply || "I'm here.");
     return NextResponse.json({ ok: true });
   } catch (e: any) {

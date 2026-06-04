@@ -36,3 +36,20 @@ export function isOwner(from: string): boolean {
   const fromDigits = (from || "").replace(/[^0-9]/g, "");
   return raw.split(",").map((n) => n.replace(/[^0-9]/g, "")).filter(Boolean).includes(fromDigits);
 }
+
+// Identity: who is this number? Jensen is the principal the concierge serves;
+// Taona is the admin/architect who built and oversees it. Override via
+// OWNER_PROFILES env (JSON keyed by digits) if numbers change.
+export type Sender = { name: string; role: "owner" | "admin" };
+export function whoIs(from: string): Sender {
+  const d = (from || "").replace(/[^0-9]/g, "");
+  try {
+    const profiles = process.env.OWNER_PROFILES ? JSON.parse(process.env.OWNER_PROFILES) : null;
+    if (profiles && profiles[d]) return profiles[d];
+  } catch { /* fall through to defaults */ }
+  const defaults: Record<string, Sender> = {
+    "971528902032": { name: "Jensen", role: "owner" },
+    "971501168462": { name: "Taona", role: "admin" },
+  };
+  return defaults[d] || { name: "Jensen", role: "owner" };
+}
