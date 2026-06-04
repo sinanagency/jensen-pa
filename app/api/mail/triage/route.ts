@@ -3,6 +3,7 @@ import { aggregateInbox, hasAccounts, packId, IMAP_ACCOUNT, UMailSummary } from 
 import { triageInbox } from "@/lib/mail-triage";
 import { MAIL_COOKIE, decryptCreds } from "@/lib/mailbox";
 import { listInbox } from "@/lib/mail-ops";
+import { syncEmailEvents } from "@/lib/calendar-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,8 @@ export async function GET(req: NextRequest) {
     ]);
     const combined = [...oauth, ...imap].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     const messages = await triageInbox(combined);
+    // Auto-add any newly-detected dated events to the calendar (idempotent).
+    await syncEmailEvents(messages).catch(() => {});
     return NextResponse.json({ messages }, { headers: { "cache-control": "no-store" } });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 502 });

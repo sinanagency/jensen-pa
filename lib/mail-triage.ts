@@ -9,6 +9,7 @@ import { kvGet, kvSet } from "./db";
 import type { UMailSummary } from "./mail-provider";
 
 export type Quadrant = 1 | 2 | 3 | 4;
+export type EmailEvent = { title: string; date: string; time?: string; note?: string };
 export type Triage = {
   important: boolean;
   urgent: boolean;
@@ -16,6 +17,7 @@ export type Triage = {
   quadrant: Quadrant;
   summary: string;
   draft: string;
+  event?: EmailEvent | null;
 };
 export type TriagedMail = UMailSummary & Triage;
 
@@ -73,8 +75,9 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
     `- needsReply: true if a human is genuinely expecting a written reply from him.`,
     `- summary: max 12 words, plain, what it is and what is wanted.`,
     `- draft: only if needsReply, a 1 to 2 sentence reply he could send, warm, professional, first person. Never use dash characters; use commas or periods. Otherwise an empty string.`,
+    `- event: ONLY if the email is or contains a specific scheduled meeting/event/booking with a concrete calendar date, return {"title":"short title","date":"YYYY-MM-DD","time":"HH:MM" 24h or null,"note":"who/where, short"}. The date MUST be an absolute YYYY-MM-DD (resolve "tomorrow"/"next Tuesday" only if you can be certain, else omit). If there is no concrete dated event, set event to null. Do NOT invent dates.`,
     `Return ONLY a JSON array, one object per email, no prose. Use the exact id string given:`,
-    `[{"id":"...","important":true,"urgent":false,"needsReply":true,"summary":"...","draft":"..."}]`,
+    `[{"id":"...","important":true,"urgent":false,"needsReply":true,"summary":"...","draft":"...","event":null}]`,
   ].join("\n");
 
   const txt = await askClaude({
@@ -92,6 +95,16 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
       if (!o || o.id == null) continue;
       const important = !!o.important;
       const urgent = !!o.urgent;
+      let event: EmailEvent | null = null;
+      const ev = o.event;
+      if (ev && typeof ev === "object" && typeof ev.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ev.date) && ev.title) {
+        event = {
+          title: String(ev.title).slice(0, 120),
+          date: ev.date,
+          time: typeof ev.time === "string" && /^\d{1,2}:\d{2}$/.test(ev.time) ? ev.time : undefined,
+          note: ev.note ? String(ev.note).slice(0, 160) : undefined,
+        };
+      }
       out[String(o.id)] = {
         important,
         urgent,
@@ -99,6 +112,7 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
         quadrant: quadrantOf(important, urgent),
         summary: String(o.summary || "").slice(0, 140),
         draft: String(o.draft || "").slice(0, 600),
+        event,
       };
     }
   }

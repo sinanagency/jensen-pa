@@ -38,8 +38,9 @@ export function providerConfig(p: Provider): ProviderConfig {
       clientSecret: process.env.MS_CLIENT_SECRET,
       authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
       tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-      // offline_access => refresh token; Graph mail read/send; User.Read for the address.
-      scopes: "offline_access openid email profile User.Read Mail.Read Mail.Send",
+      // offline_access => refresh token; Graph mail read/send; User.Read for the
+      // address; Calendars.Read so the Outlook calendar can sync into /calendar.
+      scopes: "offline_access openid email profile User.Read Mail.Read Mail.Send Calendars.Read",
       extraAuthParams: { prompt: "select_account", response_mode: "query" },
     };
   }
@@ -50,7 +51,7 @@ export function providerConfig(p: Provider): ProviderConfig {
     clientSecret: process.env.ZOHO_CLIENT_SECRET,
     authorizeUrl: `${zohoAccountsHost()}/oauth/v2/auth`,
     tokenUrl: `${zohoAccountsHost()}/oauth/v2/token`,
-    scopes: "ZohoMail.accounts.READ,ZohoMail.messages.READ,ZohoMail.messages.CREATE",
+    scopes: "ZohoMail.accounts.READ,ZohoMail.messages.READ,ZohoMail.messages.CREATE,ZohoCalendar.event.READ",
     // access_type=offline + prompt=consent => Zoho returns a refresh token.
     extraAuthParams: { access_type: "offline", prompt: "consent" },
   };

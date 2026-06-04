@@ -3,13 +3,32 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
-import { RefreshCw, Loader2, Plug, Send, CornerUpLeft, Check } from "lucide-react";
+import { RefreshCw, Loader2, Plug, Send, Check, X, CalendarPlus } from "lucide-react";
 
 type Mail = {
   id: string; accountId: string; accountEmail: string; provider: "microsoft" | "zoho" | "imap";
   from: string; fromEmail: string; subject: string; date: string; seen: boolean; attachments: number;
   important: boolean; urgent: boolean; needsReply: boolean; quadrant: 1 | 2 | 3 | 4; summary: string; draft: string;
+  event?: { title: string; date: string; time?: string; note?: string } | null;
 };
+
+function dateShort(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const diffH = (now.getTime() - d.getTime()) / 3.6e6;
+  if (diffH < 1) return `${Math.max(1, Math.round(diffH * 60))}m`;
+  if (diffH < 24 && now.getDate() === d.getDate()) return `${Math.round(diffH)}h`;
+  const sameYear = now.getFullYear() === d.getFullYear();
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(sameYear ? {} : { year: "2-digit" }) });
+}
+function dateFull(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 const QUADS = [
   { q: 1, title: "Do now", sub: "Urgent & important", accent: "var(--q1, #f87171)" },
@@ -22,7 +41,7 @@ export default function InboxPage() {
   const [state, setState] = useState<"loading" | "out" | "in">("loading");
   const [mail, setMail] = useState<Mail[]>([]);
   const [err, setErr] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [open, setOpen] = useState<Mail | null>(null);
 
   async function load() {
     setState("loading"); setErr("");
@@ -83,20 +102,12 @@ export default function InboxPage() {
               <div className="quad-list">
                 {items.length === 0 && <div className="faint" style={{ fontSize: 11.5, padding: "6px 8px" }}>Clear.</div>}
                 {items.map((m) => (
-                  <div key={m.id}>
-                    <div className="mrow" onClick={() => setOpenId(openId === m.id ? null : m.id)}>
-                      <span className="mdot" data-reply={m.needsReply ? "true" : "false"} />
-                      <span className="msubj">{m.subject || "(no subject)"}</span>
-                      <span className="mwho">{senderName(m.from)}</span>
-                    </div>
-                    {openId === m.id && (
-                      <div className="mdetail">
-                        <div className="faint" style={{ fontSize: 11, marginBottom: 6 }}>
-                          {m.from} · {m.accountEmail}{m.summary ? ` — ${m.summary}` : ""}
-                        </div>
-                        <ReplyBox m={m} onDone={() => setOpenId(null)} />
-                      </div>
-                    )}
+                  <div key={m.id} className="mrow" onClick={() => setOpen(m)}>
+                    <span className="mdot" data-reply={m.needsReply ? "true" : "false"} />
+                    <span className="msubj">{m.subject || "(no subject)"}</span>
+                    {m.event && <CalendarPlus size={12} className="mcal" />}
+                    <span className="mwho">{senderName(m.from)}</span>
+                    <span className="mdate">{dateShort(m.date)}</span>
                   </div>
                 ))}
               </div>
@@ -118,10 +129,69 @@ export default function InboxPage() {
         .mdot{width:6px;height:6px;border-radius:50%;flex:none;background:rgba(18,20,28,.22)}
         .mdot[data-reply="true"]{background:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.16)}
         .msubj{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .mwho{font-size:11px;color:#8a8a96;flex:none;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .mdetail{padding:4px 8px 10px}
+        .mcal{color:#8b5cf6;flex:none}
+        .mwho{font-size:11px;color:#8a8a96;flex:none;max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .mdate{font-size:10.5px;color:#9aa0aa;flex:none;width:42px;text-align:right}
+        .lr-modal-bg{position:fixed;inset:0;z-index:600;background:rgba(8,7,11,.62);backdrop-filter:blur(3px);display:grid;place-items:center;padding:24px}
+        .lr-modal{background:#fff;color:#16171d;width:min(720px,94vw);max-height:88vh;border-radius:18px;box-shadow:0 40px 120px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden}
+        .lr-modal-head{display:flex;align-items:flex-start;gap:12px;padding:18px 20px 14px;border-bottom:1px solid rgba(18,20,28,.10)}
+        .lr-modal-body{overflow-y:auto;padding:16px 20px}
+        .lr-modal-foot{border-top:1px solid rgba(18,20,28,.10);padding:14px 20px}
+        .lr-xbtn{flex:none;width:32px;height:32px;border-radius:9px;border:1px solid rgba(18,20,28,.14);background:#fff;display:grid;place-items:center;cursor:pointer;color:#41454f}
+        .lr-xbtn:hover{background:#f4f4f6}
+        .lr-emailbody{font-size:13.5px;line-height:1.6;color:#2a2c33;white-space:pre-wrap;word-break:break-word}
+        .lr-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;background:rgba(139,92,246,.12);color:#6b4fb0;border:1px solid rgba(139,92,246,.26);border-radius:999px;padding:3px 9px}
       `}</style>
+      {open && <MailModal m={open} onClose={() => setOpen(null)} />}
     </Shell>
+  );
+}
+
+function MailModal({ m, onClose }: { m: Mail; onClose: () => void }) {
+  const [body, setBody] = useState<string | null>(null);
+  const [to, setTo] = useState(m.fromEmail);
+  const [subject, setSubject] = useState(`Re: ${m.subject}`);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", onKey);
+    fetch(`/api/mail/message?id=${encodeURIComponent(m.id)}`).then((x) => x.json()).then((r) => {
+      if (r.message) {
+        setBody(r.message.text || "(no text content)");
+        setTo(r.message.fromEmail || m.fromEmail);
+        setSubject(`Re: ${r.message.subject || m.subject}`);
+      } else setBody("(could not load the message)");
+    }).catch(() => setBody("(could not load the message)"));
+    return () => window.removeEventListener("keydown", onKey);
+  }, [m, onClose]);
+
+  return (
+    <div className="lr-modal-bg" onClick={onClose}>
+      <div className="lr-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="lr-modal-head">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.25 }}>{m.subject || "(no subject)"}</div>
+            <div style={{ fontSize: 12.5, color: "#71757f", marginTop: 5 }}>
+              <b style={{ color: "#41454f" }}>{m.from}</b> · into {m.accountEmail} · {dateFull(m.date)}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              {m.needsReply && <span className="lr-chip">Needs reply</span>}
+              {m.event && <span className="lr-chip"><CalendarPlus size={12} /> Added to calendar · {m.event.date}{m.event.time ? ` ${m.event.time}` : ""}</span>}
+            </div>
+          </div>
+          <button className="lr-xbtn" onClick={onClose} aria-label="Close"><X size={16} /></button>
+        </div>
+        <div className="lr-modal-body">
+          {m.summary && <div style={{ fontSize: 12.5, color: "#6b4fb0", background: "rgba(139,92,246,.07)", border: "1px solid rgba(139,92,246,.18)", borderRadius: 10, padding: "8px 11px", marginBottom: 14 }}>{m.summary}</div>}
+          {body === null
+            ? <div style={{ color: "#71757f", display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> Loading…</div>
+            : <div className="lr-emailbody">{body}</div>}
+        </div>
+        <div className="lr-modal-foot">
+          <ReplyBox m={m} presetTo={to} presetSubject={subject} onDone={onClose} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -132,43 +202,34 @@ function senderName(from: string): string {
   return name.split(/\s+/).slice(0, 2).join(" ");
 }
 
-function ReplyBox({ m, onDone }: { m: Mail; onDone: () => void }) {
+function ReplyBox({ m, presetTo, presetSubject, onDone }: { m: Mail; presetTo: string; presetSubject: string; onDone: () => void }) {
   const [text, setText] = useState(m.draft || "");
-  const [full, setFull] = useState<{ to: string; subject: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState("");
-
-  useEffect(() => {
-    fetch(`/api/mail/message?id=${encodeURIComponent(m.id)}`).then((x) => x.json()).then((r) => {
-      if (r.message) setFull({ to: r.message.fromEmail || m.fromEmail, subject: `Re: ${r.message.subject || m.subject}` });
-      else setFull({ to: m.fromEmail, subject: `Re: ${m.subject}` });
-    }).catch(() => setFull({ to: m.fromEmail, subject: `Re: ${m.subject}` }));
-  }, [m]);
 
   async function send() {
     setSending(true); setErr("");
     const r = await fetch("/api/mail/reply", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: m.id, to: full?.to || m.fromEmail, subject: full?.subject || `Re: ${m.subject}`, text }),
+      body: JSON.stringify({ id: m.id, to: presetTo || m.fromEmail, subject: presetSubject || `Re: ${m.subject}`, text }),
     }).then((x) => x.json()).catch(() => ({ error: "Network error." }));
     setSending(false);
     if (r.ok) { setSent(true); setTimeout(onDone, 900); } else setErr(r.error || "Could not send.");
   }
 
-  if (sent) return <div className="accent" style={{ fontSize: 12.5, marginTop: 8, display: "flex", gap: 6, alignItems: "center" }}><Check size={14} /> Sent.</div>;
+  if (sent) return <div style={{ color: "#34a853", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}><Check size={15} /> Sent.</div>;
 
   return (
-    <div style={{ marginTop: 8 }}>
-      <div className="faint" style={{ fontSize: 11, marginBottom: 5, display: "flex", gap: 5, alignItems: "center" }}><CornerUpLeft size={12} /> Reply from {m.accountEmail} to {full?.to || m.fromEmail}</div>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
-        placeholder="Write your reply…" className="input" style={{ width: "100%", resize: "vertical", fontSize: 13 }} />
-      {err && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>{err}</div>}
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-        <button className="btn purple" onClick={send} disabled={sending || !text.trim()} style={{ height: 34 }}>
-          {sending ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Send size={14} />} Send
+    <div>
+      <div style={{ fontSize: 11, color: "#71757f", marginBottom: 6 }}>Reply from {m.accountEmail} to {presetTo || m.fromEmail}</div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3}
+        placeholder="Write your reply…" style={{ width: "100%", resize: "vertical", fontSize: 13.5, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(18,20,28,.16)", color: "#16171d", outline: "none" }} />
+      {err && <div style={{ color: "#d93025", fontSize: 12, marginTop: 4 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button className="btn purple" onClick={send} disabled={sending || !text.trim()} style={{ height: 38 }}>
+          {sending ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Send size={15} />} Send reply
         </button>
-        <button className="btn ghost" onClick={onDone} style={{ height: 34 }}>Cancel</button>
       </div>
     </div>
   );

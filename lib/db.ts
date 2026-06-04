@@ -83,6 +83,19 @@ function chk<T>(res: { data: T; error: any }, where: string): T {
   return res.data;
 }
 
+// Server-side calendar event insert (raw PostgREST, consistent with kv). Used by
+// the email -> calendar auto-sync so detected meetings land on /calendar.
+export async function addEvent(e: {
+  id: string; title: string; date: string; time?: string | null; note?: string | null; entityId?: string | null; createdAt: number;
+}): Promise<void> {
+  const r = await fetch(sbRest("events"), {
+    method: "POST",
+    headers: { ...sbHeaders(), Prefer: "return=minimal" },
+    body: JSON.stringify([{ id: e.id, title: e.title, entity_id: e.entityId ?? null, date: e.date, time: e.time ?? null, note: e.note ?? null, created_at: e.createdAt }]),
+  });
+  if (!r.ok) throw new Error(`event insert: ${r.status} ${(await r.text()).slice(0, 200)}`);
+}
+
 // ---- chat log (one-brain: portal + whatsapp share this) ----
 export async function appendChat(turn: ChatTurn & { channel?: string }): Promise<void> {
   const res = await admin().from("chat_messages").insert({ role: turn.role, content: turn.content, channel: turn.channel ?? "portal", ts: turn.ts });
