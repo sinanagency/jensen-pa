@@ -141,16 +141,33 @@ export default function InboxPage() {
         .lr-xbtn:hover{background:#f4f4f6}
         .lr-emailbody{font-size:13.5px;line-height:1.6;color:#2a2c33;white-space:pre-wrap;word-break:break-word}
         .lr-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;background:rgba(139,92,246,.12);color:#6b4fb0;border:1px solid rgba(139,92,246,.26);border-radius:999px;padding:3px 9px}
+        .evt-card{border:1px solid rgba(139,92,246,.3);background:linear-gradient(180deg,rgba(139,92,246,.06),rgba(139,92,246,.02));border-radius:12px;padding:13px 15px;margin-bottom:16px}
       `}</style>
       {open && <MailModal m={open} onClose={() => setOpen(null)} />}
     </Shell>
   );
 }
 
+function meetingLink(text: string): string {
+  if (!text) return "";
+  const pats = [
+    /https?:\/\/[\w.-]*zoom\.us\/[^\s"'<>)\]]+/i,
+    /https?:\/\/meet\.google\.com\/[^\s"'<>)\]]+/i,
+    /https?:\/\/teams\.microsoft\.com\/[^\s"'<>)\]]+/i,
+    /https?:\/\/[\w.-]*teams\.live\.com\/[^\s"'<>)\]]+/i,
+    /https?:\/\/[\w.-]*webex\.com\/[^\s"'<>)\]]+/i,
+  ];
+  for (const p of pats) { const x = text.match(p); if (x) return x[0]; }
+  return "";
+}
+
 function MailModal({ m, onClose }: { m: Mail; onClose: () => void }) {
   const [body, setBody] = useState<string | null>(null);
   const [to, setTo] = useState(m.fromEmail);
   const [subject, setSubject] = useState(`Re: ${m.subject}`);
+  const [link, setLink] = useState("");
+  const [evStatus, setEvStatus] = useState<"idle" | "adding" | "added" | "already" | "err">("idle");
+  const [evErr, setEvErr] = useState("");
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -160,10 +177,23 @@ function MailModal({ m, onClose }: { m: Mail; onClose: () => void }) {
         setBody(r.message.text || "(no text content)");
         setTo(r.message.fromEmail || m.fromEmail);
         setSubject(`Re: ${r.message.subject || m.subject}`);
+        setLink(meetingLink(r.message.text || ""));
       } else setBody("(could not load the message)");
     }).catch(() => setBody("(could not load the message)"));
     return () => window.removeEventListener("keydown", onKey);
   }, [m, onClose]);
+
+  async function addToCalendar() {
+    if (!m.event) return;
+    setEvStatus("adding"); setEvErr("");
+    const note = [m.event.note, link ? `Join: ${link}` : ""].filter(Boolean).join(" · ");
+    const r = await fetch("/api/calendar/add", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messageId: m.id, title: m.event.title, date: m.event.date, time: m.event.time || null, note }),
+    }).then((x) => x.json()).catch(() => ({ ok: false, error: "Network error." }));
+    if (r.ok) setEvStatus(r.already ? "already" : "added");
+    else { setEvStatus("err"); setEvErr(r.error || "Could not add."); }
+  }
 
   return (
     <div className="lr-modal-bg" onClick={onClose}>
@@ -176,12 +206,39 @@ function MailModal({ m, onClose }: { m: Mail; onClose: () => void }) {
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
               {m.needsReply && <span className="lr-chip">Needs reply</span>}
-              {m.event && <span className="lr-chip"><CalendarPlus size={12} /> Added to calendar · {m.event.date}{m.event.time ? ` ${m.event.time}` : ""}</span>}
+              {m.event && <span className="lr-chip"><CalendarPlus size={12} /> Meeting detected</span>}
             </div>
           </div>
           <button className="lr-xbtn" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </div>
         <div className="lr-modal-body">
+          {m.event && (
+            <div className="evt-card">
+              <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, color: "#6b4fb0", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                <CalendarPlus size={13} /> Add this to your calendar?
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>{m.event.title}</div>
+              <div style={{ fontSize: 12.5, color: "#41454f", marginTop: 2 }}>
+                {new Date(m.event.date + (m.event.time ? `T${m.event.time}` : "T00:00")).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                {m.event.time ? ` · ${m.event.time}` : ""}
+              </div>
+              {link && (
+                <div style={{ fontSize: 12, marginTop: 6 }}>
+                  <a href={link} target="_blank" rel="noreferrer" style={{ color: "#6b4fb0", wordBreak: "break-all" }}>
+                    {/zoom/i.test(link) ? "Zoom" : /meet\.google/i.test(link) ? "Google Meet" : /teams/i.test(link) ? "Microsoft Teams" : "Join"} link detected — will be saved
+                  </a>
+                </div>
+              )}
+              <div style={{ marginTop: 10 }}>
+                {evStatus === "added" ? <span style={{ color: "#34a853", fontSize: 13, display: "inline-flex", gap: 5, alignItems: "center" }}><Check size={15} /> Added to calendar</span>
+                  : evStatus === "already" ? <span style={{ color: "#71757f", fontSize: 13 }}>Already on your calendar</span>
+                  : <button className="btn purple" onClick={addToCalendar} disabled={evStatus === "adding"} style={{ height: 34 }}>
+                      {evStatus === "adding" ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <CalendarPlus size={14} />} Add to calendar
+                    </button>}
+                {evStatus === "err" && <span style={{ color: "#d93025", fontSize: 12, marginLeft: 10 }}>{evErr}</span>}
+              </div>
+            </div>
+          )}
           {m.summary && <div style={{ fontSize: 12.5, color: "#6b4fb0", background: "rgba(139,92,246,.07)", border: "1px solid rgba(139,92,246,.18)", borderRadius: 10, padding: "8px 11px", marginBottom: 14 }}>{m.summary}</div>}
           {body === null
             ? <div style={{ color: "#71757f", display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> Loading…</div>
