@@ -52,7 +52,9 @@ export default function LoginPage() {
 
   return (
     <div className="lr-login">
-      <img className="bg" src="/login-3d.png" alt="" />
+      <video className="bg" autoPlay muted loop playsInline poster="/login-bg-poster.jpg">
+        <source src="/login-bg.mp4" type="video/mp4" />
+      </video>
       <div className="veil" />
 
       <motion.div
