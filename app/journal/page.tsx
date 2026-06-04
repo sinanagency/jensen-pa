@@ -40,7 +40,7 @@ export default function Journal() {
         {entries.map((n) => (
           <div key={n.id} className="card" style={{ padding: 18 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span className="faint" style={{ fontSize: 12 }}>{new Date(n.createdAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+              <span className="faint" style={{ fontSize: 12 }}>{new Date(n.createdAt).toLocaleString("en-GB", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
               <button className="iconbtn" style={{ marginLeft: "auto", background: "rgba(18,20,28,0.05)", border: "1px solid rgba(18,20,28,0.12)", color: "var(--ink-2)" }} onClick={() => mutate((d) => { d.notes = d.notes.filter((x) => x.id !== n.id); })}><Trash2 size={14} /></button>
             </div>
             <div style={{ fontSize: 14.5, lineHeight: 1.65, color: "var(--ink-2)", whiteSpace: "pre-wrap" }}>{n.body}</div>

@@ -162,7 +162,7 @@ export default function Today() {
         .chip{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--purple-soft);color:var(--purple-2);border:1px solid var(--purple-line)}
         .mods{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
         .mod{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:20px 8px;font-size:13px;color:var(--ink-2)}
-        @media(max-width:900px){.quads,.bento2{grid-template-columns:1fr}.mods{grid-template-columns:repeat(3,1fr)}.dash-head .hud{display:none}}
+        @media(max-width:900px){.quads,.bento2{grid-template-columns:1fr}.mods{grid-template-columns:repeat(2,1fr)}.dash-head .hud{display:none}}
       `}</style>
     </Shell>
   );

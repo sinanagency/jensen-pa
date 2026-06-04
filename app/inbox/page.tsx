@@ -116,7 +116,6 @@ export default function InboxPage() {
         })}
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}
-        .btn.ghost{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--fg, #f6f6f8)}
         .quad-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
         @media (max-width:760px){.quad-grid{grid-template-columns:1fr}}
         .quad{padding:0;overflow:hidden;display:flex;flex-direction:column}

@@ -294,7 +294,7 @@ export default function FinancePage() {
 
           {/* Footer */}
           <div className="faint" style={{ fontSize: 11, marginTop: 20, lineHeight: 1.6, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
-            Figures from {UAE_TAX.source} Last reviewed {UAE_TAX.lastReviewed}. Verify before filing.
+            Figures from {UAE_TAX.source}. Last reviewed {UAE_TAX.lastReviewed}. Verify before filing.
           </div>
         </div>
 

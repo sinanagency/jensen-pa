@@ -37,7 +37,7 @@ async function vatReport(i: { from?: string; to?: string }) {
 async function ctEstimate(i: { from?: string; to?: string }) {
   const s = await financeSummary(i);
   const ct = corporateTax(s.net);
-  return { taxableProfit: s.net, corporateTax: ct, note: "9% on taxable income above AED 375,000. Estimate only; confirm with an accountant." };
+  return { taxableProfit: s.net, corporateTax: ct.tax, detail: ct, note: "9% on taxable income above AED 375,000. Estimate only; confirm with an accountant." };
 }
 
 const GEN_SYS = (kind: string) =>

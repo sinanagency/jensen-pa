@@ -177,7 +177,7 @@ export default function Meetings() {
       </div>
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
-        .u-badge{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,var(--purple-2),var(--purple-3,#5b4b8a));color:#fff;font-family:var(--font-display);font-weight:700;font-size:11px;flex:none}
+        .u-badge{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,var(--purple-2),#5b4b8a);color:#fff;font-family:var(--font-display);font-weight:700;font-size:11px;flex:none}
         .u-badge.sm{width:24px;height:24px;font-size:12px;border-radius:7px}
         .card .iconbtn{background:rgba(18,20,28,0.05);border:1px solid rgba(18,20,28,0.12);color:var(--ink-2)}
         .card .iconbtn:hover{color:var(--ink);border-color:rgba(18,20,28,0.22)}
