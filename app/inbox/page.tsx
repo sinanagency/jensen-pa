@@ -6,22 +6,23 @@ import Shell from "@/components/Shell";
 import { RefreshCw, Loader2, Plug, Send, CornerUpLeft, Check } from "lucide-react";
 
 type Mail = {
-  uid: number; from: string; fromEmail: string; subject: string; date: string; seen: boolean; attachments: number;
+  id: string; accountId: string; accountEmail: string; provider: "microsoft" | "zoho";
+  from: string; fromEmail: string; subject: string; date: string; seen: boolean; attachments: number;
   important: boolean; urgent: boolean; needsReply: boolean; quadrant: 1 | 2 | 3 | 4; summary: string; draft: string;
 };
 
 const QUADS = [
-  { q: 1, title: "Do now", sub: "Urgent & important", accent: "var(--danger, #e5709b)" },
-  { q: 2, title: "Decide & schedule", sub: "Important, not urgent", accent: "var(--purple-2, #a78bfa)" },
-  { q: 3, title: "Quick / delegate", sub: "Urgent, not important", accent: "#e0b15e" },
-  { q: 4, title: "Everything else", sub: "Low signal", accent: "var(--muted, #8a8398)" },
+  { q: 1, title: "Do now", sub: "Urgent & important", accent: "var(--q1, #f87171)" },
+  { q: 2, title: "Decide & schedule", sub: "Important, not urgent", accent: "var(--q2, #8b5cf6)" },
+  { q: 3, title: "Quick / delegate", sub: "Urgent, not important", accent: "var(--q3, #fbbf24)" },
+  { q: 4, title: "Everything else", sub: "Low signal", accent: "var(--q4, #5e5e68)" },
 ] as const;
 
 export default function InboxPage() {
   const [state, setState] = useState<"loading" | "out" | "in">("loading");
   const [mail, setMail] = useState<Mail[]>([]);
   const [err, setErr] = useState("");
-  const [openUid, setOpenUid] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   async function load() {
     setState("loading"); setErr("");
@@ -37,16 +38,16 @@ export default function InboxPage() {
 
   if (state === "loading") {
     return <Shell><div className="page-hero fade-up"><div className="eyebrow">Inbox</div><h1>Sorting your mail…</h1></div>
-      <div className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Reading and ranking the latest messages.</div>
+      <div className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Reading and ranking across your mailboxes.</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></Shell>;
   }
 
   if (state === "out") {
     return <Shell>
-      <div className="page-hero fade-up"><div className="eyebrow">Inbox</div><h1>Connect your mailbox.</h1></div>
+      <div className="page-hero fade-up"><div className="eyebrow">Inbox</div><h1>Connect your mailboxes.</h1></div>
       <div className="card" style={{ padding: 26, textAlign: "center", maxWidth: 460 }}>
         <Plug size={22} style={{ opacity: 0.7 }} />
-        <p className="muted" style={{ marginTop: 10, fontSize: 14 }}>Link your email once and I sort every message into your four quadrants and flag what needs a reply.</p>
+        <p className="muted" style={{ marginTop: 10, fontSize: 14 }}>Connect Outlook and Zoho once and I sort every message into your four quadrants and flag what needs a reply.</p>
         <Link href="/mail" className="btn purple" style={{ marginTop: 6, display: "inline-flex" }}>Connect mailbox</Link>
       </div>
     </Shell>;
@@ -82,17 +83,17 @@ export default function InboxPage() {
               {items.length === 0 && <div className="faint" style={{ fontSize: 12.5, padding: "8px 0" }}>Clear.</div>}
 
               {items.map((m) => (
-                <div key={m.uid} style={{ borderTop: "1px solid var(--line)", padding: "9px 0" }}>
+                <div key={m.id} style={{ borderTop: "1px solid var(--line)", padding: "9px 0" }}>
                   <div style={{ display: "flex", gap: 8, justifyContent: "space-between", cursor: "pointer" }}
-                    onClick={() => setOpenUid(openUid === m.uid ? null : m.uid)}>
+                    onClick={() => setOpenId(openId === m.id ? null : m.id)}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.subject || "(no subject)"}</div>
-                      <div className="faint" style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from}</div>
+                      <div className="faint" style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from} · {m.accountEmail}</div>
                       {m.summary && <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{m.summary}</div>}
                     </div>
                     {m.needsReply && <span className="pill accent" style={{ height: 20, alignSelf: "flex-start", flex: "none" }}>Reply</span>}
                   </div>
-                  {openUid === m.uid && <ReplyBox m={m} onDone={() => setOpenUid(null)} />}
+                  {openId === m.id && <ReplyBox m={m} onDone={() => setOpenId(null)} />}
                 </div>
               ))}
             </div>
@@ -100,7 +101,7 @@ export default function InboxPage() {
         })}
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}
-        .btn.ghost{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--fg)}
+        .btn.ghost{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--fg, #f6f6f8)}
       `}</style>
     </Shell>
   );
@@ -108,14 +109,15 @@ export default function InboxPage() {
 
 function ReplyBox({ m, onDone }: { m: Mail; onDone: () => void }) {
   const [text, setText] = useState(m.draft || "");
-  const [full, setFull] = useState<{ to: string; subject: string; messageId?: string } | null>(null);
+  const [full, setFull] = useState<{ to: string; subject: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    fetch(`/api/mail/message?uid=${m.uid}`).then((x) => x.json()).then((r) => {
-      if (r.message) setFull({ to: r.message.fromEmail || m.fromEmail, subject: `Re: ${r.message.subject || m.subject}`, messageId: r.message.messageId });
+    fetch(`/api/mail/message?id=${encodeURIComponent(m.id)}`).then((x) => x.json()).then((r) => {
+      if (r.message) setFull({ to: r.message.fromEmail || m.fromEmail, subject: `Re: ${r.message.subject || m.subject}` });
+      else setFull({ to: m.fromEmail, subject: `Re: ${m.subject}` });
     }).catch(() => setFull({ to: m.fromEmail, subject: `Re: ${m.subject}` }));
   }, [m]);
 
@@ -123,7 +125,7 @@ function ReplyBox({ m, onDone }: { m: Mail; onDone: () => void }) {
     setSending(true); setErr("");
     const r = await fetch("/api/mail/reply", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ to: full?.to || m.fromEmail, subject: full?.subject || `Re: ${m.subject}`, text, inReplyTo: full?.messageId }),
+      body: JSON.stringify({ id: m.id, to: full?.to || m.fromEmail, subject: full?.subject || `Re: ${m.subject}`, text }),
     }).then((x) => x.json()).catch(() => ({ error: "Network error." }));
     setSending(false);
     if (r.ok) { setSent(true); setTimeout(onDone, 900); } else setErr(r.error || "Could not send.");
@@ -133,7 +135,7 @@ function ReplyBox({ m, onDone }: { m: Mail; onDone: () => void }) {
 
   return (
     <div style={{ marginTop: 8 }}>
-      <div className="faint" style={{ fontSize: 11, marginBottom: 5, display: "flex", gap: 5, alignItems: "center" }}><CornerUpLeft size={12} /> Reply to {full?.to || m.fromEmail}</div>
+      <div className="faint" style={{ fontSize: 11, marginBottom: 5, display: "flex", gap: 5, alignItems: "center" }}><CornerUpLeft size={12} /> Reply from {m.accountEmail} to {full?.to || m.fromEmail}</div>
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
         placeholder="Write your reply…" className="input" style={{ width: "100%", resize: "vertical", fontSize: 13 }} />
       {err && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>{err}</div>}

@@ -101,10 +101,13 @@ export default function MailPage() {
     return (
       <Shell>
         <div className="mail-connect fade-up">
-        <div className="page-hero" style={{ textAlign: "center", marginBottom: 8 }}><div className="eyebrow">Mail</div><h1>Connect your mailbox.</h1></div>
+        <div className="page-hero" style={{ textAlign: "center", marginBottom: 8 }}><div className="eyebrow">Mail</div><h1>Connect your mailboxes.</h1></div>
         <p className="muted" style={{ marginBottom: 22, maxWidth: 520, textAlign: "center" }}>
-          Read and reply to your email here and from WhatsApp, with attachments. Use an app password, not your login password. Your credentials are encrypted and never shared.
+          Connect Outlook and Zoho with one click. Sign in, accept, done. You can add as many mailboxes as you like, and they all flow into your one inbox.
         </p>
+        <MailboxOAuth />
+        <details style={{ maxWidth: 480, width: "100%", marginTop: 18 }}>
+          <summary className="faint" style={{ cursor: "pointer", fontSize: 12.5 }}>Advanced: connect another provider with an app password</summary>
         <div className="card feature" style={{ padding: 24, width: "100%", maxWidth: 480, textAlign: "left" }}>
           <label>Provider</label>
           <div style={{ display: "flex", gap: 8, margin: "8px 0 14px", flexWrap: "wrap" }}>
@@ -128,6 +131,7 @@ export default function MailPage() {
             Outlook and Gmail require an app password from your account security settings. We validate by signing in once.
           </div>
         </div>
+        </details>
         </div>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}} .mail-connect{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 230px)}`}</style>
       </Shell>
@@ -203,5 +207,66 @@ export default function MailPage() {
       )}
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} .mailrow:hover{background:var(--glass-2)!important}`}</style>
     </Shell>
+  );
+}
+
+// ---------- OAuth multi-account connect ----------
+type OAuthAccount = { id: string; provider: "microsoft" | "zoho"; email: string; createdAt: number };
+
+function MailboxOAuth() {
+  const [accounts, setAccounts] = useState<OAuthAccount[]>([]);
+  const [cfg, setCfg] = useState<{ microsoft: boolean; zoho: boolean }>({ microsoft: false, zoho: false });
+  const [loaded, setLoaded] = useState(false);
+
+  async function refresh() {
+    const r = await fetch("/api/mail/accounts").then((x) => x.json()).catch(() => ({}));
+    setAccounts(r.accounts || []);
+    setCfg(r.configured || { microsoft: false, zoho: false });
+    setLoaded(true);
+  }
+  useEffect(() => { refresh(); }, []);
+
+  async function remove(id: string) {
+    await fetch(`/api/mail/accounts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    refresh();
+  }
+
+  const provLabel = (p: string) => (p === "microsoft" ? "Outlook / Microsoft 365" : "Zoho Mail");
+
+  return (
+    <div className="card" style={{ padding: 20, width: "100%", maxWidth: 480, textAlign: "left" }}>
+      {accounts.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <label>Connected mailboxes</label>
+          {accounts.map((a) => (
+            <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 0", borderTop: "1px solid var(--line)" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.email}</div>
+                <div className="faint" style={{ fontSize: 11.5 }}>{provLabel(a.provider)}</div>
+              </div>
+              <button className="pill" style={{ height: 28, cursor: "pointer" }} onClick={() => remove(a.id)}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <label>Add a mailbox</label>
+      <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+        <a className="btn purple" href="/api/mail/oauth/start?provider=microsoft"
+          style={{ pointerEvents: cfg.microsoft ? "auto" : "none", opacity: cfg.microsoft ? 1 : 0.5, justifyContent: "center" }}>
+          Continue with Microsoft
+        </a>
+        <a className="btn purple" href="/api/mail/oauth/start?provider=zoho"
+          style={{ pointerEvents: cfg.zoho ? "auto" : "none", opacity: cfg.zoho ? 1 : 0.5, justifyContent: "center" }}>
+          Continue with Zoho
+        </a>
+      </div>
+      {loaded && (!cfg.microsoft || !cfg.zoho) && (
+        <div className="faint" style={{ fontSize: 11.5, marginTop: 12 }}>
+          {(!cfg.microsoft && !cfg.zoho) ? "Sign-in is being switched on. One moment." :
+            !cfg.microsoft ? "Microsoft sign-in is being switched on." : "Zoho sign-in is being switched on."}
+        </div>
+      )}
+    </div>
   );
 }

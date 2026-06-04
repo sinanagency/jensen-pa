@@ -1,12 +1,12 @@
 // Inbox triage: classify each email into Jensen's Eisenhower four quadrants and
 // flag the ones that actually need a reply. One cheap Haiku call per uncached
-// batch; results cached in Supabase kv by uid so we don't re-spend on every open.
-// The four-quadrant frame is the platform philosophy — tasks, payments, and mail
-// all sort by urgent x important.
+// batch; results cached in Supabase kv by message id so we don't re-spend on
+// every open. The four-quadrant frame is the platform philosophy — tasks,
+// payments, and mail all sort by urgent x important.
 
 import { askClaude, HAIKU } from "./anthropic";
 import { kvGet, kvSet } from "./db";
-import type { MailSummary } from "./mail-ops";
+import type { UMailSummary } from "./mail-provider";
 
 export type Quadrant = 1 | 2 | 3 | 4;
 export type Triage = {
@@ -17,10 +17,10 @@ export type Triage = {
   summary: string;
   draft: string;
 };
-export type TriagedMail = MailSummary & Triage;
+export type TriagedMail = UMailSummary & Triage;
 
 const CACHE_KEY = "mailtriage";
-const MAX_CACHE = 300;
+const MAX_CACHE = 400;
 
 export function quadrantOf(important: boolean, urgent: boolean): Quadrant {
   if (important && urgent) return 1;
@@ -33,27 +33,24 @@ function blank(): Triage {
   return { important: false, urgent: false, needsReply: false, quadrant: 4, summary: "", draft: "" };
 }
 
-export async function triageInbox(list: MailSummary[]): Promise<TriagedMail[]> {
+export async function triageInbox(list: UMailSummary[]): Promise<TriagedMail[]> {
   const cache = await kvGet<Record<string, Triage>>(CACHE_KEY, {});
-  const need = list.filter((m) => !cache[String(m.uid)]);
+  const need = list.filter((m) => !cache[m.id]);
 
   if (need.length) {
     const fresh = await classifyBatch(need);
-    for (const m of need) {
-      const c = fresh[String(m.uid)];
-      if (c) cache[String(m.uid)] = c;
-    }
+    for (const m of need) if (fresh[m.id]) cache[m.id] = fresh[m.id];
     const keys = Object.keys(cache);
     if (keys.length > MAX_CACHE) for (const k of keys.slice(0, keys.length - MAX_CACHE)) delete cache[k];
     await kvSet(CACHE_KEY, cache).catch(() => {});
   }
 
-  return list.map((m) => ({ ...m, ...(cache[String(m.uid)] || blank()) }));
+  return list.map((m) => ({ ...m, ...(cache[m.id] || blank()) }));
 }
 
-async function classifyBatch(items: MailSummary[]): Promise<Record<string, Triage>> {
+async function classifyBatch(items: UMailSummary[]): Promise<Record<string, Triage>> {
   const lines = items
-    .map((m) => `uid=${m.uid} | from: ${m.from} | subject: ${m.subject} | preview: ${(m.snippet || "").replace(/\s+/g, " ").slice(0, 220)}`)
+    .map((m) => `id=${m.id} | from: ${m.from} | subject: ${m.subject} | preview: ${(m.snippet || "").replace(/\s+/g, " ").slice(0, 220)}`)
     .join("\n");
 
   const system = [
@@ -63,15 +60,15 @@ async function classifyBatch(items: MailSummary[]): Promise<Record<string, Triag
     `- needsReply: true if a human is genuinely expecting a written reply from him.`,
     `- summary: max 12 words, plain, what it is and what is wanted.`,
     `- draft: only if needsReply, a 1 to 2 sentence reply he could send, warm, professional, first person. Never use dash characters; use commas or periods. Otherwise an empty string.`,
-    `Return ONLY a JSON array, one object per email, no prose:`,
-    `[{"uid":123,"important":true,"urgent":false,"needsReply":true,"summary":"...","draft":"..."}]`,
+    `Return ONLY a JSON array, one object per email, no prose. Use the exact id string given:`,
+    `[{"id":"...","important":true,"urgent":false,"needsReply":true,"summary":"...","draft":"..."}]`,
   ].join("\n");
 
   const txt = await askClaude({
     system,
     messages: [{ role: "user", content: lines }],
     model: HAIKU,
-    maxTokens: 1800,
+    maxTokens: 2200,
     temperature: 0,
   });
 
@@ -79,10 +76,10 @@ async function classifyBatch(items: MailSummary[]): Promise<Record<string, Triag
   const out: Record<string, Triage> = {};
   if (Array.isArray(arr)) {
     for (const o of arr) {
-      if (!o || o.uid == null) continue;
+      if (!o || o.id == null) continue;
       const important = !!o.important;
       const urgent = !!o.urgent;
-      out[String(o.uid)] = {
+      out[String(o.id)] = {
         important,
         urgent,
         needsReply: !!o.needsReply,
