@@ -3,7 +3,7 @@
 // Raw Anthropic tool-use loop with prompt caching on system + tools.
 
 import { SONNET, NO_DASHES } from "../anthropic";
-import { TOOLS } from "./tools";
+import { TOOLS, ADMIN_ONLY } from "./tools";
 import { runAction } from "./dispatch";
 import { verifyReply } from "./verify";
 import { recall, captureSalience, listDirectives } from "./brain";
@@ -70,7 +70,7 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
   ].filter(Boolean).join("\n\n");
 }
 
-async function callRaw(system: string, messages: Turn[], maxTokens = 1800, withTools = true) {
+async function callRaw(system: string, messages: Turn[], maxTokens = 1800, withTools = true, tools: any[] = TOOLS) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("ANTHROPIC_API_KEY not set");
   const body: any = {
@@ -80,7 +80,7 @@ async function callRaw(system: string, messages: Turn[], maxTokens = 1800, withT
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     messages,
   };
-  if (withTools) body.tools = TOOLS.map((t, i) => (i === TOOLS.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t));
+  if (withTools) body.tools = tools.map((t, i) => (i === tools.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t));
   const res = await fetch(API, {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
@@ -102,6 +102,12 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
   const onboarding = ((input.sender?.role ?? "owner") === "owner") && prefs?.onboarding !== false;
   const system = await buildSystem(lastUser, input.sender, onboarding, input.channel);
 
+  // Privacy wall: which conversation this is. Taona (admin/dev) is walled off from
+  // Jensen; his messages and memory never mix into Jensen's, and only the admin
+  // toolset can read Jensen's chats (one-way).
+  const party = input.sender?.role === "admin" ? "taona" : "jensen";
+  const toolset = input.sender?.role === "admin" ? TOOLS : TOOLS.filter((t) => !ADMIN_ONLY.has(t.name));
+
   const convo: Turn[] = history.map((m) => ({ role: m.role, content: m.content }));
   const runs: { name: string; ok: boolean }[] = [];
   let reply = "";
@@ -114,7 +120,7 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
       || `I'm here, ${input.sender?.name || "Jensen"}. Tell me everything you'd want me to take off your plate and how you like to work. I'm capturing all of it so I'm ready the moment we go live.`;
   } else {
     for (let i = 0; i < 6; i++) {
-      const data = await callRaw(system, convo);
+      const data = await callRaw(system, convo, 1800, true, toolset);
       const blocks: any[] = data.content || [];
       const text = blocks.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
       const toolUses = blocks.filter((b) => b.type === "tool_use");
@@ -147,10 +153,11 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
   // persist to the shared chat log + capture durable facts (non-blocking best-effort)
   const ch = input.channel || "portal";
   try {
-    if (lastUser) await ops.chatAppend("user", lastUser, ch);
-    await ops.chatAppend("assistant", reply, ch);
+    if (lastUser) await ops.chatAppend("user", lastUser, ch, party);
+    await ops.chatAppend("assistant", reply, ch, party);
   } catch { /* ignore log failure */ }
-  captureSalience(lastUser, reply).catch(() => {});
+  // Only learn durable facts from Jensen's world, never from the admin's dev chatter.
+  if (party === "jensen") captureSalience(lastUser, reply).catch(() => {});
 
   return { reply, toolsUsed: runs.map((r) => r.name) };
 }

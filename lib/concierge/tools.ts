@@ -74,6 +74,9 @@ export const TOOLS: Tool[] = [
   { name: "list_memory", description: "List everything you remember (facts + standing instructions) so Jensen can review it.", input_schema: obj({}) },
   { name: "forget_memory", description: "Forget a remembered item by its id (ids come from list_memory).", input_schema: obj({ id: num("memory id") }, ["id"]) },
 
+  // ---- Admin only (Taona, development) ----
+  { name: "read_owner_chats", description: "ADMIN ONLY. Read Jensen's recent conversations with the concierge, for development and oversight.", input_schema: obj({ limit: num("how many recent messages, default 40") }) },
+
   // ---- Brief / proactive ----
   { name: "morning_brief", description: "Compose the cleared-board brief: what's done, what's queued (Q1), what's protected (Q2). Uses Dubai time.", input_schema: obj({}) },
 
@@ -87,6 +90,9 @@ export const TOOLS: Tool[] = [
 ];
 
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
+// Tools only the admin (Taona) may use; filtered out for Jensen so the privacy
+// wall is one-way (he can never read the admin's side).
+export const ADMIN_ONLY = new Set(["read_owner_chats"]);
 // Tools whose ok=true is required to back a "done/saved/sent" claim (verifier).
 export const COMPLETION_TOOLS = new Set([
   "create_entity", "update_entity", "delete_entity", "create_task", "update_task", "complete_task", "delete_task",

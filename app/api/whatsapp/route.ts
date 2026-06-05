@@ -46,9 +46,9 @@ async function downloadMedia(mediaId: string): Promise<{ buf: Buffer; mime: stri
   }
 }
 
-async function recentHistory(): Promise<{ role: "user" | "assistant"; content: string }[]> {
+async function recentHistory(party: string): Promise<{ role: "user" | "assistant"; content: string }[]> {
   try {
-    return await ops.chatRecent(12);
+    return await ops.chatRecent(party, 12);
   } catch {
     return [];
   }
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     }
 
     const sender = whoIs(from);
-    const history = await recentHistory();
+    const history = await recentHistory(sender.role === "admin" ? "taona" : "jensen");
     const media = msg.image || msg.document || msg.video || null;
     const caption: string = msg.image?.caption || msg.document?.caption || "";
 

@@ -103,6 +103,8 @@ export async function runAction(name: string, input: any): Promise<{ ok: boolean
       case "query_memory": result = { facts: await queryMemory(input.about) }; break;
       case "list_memory": result = await listMemory(); break;
       case "forget_memory": await forgetMemory(input.id); result = { forgotten: input.id }; break;
+      // admin only (the loop only exposes this tool to Taona)
+      case "read_owner_chats": result = await ops.readOwnerChats(input.limit || 40); break;
       // voice call
       case "call_owner": { const to = (process.env.OWNER_WHATSAPP || "").split(",")[0]?.trim(); if (!to) { result = { ok: false, error: "no owner number set" }; break; } result = await callOwner(to, input.message); break; }
       // brief

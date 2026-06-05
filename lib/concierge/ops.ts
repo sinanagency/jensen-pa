@@ -154,13 +154,22 @@ export async function fileDocument(i: { id: string; folder: string; entityId?: s
 }
 export async function deleteDoc(id: string) { await sbDelete("docs", `id=eq.${enc(id)}`); return { deleted: id }; }
 
-// ---------- CHAT (append-only, one-brain) ----------
-export async function chatAppend(role: "user" | "assistant", content: string, channel = "portal") {
-  await sbInsert("chat_messages", { role, content, channel, ts: now() });
+// ---------- CHAT (append-only, one-brain, PARTY-SCOPED privacy wall) ----------
+// Every message belongs to a `party` (the person the conversation is with).
+// Jensen's history and Taona's dev history never mix; Jensen can only ever load
+// his own. (Asymmetric wall: an admin tool can read Jensen's; nothing lets Jensen
+// read the admin's.)
+export async function chatAppend(role: "user" | "assistant", content: string, channel = "portal", party = "jensen") {
+  await sbInsert("chat_messages", { role, content, channel, party, ts: now() });
 }
-export async function chatRecent(limit = 12): Promise<{ role: "user" | "assistant"; content: string }[]> {
-  const rows = await sbSelect<any>("chat_messages", `select=role,content,ts&order=ts.desc&limit=${limit}`);
+export async function chatRecent(party = "jensen", limit = 12): Promise<{ role: "user" | "assistant"; content: string }[]> {
+  const rows = await sbSelect<any>("chat_messages", `party=eq.${enc(party)}&select=role,content,ts&order=ts.desc&limit=${limit}`);
   return rows.reverse().map((r) => ({ role: r.role, content: r.content }));
+}
+// Admin-only: read Jensen's recent conversation (development access, one-way).
+export async function readOwnerChats(limit = 40): Promise<{ role: string; content: string; channel: string; ts: number }[]> {
+  const rows = await sbSelect<any>("chat_messages", `party=eq.jensen&select=role,content,channel,ts&order=ts.desc&limit=${limit}`);
+  return rows.reverse();
 }
 
 // ---------- KV ----------
