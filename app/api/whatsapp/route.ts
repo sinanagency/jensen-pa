@@ -7,6 +7,7 @@ import { classifyAndFile } from "@/lib/concierge/intake";
 import { readImage } from "@/lib/anthropic";
 import { extractTextFromBuffer } from "@/lib/extract-text";
 import { embed, chunk } from "@/lib/openai";
+import { transcribeAudio } from "@/lib/transcribe";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -71,8 +72,25 @@ export async function POST(req: NextRequest) {
 
     const sender = whoIs(from);
     const history = await recentHistory(sender.role === "admin" ? "taona" : "jensen");
+    // Voice notes arrive as msg.voice (push-to-talk) or msg.audio (uploaded audio).
+    // Treat both: transcribe and flow into the concierge as text.
+    const audio = msg.voice || msg.audio || (msg.document?.mime_type?.startsWith("audio/") ? msg.document : null);
     const media = msg.image || msg.document || msg.video || null;
     const caption: string = msg.image?.caption || msg.document?.caption || "";
+
+    // ---- audio: download, transcribe via Whisper, hand to concierge as text ----
+    if (audio && !media?.mime_type?.startsWith("image/") && !audio.filename?.match(/\.(pdf|docx?|xlsx?|csv|txt)$/i)) {
+      const dl = await downloadMedia(audio.id);
+      if (!dl) { await sendWhatsApp(from, "I couldn't fetch that voice note. Try again."); return NextResponse.json({ ok: true }); }
+      const transcript = await transcribeAudio(dl.buf, dl.mime);
+      if (!transcript) { await sendWhatsApp(from, "I got your voice note but couldn't make out the words. Could you re-record or type it?"); return NextResponse.json({ ok: true }); }
+      const party = sender.role === "admin" ? "taona" : "jensen";
+      // Persist with a [voice note] marker so chat history shows it came as audio.
+      await ops.chatAppend("user", `[voice note] ${transcript}`, "whatsapp", party).catch(() => {});
+      const { reply } = await runConcierge({ messages: [...history, { role: "user", content: transcript }], channel: "whatsapp", sender });
+      await sendWhatsApp(from, reply || "I'm here.");
+      return NextResponse.json({ ok: true });
+    }
 
     // ---- media: download, read, file into the portal via the brain ----
     if (media) {
