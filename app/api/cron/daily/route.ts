@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as ops from "@/lib/concierge/ops";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { sendWhatsApp, whoIs } from "@/lib/whatsapp";
 import { callOwner, twilioConfigured } from "@/lib/voice-call";
 import { dubaiToday, dayPart } from "@/lib/time";
 
@@ -12,7 +12,7 @@ function owners(): string[] {
 }
 function authed(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // not configured -> allow (Vercel cron / dev)
+  if (!secret) return false; // FAIL CLOSED: never run unauthenticated (this route sends real messages)
   const hdr = req.headers.get("authorization") || "";
   const key = new URL(req.url).searchParams.get("key") || "";
   return hdr === `Bearer ${secret}` || key === secret;
@@ -48,8 +48,14 @@ async function buildBrief(): Promise<{ text: string; q1: number; call: string }>
 export async function GET(req: NextRequest) {
   if (!authed(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
+    // Stay silent until Jensen is switched on (past onboarding). No proactive
+    // messages while he is still being set up.
+    const prefs = await ops.getPrefs().catch(() => ({} as any));
+    if (prefs?.onboarding !== false) return NextResponse.json({ ok: true, skipped: "onboarding" });
+
     const brief = await buildBrief();
-    const to = owners();
+    // Brief goes to JENSEN only (the owner), never the admin/developer.
+    const to = owners().filter((n) => whoIs(n).role === "owner");
     const sent: Record<string, boolean> = {};
     for (const n of to) sent[n] = await sendWhatsApp(n, brief.text);
 
