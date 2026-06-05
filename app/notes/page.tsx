@@ -206,7 +206,7 @@ export default function NotesPage() {
 
   return (
     <Shell>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
 
       <div className="page-hero fade-up">
         <div className="eyebrow">Capture</div>
@@ -322,7 +322,7 @@ export default function NotesPage() {
                   borderRadius: "50%",
                   background: "var(--danger)",
                   display: "inline-block",
-                  animation: "spin 1.5s ease-in-out infinite",
+                  animation: "pulse 1.2s ease-in-out infinite",
                 }}
               />
               <Square size={14} /> Stop
@@ -346,7 +346,7 @@ export default function NotesPage() {
             style={{
               marginTop: 14,
               padding: 14,
-              background: "rgba(var(--purple-rgb, 139,92,246),0.08)",
+              background: "rgba(124,107,176,0.10)",
               borderRadius: 8,
               border: "1px solid var(--line)",
             }}

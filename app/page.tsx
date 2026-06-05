@@ -7,6 +7,7 @@ import { useDB } from "@/components/useDB";
 import { DB, Quadrant } from "@/lib/store";
 import { aed } from "@/lib/tax";
 import { RefreshCw, ArrowRight, MessageCircle, Mail, Library, FileText, Mic, Building2 } from "lucide-react";
+import { Gauge, BarChart } from "@/components/charts";
 
 const QUADS: { q: Quadrant; title: string; note: string; color: string }[] = [
   { q: 1, title: "Do first", note: "Urgent + important", color: "var(--q1)" },
@@ -53,6 +54,20 @@ export default function Today() {
 
   const income = db.finance.filter((f) => f.kind === "income").reduce((s, f) => s + f.amount, 0);
   const expense = db.finance.filter((f) => f.kind === "expense").reduce((s, f) => s + f.amount, 0);
+
+  // last 6 months of income, for the revenue trend + this-month gauge
+  const _now = new Date();
+  const months = Array.from({ length: 6 }, (_, idx) => {
+    const k = 5 - idx;
+    const d = new Date(_now.getFullYear(), _now.getMonth() - k, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const value = db.finance.filter((f) => f.kind === "income" && (f.date || "").slice(0, 7) === key).reduce((s, f) => s + f.amount, 0);
+    return { label: d.toLocaleDateString("en-GB", { month: "short" }), value, tip: aed(value) };
+  });
+  const thisMonthRev = months[months.length - 1].value;
+  const bestMonth = Math.max(...months.map((m) => m.value), 0);
+  const gaugePct = bestMonth > 0 ? (thisMonthRev / bestMonth) * 100 : 0;
+
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const toggle = (id: string) => mutate((d) => { const x = d.tasks.find((y) => y.id === id); if (x) x.done = !x.done; });
@@ -137,6 +152,18 @@ export default function Today() {
         </div>
       </div>
 
+      {/* Revenue trend + this-month gauge (ported from Nisria, restyled) */}
+      <div className="dash-charts">
+        <div className="card chart-card" style={{ alignItems: "center" }}>
+          <div className="tile-label" style={{ alignSelf: "flex-start" }}>This month vs best</div>
+          <Gauge pct={gaugePct} value={aed(thisMonthRev)} label={`of ${aed(bestMonth)} best`} />
+        </div>
+        <div className="card chart-card">
+          <div className="tile-label">Revenue, last 6 months</div>
+          <BarChart data={months} valueLabels tall />
+        </div>
+      </div>
+
       <style>{`
         .dash-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
         .dash-head h1{margin-top:6px}
@@ -162,7 +189,9 @@ export default function Today() {
         .chip{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--purple-soft);color:var(--purple-2);border:1px solid var(--purple-line)}
         .mods{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
         .mod{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:20px 8px;font-size:13px;color:var(--ink-2)}
-        @media(max-width:900px){.quads,.bento2{grid-template-columns:1fr}.mods{grid-template-columns:repeat(3,1fr)}.dash-head .hud{display:none}}
+        .dash-charts{display:grid;grid-template-columns:1fr 2fr;gap:14px;margin-top:16px}
+        .chart-card{padding:18px;display:flex;flex-direction:column;gap:10px}
+        @media(max-width:900px){.quads,.bento2,.dash-charts{grid-template-columns:1fr}.mods{grid-template-columns:repeat(2,1fr)}.dash-head .hud{display:none}}
       `}</style>
     </Shell>
   );

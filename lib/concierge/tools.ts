@@ -79,7 +79,7 @@ export const TOOLS: Tool[] = [
 
   // ---- Settings / goals ----
   { name: "get_settings", description: "Read Jensen's preferences and goals.", input_schema: obj({}) },
-  { name: "update_prefs", description: "Update working preferences (style/tone/hours).", input_schema: obj({ workStyle: str(""), tone: str(""), hours: str(""), extra: str("") }) },
+  { name: "update_prefs", description: "Update working preferences (style/tone/hours), and the onboarding gate. Admin only: set onboarding=false to ACTIVATE the bot for Jensen (end listen-only onboarding); onboarding=true returns him to onboarding.", input_schema: obj({ workStyle: str(""), tone: str(""), hours: str(""), extra: str(""), onboarding: bool("false = activate bot for Jensen; true = listen-only onboarding") }) },
   { name: "set_goals", description: "Set Jensen's goals list.", input_schema: obj({ goals: { type: "array", items: { type: "string" } } }, ["goals"]) },
 
   // ---- Store ----

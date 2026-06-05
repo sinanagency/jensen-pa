@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { runConcierge } from "@/lib/concierge/loop";
+import { senderFromToken } from "@/lib/accounts";
+import { COOKIE } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -14,7 +16,8 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response("messages required", { status: 400 });
     }
-    const { reply } = await runConcierge({ messages, channel: "portal" });
+    const sender = await senderFromToken(req.cookies.get(COOKIE)?.value).catch(() => undefined);
+    const { reply } = await runConcierge({ messages, channel: "portal", sender });
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid, MessageCircle, Building2, CheckSquare, Wallet, Library,
-  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft, ScrollText, Mail, ShoppingBag, StickyNote, User, SlidersHorizontal, BookOpen, Mic, Inbox,
+  FileText, Calendar, ChevronDown, Search, LogOut, ChevronLeft, ScrollText, Mail, ShoppingBag, StickyNote, User, SlidersHorizontal, BookOpen, Mic, Inbox, Receipt,
 } from "lucide-react";
 import CommandPalette from "@/components/CommandPalette";
 import Logo from "@/components/Logo";
@@ -13,7 +13,7 @@ import Logo from "@/components/Logo";
 const ICONS: Record<string, any> = {
   today: LayoutGrid, mentor: MessageCircle, portfolio: Building2, tasks: CheckSquare,
   finance: Wallet, brain: Library, generate: FileText, calendar: Calendar, legal: ScrollText, mail: Mail, store: ShoppingBag,
-  notes: StickyNote, contacts: User, journal: BookOpen, meetings: Mic, inbox: Inbox,
+  notes: StickyNote, contacts: User, journal: BookOpen, meetings: Mic, inbox: Inbox, invoice: Receipt,
 };
 
 const PILLS = [
@@ -37,6 +37,7 @@ const GROUPS = [
     { href: "/notes", label: "Notes", icon: "notes" },
     { href: "/journal", label: "Journal", icon: "journal" },
     { href: "/generate", label: "Generate", icon: "generate" },
+    { href: "/invoice", label: "Invoice", icon: "invoice" },
     { href: "/legal", label: "Legal", icon: "legal" },
   ]},
 ];

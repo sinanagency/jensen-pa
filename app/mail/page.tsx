@@ -163,7 +163,7 @@ export default function MailPage() {
               <span style={{ flex: "0 0 180px", fontWeight: m.seen ? 400 : 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from}</span>
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--ink-2)" }}>{m.subject}</span>
               {m.attachments > 0 && <Paperclip size={14} style={{ color: "var(--muted)" }} />}
-              <span className="faint" style={{ fontSize: 12, flex: "none" }}>{new Date(m.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+              <span className="faint" style={{ fontSize: 12, flex: "none" }}>{new Date(m.date).toLocaleDateString("en-GB", { month: "short", day: "numeric" })}</span>
             </button>
           ))}
         </div>
