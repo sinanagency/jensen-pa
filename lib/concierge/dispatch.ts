@@ -2,11 +2,12 @@
 // model reads back. Errors are surfaced (never a fake success).
 
 import * as ops from "./ops";
-import { recall, rememberFact, queryMemory } from "./brain";
+import { recall, rememberFact, queryMemory, rememberDirective, listMemory, forgetMemory } from "./brain";
 import { vatFromNet, corporateTax } from "../tax";
 import { askClaude, NO_DASHES, SONNET } from "../anthropic";
 import { dubaiToday, dubaiNow } from "../time";
 import { ordersContext } from "../shopify";
+import { callOwner } from "../voice-call";
 
 type Result = any;
 
@@ -98,7 +99,12 @@ export async function runAction(name: string, input: any): Promise<{ ok: boolean
       case "draft_reply": result = { drafted: true, sent: false, to: input.to, subject: input.subject, body: await askClaude({ system: `You are Rencontre drafting an email reply for Jensen. ${NO_DASHES} Output only the email body.`, messages: [{ role: "user", content: input.intent }], maxTokens: 800 }), note: "Draft only. Jensen must approve before it sends." }; break;
       // memory
       case "remember_fact": await rememberFact(input.fact, { subject: input.subject, source: "concierge" }); result = { remembered: input.fact }; break;
+      case "remember_preference": await rememberDirective(input.instruction); result = { saved: input.instruction, note: "I will always honor this from now on." }; break;
       case "query_memory": result = { facts: await queryMemory(input.about) }; break;
+      case "list_memory": result = await listMemory(); break;
+      case "forget_memory": await forgetMemory(input.id); result = { forgotten: input.id }; break;
+      // voice call
+      case "call_owner": { const to = (process.env.OWNER_WHATSAPP || "").split(",")[0]?.trim(); if (!to) { result = { ok: false, error: "no owner number set" }; break; } result = await callOwner(to, input.message); break; }
       // brief
       case "morning_brief": {
         const today = dubaiToday();

@@ -64,9 +64,15 @@ export const TOOLS: Tool[] = [
   // ---- Mail (read freely; sending is gated) ----
   { name: "draft_reply", description: "Draft a reply to an email (NOT sent; queued for Jensen to approve).", input_schema: obj({ to: str(""), subject: str(""), intent: str("what to say") }, ["intent"]) },
 
+  // ---- Voice call (telephony) ----
+  { name: "call_owner", description: "Place a phone call to Jensen that speaks a short message aloud. Use only when he asks to be called, or for an urgent voice reminder. Needs Twilio configured.", input_schema: obj({ message: str("one or two sentences to speak on the call") }, ["message"]) },
+
   // ---- Memory / brain ----
   { name: "remember_fact", description: "Store a durable fact about Jensen's world for long-term memory.", input_schema: obj({ fact: str(""), subject: str("who/what it is about") }, ["fact"]) },
+  { name: "remember_preference", description: "Save a STANDING INSTRUCTION or shorthand to always honor from now on (e.g. 'always reply short', 'ddjt = dont do just talk, plan first'). Use whenever Jensen says 'remember', 'from now on', or teaches you a rule or term.", input_schema: obj({ instruction: str("the rule, preference, or shorthand to always follow") }, ["instruction"]) },
   { name: "query_memory", description: "Recall what you know about a person, venue, client, or topic.", input_schema: obj({ about: str("") }, ["about"]) },
+  { name: "list_memory", description: "List everything you remember (facts + standing instructions) so Jensen can review it.", input_schema: obj({}) },
+  { name: "forget_memory", description: "Forget a remembered item by its id (ids come from list_memory).", input_schema: obj({ id: num("memory id") }, ["id"]) },
 
   // ---- Brief / proactive ----
   { name: "morning_brief", description: "Compose the cleared-board brief: what's done, what's queued (Q1), what's protected (Q2). Uses Dubai time.", input_schema: obj({}) },
@@ -87,5 +93,5 @@ export const COMPLETION_TOOLS = new Set([
   "create_event", "update_event", "delete_event", "record_finance", "update_finance", "delete_finance",
   "file_document", "delete_document", "generate_document", "generate_legal", "set_legal_blueprint",
   "add_contact", "update_contact", "delete_contact", "add_note", "delete_note", "remember_fact",
-  "update_prefs", "set_goals",
+  "remember_preference", "forget_memory", "update_prefs", "set_goals",
 ]);

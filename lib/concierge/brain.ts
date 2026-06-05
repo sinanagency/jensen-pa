@@ -2,7 +2,7 @@
 // Rank Fusion), durable fact memory, salience auto-capture, grounding. Raw
 // PostgREST (rest.ts) so it is deterministic on Node 20 + Vercel. Server-only.
 
-import { sbSelect, sbInsert, sbRpc, enc } from "./rest";
+import { sbSelect, sbInsert, sbUpdate, sbRpc, enc } from "./rest";
 import { claudeJSON } from "../anthropic";
 import { embed as openaiEmbed } from "../openai";
 
@@ -28,6 +28,25 @@ export async function rememberFact(fact: string, opts?: { source?: string; kind?
   const row: any = { fact: f, source: opts?.source ?? null, kind: opts?.kind ?? "fact", subject: opts?.subject ?? null, status: "active", created_at: now() };
   if (e) row.embedding = vec(e);
   await sbInsert("brain_facts", row);
+}
+
+// Directives = standing instructions / preferences (ChatGPT "custom instructions"
+// + shorthand). Unlike facts they are ALWAYS injected, every turn, verbatim.
+export async function rememberDirective(text: string): Promise<void> {
+  await rememberFact(text, { kind: "directive", source: "user" });
+}
+export async function listDirectives(): Promise<string[]> {
+  const rows = await sbSelect<any>("brain_facts", `status=eq.active&kind=eq.directive&order=created_at.asc&select=fact`).catch(() => []);
+  return rows.map((r) => r.fact);
+}
+
+// Full memory view (facts + directives) for the /memory panel.
+export async function listMemory(): Promise<{ id: number; fact: string; kind: string; subject: string | null; created_at: number }[]> {
+  return sbSelect<any>("brain_facts", `status=eq.active&order=created_at.desc&limit=300&select=id,fact,kind,subject,created_at`).catch(() => []);
+}
+// Soft-forget: archive so recall stops grounding on it (reversible, audit-safe).
+export async function forgetMemory(id: number | string): Promise<void> {
+  await sbUpdate("brain_facts", `id=eq.${enc(String(id))}`, { status: "archived" });
 }
 
 export async function queryMemory(about: string, limit = 12): Promise<string[]> {

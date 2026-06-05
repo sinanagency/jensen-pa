@@ -6,7 +6,7 @@ import { SONNET, NO_DASHES } from "../anthropic";
 import { TOOLS } from "./tools";
 import { runAction } from "./dispatch";
 import { verifyReply } from "./verify";
-import { recall, captureSalience } from "./brain";
+import { recall, captureSalience, listDirectives } from "./brain";
 import * as ops from "./ops";
 import { dubaiNow, dayPart } from "../time";
 
@@ -25,12 +25,14 @@ async function buildSystem(lastUser: string, sender?: Sender, channel?: string):
     s.role === "admin"
       ? `You are CURRENTLY speaking with ${s.name}, the admin and architect who built and oversees you (not Jensen). Address him as ${s.name}. He is a trusted operator: he can ask anything, including system, config, and oversight questions about how you and the portal run. When he asks you to do something in Jensen's world, do it on Jensen's behalf.`
       : `You are CURRENTLY speaking with ${s.name}, the founder and principal you serve. Address him as ${s.name}.`;
-  const [ents, prefs, goals, rec] = await Promise.all([
+  const [ents, prefs, goals, rec, directives] = await Promise.all([
     ops.listEntities({}).catch(() => []),
     ops.getPrefs().catch(() => ({})),
     ops.getGoals().catch(() => [] as string[]),
     recall(lastUser).catch(() => ({ facts: [], docs: [] })),
+    listDirectives().catch(() => [] as string[]),
   ]);
+  const directivesText = directives.length ? directives.map((d) => `- ${d}`).join("\n") : "";
   const entitiesText = (ents as any[]).map((e) => `- ${e.kind}: ${e.name}${e.status ? ` (${e.status})` : ""} [id:${e.id}]`).join("\n") || "(none yet)";
   const prefsText = Object.entries(prefs as any).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join("; ") || "(none set)";
   const goalsText = (goals as string[]).length ? (goals as string[]).map((g) => `- ${g}`).join("\n") : "(none set)";
@@ -41,6 +43,7 @@ async function buildSystem(lastUser: string, sender?: Sender, channel?: string):
     `You are Rencontre, the private concierge and chief of staff for La Rencontre, a luxury F&B hospitality consultancy in Dubai. Speak in the first person, warm, sharp, discreet.`,
     `WHO IS WHO: Jensen is the founder and principal you serve, the whole portal is his world. Taona is the admin and architect who built and oversees you; treat Taona as a trusted operator with full access. Always know which of them you are talking to and never confuse one for the other.`,
     speaking,
+    directivesText && `STANDING INSTRUCTIONS from Jensen, always honor these exactly, every turn (these are his saved preferences and shorthand):\n${directivesText}`,
     `Your job: keep Jensen's whole world in order so nothing slips. Sort everything by Covey's matrix (Q1 urgent+important = queue for him; Q2 important = protect & schedule; Q3 urgent-not-important = handle; Q4 = drop). He should wake to a clean board.`,
     `Current time in Dubai: ${dubaiNow()} (it is ${dayPart()}). Always reason in Dubai time.`,
     `You have tools to actually DO things in his portal (create tasks, record finance, file documents, manage his calendar, contacts, notes, generate documents, recall memory). USE them. Read freely. Take write actions when he asks. Never claim you did something unless the tool returned success. For sending email or messaging other people, draft it and ask him to confirm first.`,
