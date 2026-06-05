@@ -19,6 +19,7 @@ export const PRESETS: Record<string, { imapHost: string; imapPort: number; smtpH
   outlook: { label: "Outlook / Microsoft 365", imapHost: "outlook.office365.com", imapPort: 993, smtpHost: "smtp.office365.com", smtpPort: 587 },
   gmail: { label: "Gmail / Google Workspace", imapHost: "imap.gmail.com", imapPort: 993, smtpHost: "smtp.gmail.com", smtpPort: 587 },
   larencontre: { label: "La Rencontre (larencontre.ae)", imapHost: "mail.larencontre.ae", imapPort: 993, smtpHost: "mail.larencontre.ae", smtpPort: 465 },
+  zoho: { label: "Zoho Mail", imapHost: "imap.zoho.com", imapPort: 993, smtpHost: "smtp.zoho.com", smtpPort: 465 },
   custom: { label: "Custom IMAP / SMTP", imapHost: "", imapPort: 993, smtpHost: "", smtpPort: 587 },
 };
 

@@ -11,6 +11,7 @@ type Out = { filename: string; content: string; contentType?: string };
 const PRESETS = [
   { id: "larencontre", label: "La Rencontre (larencontre.ae)" },
   { id: "outlook", label: "Outlook / Microsoft 365" },
+  { id: "zoho", label: "Zoho Mail" },
   { id: "gmail", label: "Gmail / Workspace" },
   { id: "custom", label: "Custom IMAP / SMTP" },
 ];
@@ -270,7 +271,7 @@ function MailboxOAuth() {
 
       <label>Add a mailbox (email + password)</label>
       <div style={{ display: "flex", gap: 8, margin: "8px 0", flexWrap: "wrap" }}>
-        {[{ id: "larencontre", l: "larencontre.ae" }, { id: "outlook", l: "Outlook" }, { id: "gmail", l: "Gmail" }, { id: "custom", l: "Other" }].map((p) => (
+        {[{ id: "larencontre", l: "larencontre.ae" }, { id: "outlook", l: "Outlook" }, { id: "zoho", l: "Zoho" }, { id: "gmail", l: "Gmail" }, { id: "custom", l: "Other" }].map((p) => (
           <button key={p.id} className={`pill ${ipreset === p.id ? "accent" : ""}`} style={{ cursor: "pointer", height: 30 }} onClick={() => setIpreset(p.id)}>{p.l}</button>
         ))}
       </div>
