@@ -46,8 +46,8 @@ export default function Legal() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      if (ct.includes("pdf")) { a.download = `${title}.pdf`; a.click(); } else { window.open(url, "_blank"); }
-      URL.revokeObjectURL(url);
+      if (ct.includes("pdf")) { a.download = `${title}.pdf`; a.style.display = "none"; document.body.appendChild(a); a.click(); a.remove(); } else { window.open(url, "_blank"); }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e: any) { setErr(e?.message || "Failed."); } finally { setBusy(false); }
   }
 

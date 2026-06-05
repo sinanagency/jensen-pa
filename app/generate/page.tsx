@@ -94,11 +94,15 @@ export default function GeneratePage() {
       a.href = url;
       if (ct?.includes("pdf")) {
         a.download = `${title.trim()}.pdf`;
+        a.style.display = "none";
+        document.body.appendChild(a);
         a.click();
+        a.remove();
       } else {
         window.open(url, "_blank");
       }
-      URL.revokeObjectURL(url);
+      // Defer revoke: revoking synchronously kills the opened tab / races the download.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Network error. Please try again.";
       setErr(msg);

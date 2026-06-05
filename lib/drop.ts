@@ -77,6 +77,8 @@ export async function dropFile(file: File, mutate: Mutate): Promise<DropResult> 
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: ing.text, filename: ing.title, kind: ing.kind }),
     }).then((r) => r.json());
+    // Never report fake success: if triage failed, surface it (mirror dropText).
+    if (tri?.error) return { ok: false, summary: "", error: tri.error };
 
     const summary = apply(tri, mutate, ing.title);
 

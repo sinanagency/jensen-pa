@@ -11,12 +11,12 @@ type VisionResponse =
   | { error: string; data?: never };
 
 function initials(name: string): string {
-  return name
-    .split(" ")
+  return (name || "")
+    .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
+    .map((w) => (w[0] ?? "").toUpperCase())
+    .join("") || "?";
 }
 
 export default function Contacts() {
@@ -101,7 +101,7 @@ export default function Contacts() {
         return;
       }
       const d = json.data ?? {};
-      if (d.name) setName(d.name);
+      if (d.name) setName(String(d.name).trim());
       if (d.company) setCompany(d.company);
       if (d.role) setRole(d.role);
       if (d.email) setEmail(d.email);

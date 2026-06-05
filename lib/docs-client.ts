@@ -30,6 +30,10 @@ export function uid(): string {
 // the raw base64 blob (dataUrl) before sending — keeps us under the serverless
 // body limit and the docs table lean; the searchable text + embeddings are what
 // the brain actually needs.
+function emitDocsChange() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("lr-docs-change"));
+}
+
 export async function addDoc(doc: Doc): Promise<void> {
   const { dataUrl, ...lean } = doc;
   const res = await fetch("/api/docs", {
@@ -41,6 +45,7 @@ export async function addDoc(doc: Doc): Promise<void> {
     const e = await res.json().catch(() => ({}));
     throw new Error(e.error || `Could not save (${res.status}).`);
   }
+  emitDocsChange(); // so Brain / Meetings / Contacts lists repaint immediately
 }
 
 export async function allDocs(): Promise<Doc[]> {
@@ -52,6 +57,7 @@ export async function allDocs(): Promise<Doc[]> {
 
 export async function deleteDoc(id: string): Promise<void> {
   await fetch(`/api/docs?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  emitDocsChange();
 }
 
 // Server-side pgvector RAG. Same shape as the old client cosine search.
