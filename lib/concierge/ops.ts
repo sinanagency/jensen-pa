@@ -41,6 +41,9 @@ export async function listTasks(f: { quadrant?: number; entityId?: string; done?
 }
 export async function createTask(i: { title: string; quadrant?: number; entityId?: string; due?: string }) {
   const q = [1, 2, 3, 4].includes(i.quadrant as any) ? i.quadrant : 2;
+  // Soft-dedup: never create a duplicate of an existing open task (Memorae's worst bug).
+  const dup = await sbSelect<any>("tasks", `title=eq.${enc(i.title)}&done=is.false&select=id,quadrant&limit=1`).catch(() => []);
+  if (dup.length) return { id: dup[0].id, title: i.title, quadrant: dup[0].quadrant, deduped: true };
   const row = { id: uid(), title: i.title, quadrant: q, entity_id: i.entityId ?? null, done: false, due: i.due ?? null, created_at: now() };
   await sbInsert("tasks", row);
   return { id: row.id, title: i.title, quadrant: q };
@@ -85,6 +88,9 @@ export async function queryCalendar(f: { from?: string; to?: string; entityId?: 
   return sbSelect("events", qs);
 }
 export async function createEvent(i: { title: string; date: string; time?: string; entityId?: string; note?: string }) {
+  // Soft-dedup: same title on the same date is the same event, not a copy.
+  const dup = await sbSelect<any>("events", `title=eq.${enc(i.title)}&date=eq.${enc(i.date)}&select=id&limit=1`).catch(() => []);
+  if (dup.length) return { id: dup[0].id, title: i.title, date: i.date, deduped: true };
   const row = { id: uid(), title: i.title, date: i.date, time: i.time ?? null, entity_id: i.entityId ?? null, note: i.note ?? null, created_at: now() };
   await sbInsert("events", row);
   return { id: row.id, title: i.title, date: i.date, time: i.time };
