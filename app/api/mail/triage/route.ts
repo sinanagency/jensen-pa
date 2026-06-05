@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { aggregateInbox, hasAccounts, packId, IMAP_ACCOUNT, UMailSummary } from "@/lib/mail-provider";
 import { triageInbox } from "@/lib/mail-triage";
 import { MAIL_COOKIE, decryptCreds } from "@/lib/mailbox";
-import { listInbox } from "@/lib/mail-ops";
+import { listInbox, imapPackLocal } from "@/lib/mail-ops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         ? listInbox(creds, 15)
             .then((ms) =>
               ms.map<UMailSummary>((m) => ({
-                id: packId(IMAP_ACCOUNT, String(m.uid)), accountId: IMAP_ACCOUNT, accountEmail: creds.email, provider: "imap",
+                id: packId(IMAP_ACCOUNT, imapPackLocal(m.folder || "INBOX", m.uid)), accountId: IMAP_ACCOUNT, accountEmail: creds.email, provider: "imap",
                 from: m.from, fromEmail: m.fromEmail, subject: m.subject, date: m.date, snippet: m.snippet, seen: m.seen, attachments: m.attachments,
               }))
             )

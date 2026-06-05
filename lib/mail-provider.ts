@@ -5,7 +5,7 @@
 
 import { freshToken, listAccounts, imapCreds, accountProvider } from "./mail-accounts";
 import { zohoApiHost, Provider } from "./oauth";
-import { listInbox as imapList, readMessage as imapRead, sendMail as imapSend } from "./mail-ops";
+import { listInbox as imapList, readMessage as imapRead, sendMail as imapSend, imapPackLocal, imapUnpackLocal } from "./mail-ops";
 
 export type UMailSummary = {
   id: string; accountId: string; accountEmail: string; provider: Provider | "imap";
@@ -121,7 +121,7 @@ async function zoSend(token: string, fromEmail: string, to: string, subject: str
 // ---------- unified dispatch ----------
 function imapToSummary(accountId: string, accountEmail: string, m: any): UMailSummary {
   return {
-    id: packId(accountId, String(m.uid)), accountId, accountEmail, provider: "imap",
+    id: packId(accountId, imapPackLocal(m.folder || "INBOX", m.uid)), accountId, accountEmail, provider: "imap",
     from: m.from, fromEmail: m.fromEmail, subject: m.subject, date: m.date, snippet: m.snippet, seen: m.seen, attachments: m.attachments,
   };
 }
@@ -148,7 +148,8 @@ export async function readUnified(id: string): Promise<UMailFull> {
   const a = (await listAccounts()).find((x) => x.id === accountId);
   if (a?.provider === "imap") {
     const creds = await imapCreds(accountId);
-    const m: any = await imapRead(creds, Number(local));
+    const { folder, uid } = imapUnpackLocal(local);
+    const m: any = await imapRead(creds, uid, folder);
     return { ...imapToSummary(accountId, a.email, m), text: m.text || "", to: m.to || "", messageId: m.messageId };
   }
   const t = await freshToken(accountId);

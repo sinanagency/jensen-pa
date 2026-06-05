@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MAIL_COOKIE, decryptCreds } from "@/lib/mailbox";
-import { readMessage } from "@/lib/mail-ops";
+import { readMessage, imapUnpackLocal } from "@/lib/mail-ops";
 import { readUnified, unpackId, IMAP_ACCOUNT } from "@/lib/mail-provider";
 
 export const runtime = "nodejs";
@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
       const creds = await decryptCreds(req.cookies.get(MAIL_COOKIE)?.value);
       if (!creds) return NextResponse.json({ error: "No mailbox connected." }, { status: 401 });
       try {
-        return NextResponse.json({ message: await readMessage(creds, Number(local)) });
+        const { folder, uid } = imapUnpackLocal(local);
+        return NextResponse.json({ message: await readMessage(creds, uid, folder) });
       } catch (e: any) {
         return NextResponse.json({ error: e?.message || String(e) }, { status: 502 });
       }
