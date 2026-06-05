@@ -3,6 +3,7 @@ import { sendWhatsApp, isOwner, whoIs } from "@/lib/whatsapp";
 import { runConcierge } from "@/lib/concierge/loop";
 import { kvGet, kvSet } from "@/lib/db";
 import * as ops from "@/lib/concierge/ops";
+import { classifyAndFile } from "@/lib/concierge/intake";
 import { readImage } from "@/lib/anthropic";
 import { extractTextFromBuffer } from "@/lib/extract-text";
 import { embed, chunk } from "@/lib/openai";
@@ -88,9 +89,16 @@ export async function POST(req: NextRequest) {
       try { const parts = chunk(text); const vecs = parts.length ? await embed(parts) : []; chunks = parts.map((t, i) => ({ text: t, embedding: vecs[i] })); } catch { /* no embedder: keyword only */ }
       await ops.addDoc({ id, title, fileName: media.filename || "whatsapp-upload", mime: dl.mime, kind: "document", text, chunks, createdAt: Date.now() });
 
-      const prompt = `I just sent you a document over WhatsApp${caption ? ` with the note: "${caption}"` : ""}. It is now in the brain (document id "${id}", title "${title}"). Its content:\n\n${text.slice(0, 4000)}\n\nFile it: call file_document to put it in the right folder (finance, legal, identity, contracts, clients, venues, events, menus, branding, reports, general). If it is an invoice or receipt, also record_finance using the amounts shown (never invent a number). Then tell me in one or two lines what you filed and where.`;
-      const { reply } = await runConcierge({ messages: [...history, { role: "user", content: prompt }], channel: "whatsapp", sender });
-      await sendWhatsApp(from, reply);
+      // Intake runs directly (NOT through the chat brain) so it works even during
+      // onboarding: stored + embedded + foldered + (invoice -> finance) + noted.
+      const filed = await classifyAndFile({ id, title, text });
+      let msg = `Filed *${title}* under *${filed.folder}*.`;
+      if (filed.finance) msg += ` Logged an expense of AED ${filed.finance.amount} (${filed.finance.label}).`;
+      msg += ` I've read it, so I can pull it up or send it whenever you need.`;
+      const party = sender.role === "admin" ? "taona" : "jensen";
+      await ops.chatAppend("user", `[sent a document: ${title}]`, "whatsapp", party).catch(() => {});
+      await ops.chatAppend("assistant", msg, "whatsapp", party).catch(() => {});
+      await sendWhatsApp(from, msg);
       return NextResponse.json({ ok: true });
     }
 
