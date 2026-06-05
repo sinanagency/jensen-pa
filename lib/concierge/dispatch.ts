@@ -8,6 +8,7 @@ import { askClaude, NO_DASHES, SONNET } from "../anthropic";
 import { dubaiToday, dubaiNow } from "../time";
 import { ordersContext } from "../shopify";
 import { callOwner } from "../voice-call";
+import { aggregateInbox, readUnified, sendUnified, unpackId } from "../mail-provider";
 
 type Result = any;
 
@@ -95,8 +96,25 @@ export async function runAction(name: string, input: any): Promise<{ ok: boolean
       case "list_notes": result = await ops.listNotes(input); break;
       case "add_note": result = await ops.addNote(input); break;
       case "delete_note": result = await ops.deleteNote(input.id); break;
-      // mail (gated draft only)
-      case "draft_reply": result = { drafted: true, sent: false, to: input.to, subject: input.subject, body: await askClaude({ system: `You are Rencontre drafting an email reply for Jensen. ${NO_DASHES} Output only the email body.`, messages: [{ role: "user", content: input.intent }], maxTokens: 800 }), note: "Draft only. Jensen must approve before it sends." }; break;
+      // mail
+      case "list_inbox": {
+        const ms = await aggregateInbox(Math.min(input.limit || 10, 20));
+        result = ms.slice(0, input.limit || 10).map((m: any) => ({ id: m.id, from: m.from, email: m.fromEmail, subject: m.subject, date: m.date, snippet: m.snippet, mailbox: m.accountEmail, unread: !m.seen }));
+        break;
+      }
+      case "read_email": {
+        const f: any = await readUnified(input.id);
+        result = { id: f.id, from: f.from, email: f.fromEmail, subject: f.subject, date: f.date, mailbox: f.accountEmail, text: (f.text || "").slice(0, 4000) };
+        break;
+      }
+      case "reply_email": {
+        const f: any = await readUnified(input.id);
+        const subject = /^re:/i.test(f.subject || "") ? f.subject : `Re: ${f.subject || ""}`;
+        await sendUnified(unpackId(input.id).accountId, f.fromEmail, subject, input.body);
+        result = { sent: true, to: f.fromEmail, subject, from_mailbox: f.accountEmail };
+        break;
+      }
+      case "draft_reply": result = { drafted: true, sent: false, to: input.to, subject: input.subject, body: await askClaude({ system: `You are Rencontre drafting an email reply for Jensen. ${NO_DASHES} Output only the email body.`, messages: [{ role: "user", content: input.intent }], maxTokens: 800 }), note: "Draft only, not sent." }; break;
       // memory
       case "remember_fact": await rememberFact(input.fact, { subject: input.subject, source: "concierge" }); result = { remembered: input.fact }; break;
       case "remember_preference": await rememberDirective(input.instruction); result = { saved: input.instruction, note: "I will always honor this from now on." }; break;

@@ -61,8 +61,11 @@ export const TOOLS: Tool[] = [
   { name: "add_note", description: "Capture a note, idea, link, or journal entry.", input_schema: obj({ kind: { type: "string", enum: ["note", "idea", "link", "journal"] }, title: str(""), body: str(""), url: str(""), entityId: str("") }, ["body"]) },
   { name: "delete_note", description: "Delete a note.", input_schema: obj({ id: str("") }, ["id"]) },
 
-  // ---- Mail (read freely; sending is gated) ----
-  { name: "draft_reply", description: "Draft a reply to an email (NOT sent; queued for Jensen to approve).", input_schema: obj({ to: str(""), subject: str(""), intent: str("what to say") }, ["intent"]) },
+  // ---- Mail (read freely; SEND only after confirming wording with Jensen) ----
+  { name: "list_inbox", description: "List Jensen's latest emails across ALL his connected mailboxes (Outlook, Zoho, larencontre), each with an id, sender, subject, date, snippet.", input_schema: obj({ limit: num("how many, default 10") }) },
+  { name: "read_email", description: "Read the full text of one email by its id (ids come from list_inbox).", input_schema: obj({ id: str("email id from list_inbox") }, ["id"]) },
+  { name: "reply_email", description: "Send a reply to an email by its id. This SENDS the email immediately from the right mailbox, so always confirm the wording with Jensen before calling it.", input_schema: obj({ id: str("email id from list_inbox"), body: str("the reply message to send") }, ["id", "body"]) },
+  { name: "draft_reply", description: "Draft (NOT send) an email reply for Jensen to review.", input_schema: obj({ to: str(""), subject: str(""), intent: str("what to say") }, ["intent"]) },
 
   // ---- Voice call (telephony) ----
   { name: "call_owner", description: "Place a phone call to Jensen that speaks a short message aloud. Use only when he asks to be called, or for an urgent voice reminder. Needs Twilio configured.", input_schema: obj({ message: str("one or two sentences to speak on the call") }, ["message"]) },
@@ -99,5 +102,5 @@ export const COMPLETION_TOOLS = new Set([
   "create_event", "update_event", "delete_event", "record_finance", "update_finance", "delete_finance",
   "file_document", "delete_document", "generate_document", "generate_legal", "set_legal_blueprint",
   "add_contact", "update_contact", "delete_contact", "add_note", "delete_note", "remember_fact",
-  "remember_preference", "forget_memory", "update_prefs", "set_goals",
+  "remember_preference", "forget_memory", "update_prefs", "set_goals", "reply_email",
 ]);
