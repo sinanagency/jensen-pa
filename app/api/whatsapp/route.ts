@@ -64,9 +64,13 @@ export async function POST(req: NextRequest) {
     if (!from || !msg?.id) return NextResponse.json({ ok: true });
     if (await seen(msg.id)) return NextResponse.json({ ok: true });
 
-    // owner gate: Jensen (and Taona) drive the concierge; anyone else is refused
+    // owner gate: Jensen (and Taona) drive the concierge; anyone else is gently
+    // redirected to Jensen's direct WhatsApp. Don't leak that this is a bot.
     if (!isOwner(from)) {
-      await sendWhatsApp(from, "This assistant is private.");
+      await sendWhatsApp(
+        from,
+        "Thank you for reaching out. This line is private to Jensen. To reach him directly, please message https://wa.me/971528902032.",
+      );
       return NextResponse.json({ ok: true });
     }
 
