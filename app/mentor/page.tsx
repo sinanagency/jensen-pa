@@ -6,7 +6,7 @@ import { useDB } from "@/components/useDB";
 import { DB } from "@/lib/store";
 import { searchDocs } from "@/lib/docs-client";
 import { dropFile } from "@/lib/drop";
-import { Send, Upload, Loader2, CheckCircle2 } from "lucide-react";
+import { Send, Upload, Loader2, CheckCircle2, Paperclip } from "lucide-react";
 
 const SUGGESTIONS = [
   "What should I focus on today, and why?",
@@ -36,6 +36,7 @@ export default function Concierge() {
   const [filing, setFiling] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragDepth = useRef(0);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (db && msgs.length === 0) setMsgs(db.chat.map((c) => ({ role: c.role, content: c.content }))); /* eslint-disable-next-line */ }, [!!db]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs]);
@@ -168,7 +169,13 @@ export default function Concierge() {
         </div>
 
         <form onSubmit={(e) => { e.preventDefault(); send(input); }} style={{ display: "flex", gap: 10, paddingTop: 14, borderTop: "1px solid var(--line)", alignItems: "center" }}>
-          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message your concierge…" autoFocus disabled={busy} style={{ flex: 1, minWidth: 0, height: 48 }} />
+          <input ref={fileRef} type="file" multiple onChange={(e) => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = ""; }} style={{ display: "none" }}
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,.heic" />
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={busy || filing} title="Attach files (you can pick several)" className="inline"
+            style={{ width: 48, height: 48, padding: 0, flex: "none", borderRadius: 14, border: "1px solid var(--line)", background: "transparent", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
+            {filing ? <Loader2 size={18} className="spin" /> : <Paperclip size={18} />}
+          </button>
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message your concierge, or attach files…" autoFocus disabled={busy} style={{ flex: 1, minWidth: 0, height: 48 }} />
           <button className="btn purple" type="submit" disabled={busy || !input.trim()} style={{ width: 48, height: 48, padding: 0, flex: "none", borderRadius: 14 }}><Send size={18} /></button>
         </form>
       </div>
