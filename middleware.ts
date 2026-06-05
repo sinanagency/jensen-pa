@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE, verifyToken } from "@/lib/auth";
 
-// Only the Shopify webhook is public (Shopify posts to it, HMAC-verified). Everything
-// else under /api/shopify (e.g. /status, which returns order + customer PII) stays gated.
-const PUBLIC = ["/login", "/api/auth", "/api/whatsapp", "/api/shopify/webhook", "/api/cron", "/manifest.webmanifest", "/favicon.ico"];
+const PUBLIC = ["/login", "/api/auth", "/api/whatsapp", "/api/cron", "/manifest.webmanifest", "/favicon.ico"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

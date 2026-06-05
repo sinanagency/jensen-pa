@@ -87,9 +87,6 @@ export const TOOLS: Tool[] = [
   { name: "get_settings", description: "Read Jensen's preferences and goals.", input_schema: obj({}) },
   { name: "update_prefs", description: "Update working preferences (style/tone/hours), and the onboarding gate. Admin only: set onboarding=false to ACTIVATE the bot for Jensen (end listen-only onboarding); onboarding=true returns him to onboarding.", input_schema: obj({ workStyle: str(""), tone: str(""), hours: str(""), extra: str(""), onboarding: bool("false = activate bot for Jensen; true = listen-only onboarding") }) },
   { name: "set_goals", description: "Set Jensen's goals list.", input_schema: obj({ goals: { type: "array", items: { type: "string" } } }, ["goals"]) },
-
-  // ---- Store ----
-  { name: "store_summary", description: "Live Upaya Shopify data: order count, revenue, and recent orders with customer, items, fulfillment status and tracking. Use for any question about orders, sales, revenue, customers, or deliveries.", input_schema: obj({}) },
 ];
 
 export const TOOL_NAMES = TOOLS.map((t) => t.name);
