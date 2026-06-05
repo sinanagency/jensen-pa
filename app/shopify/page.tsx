@@ -20,7 +20,7 @@ export default function Shopify() {
     <Shell>
       <div className="page-hero fade-up">
         <div className="eyebrow">Store</div>
-        <h1>Upaya orders, live.</h1>
+        <h1>Store orders, live.</h1>
       </div>
 
       {loading && <p className="muted">Connecting to your store…</p>}

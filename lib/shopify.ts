@@ -1,12 +1,12 @@
-// Upaya Shopify — Admin API access for the new Dev Dashboard model.
+// Shopify Admin API access for the new Dev Dashboard model.
 //
 // The new dev.shopify.com apps DON'T hand you a permanent shpat_ token. They give
 // a Client ID + Client Secret, and you exchange them for a SHORT-LIVED (~24h) token
 // via the client_credentials grant. So we mint on demand and cache until it expires.
 // Ref: https://shopify.dev/docs/apps/build/dev-dashboard/get-api-access-tokens?lang=node
 //
-// Env (set on Vercel — values are in macOS Keychain: upaya-shopify-client-id/secret/store):
-//   SHOPIFY_STORE          = upayafestival.myshopify.com
+// Env (set on Vercel):
+//   SHOPIFY_STORE          = <store>.myshopify.com
 //   SHOPIFY_CLIENT_ID      = ce19...
 //   SHOPIFY_CLIENT_SECRET  = shpss_65d2...   (the shpss_ prefix is REQUIRED)
 //   SHOPIFY_API_VERSION    = 2025-01 (optional)
@@ -58,7 +58,7 @@ export async function ensureOrderWebhook(callbackUrl: string): Promise<void> {
 export async function fetchAllOrders(): Promise<any[]> {
   const out: any[] = [];
   let url = `orders.json?status=any&limit=250`;
-  // (For >250 orders, follow the Link: rel="next" header — Upaya has 3, so one page is plenty for now.)
+  // (For >250 orders, follow the Link: rel="next" header — store volumes are low, so one page is plenty for now.)
   const r = await adminApi(url);
   const j = await r.json();
   out.push(...(j.orders || []));
