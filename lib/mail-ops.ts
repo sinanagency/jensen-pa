@@ -55,7 +55,7 @@ async function discoverSpamFolder(client: ImapFlow): Promise<string | null> {
   } catch { return null; }
 }
 
-const FORWARDER_RE = /outlook\.com|office365\.com|protection\.outlook\.com|hotmail\.com|live\.com|microsoft\.com|zoho\.com|zoho\.eu|zoho\.in|gmail\.com|googlemail\.com/i;
+const FORWARDER_RE = /outlook\.com|office365\.com|protection\.outlook\.com|hotmail\.com|live\.com|microsoft\.com/i;
 function looksForwarded(headersBlob: string | undefined): boolean {
   return !!headersBlob && FORWARDER_RE.test(headersBlob);
 }

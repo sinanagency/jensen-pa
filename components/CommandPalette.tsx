@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useDB } from "@/components/useDB";
 import {
   Search, CheckSquare, Building2, User, StickyNote, Wallet, Sparkles,
-  LayoutGrid, MessageCircle, Calendar, Library, FileText, ScrollText, Mail, CornerDownLeft, Mic, BookOpen, Plus,
+  LayoutGrid, MessageCircle, Calendar, Library, FileText, ScrollText, Mail, ShoppingBag, CornerDownLeft, Mic, BookOpen, Plus,
 } from "lucide-react";
 
 type Group = "Ask" | "Actions" | "Go to" | "Results";
@@ -19,6 +19,7 @@ const PAGES: { label: string; href: string; icon: any }[] = [
   { label: "Tasks", href: "/tasks", icon: CheckSquare },
   { label: "Calendar", href: "/calendar", icon: Calendar },
   { label: "Finance", href: "/finance", icon: Wallet },
+  { label: "Store", href: "/shopify", icon: ShoppingBag },
   { label: "Meetings", href: "/meetings", icon: Mic },
   { label: "Documents", href: "/brain", icon: Library },
   { label: "Notes", href: "/notes", icon: StickyNote },
