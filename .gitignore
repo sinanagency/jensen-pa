@@ -4,4 +4,8 @@ node_modules
 .env
 .env*.local
 *.tsbuildinfo
+*.log
 .DS_Store
+
+# Local doctrine + agent worktrees (kept untracked — see CLAUDE.md)
+.claude/worktrees/
