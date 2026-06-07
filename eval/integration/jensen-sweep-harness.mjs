@@ -272,6 +272,15 @@ async function main() {
   console.log(`Cases:   ${cases.length}${LIMIT ? ` (limited to ${LIMIT})` : ""}${SKIP.size ? `, skipping ${[...SKIP].join(",")}` : ""}`);
   console.log("=".repeat(80));
 
+  // Warmup: fire a no-op webhook to wake the Vercel runtime + Anthropic cache
+  // before the first scored test. The first cold-start request can take 40-60s
+  // which exceeds soak+retry window. Per HOW-TO-SWEEP step 8 cost note (~5min
+  // wall clock), this adds ~15s but eliminates cold-start flakes on FM-01.
+  console.log("\n[warmup] priming runtime...");
+  await postWebhook(tag("warmup ping")).catch(() => {});
+  await sleep(15000);
+  console.log("[warmup] done\n");
+
   const results = [];
   let count = 0;
   for (const c of cases) {
