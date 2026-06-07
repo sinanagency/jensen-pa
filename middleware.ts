@@ -1,13 +1,63 @@
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE, verifyToken } from "@/lib/auth";
 
-// Only the Shopify webhook is public (Shopify posts to it, HMAC-verified). Everything
-// else under /api/shopify (e.g. /status, which returns order + customer PII) stays gated.
-const PUBLIC = ["/login", "/api/auth", "/api/whatsapp", "/api/shopify/webhook", "/api/cron", "/manifest.webmanifest", "/favicon.ico"];
+// External webhooks have their own auth (HMAC / verify-token / agent secret) and
+// must always reach their handlers, even during maintenance. /api/whatsapp has
+// the JENSEN_MODE allowlist gate inside route.ts.
+const EXTERNAL = ["/api/whatsapp", "/api/cron", "/api/shopify/webhook"];
+
+// The session-login flow's own routes — public for the auth gate, but during
+// maintenance they are also walled (don't let anyone log in while we are dark).
+const AUTH_PUBLIC = ["/login", "/api/auth"];
+
+function isStatic(pathname: string): boolean {
+  return (
+    pathname.startsWith("/_next") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/manifest.webmanifest" ||
+    /\.(svg|png|jpg|jpeg|webp|ico)$/.test(pathname)
+  );
+}
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC.some((p) => pathname.startsWith(p)) || pathname.startsWith("/_next")) {
+
+  if (EXTERNAL.some((p) => pathname.startsWith(p)) || isStatic(pathname)) {
+    return NextResponse.next();
+  }
+
+  // MAINTENANCE GATE. While MAINTENANCE_MODE=1, only requests carrying the
+  // maintenance_admin cookie may pass; everyone else lands on /maintenance.
+  // A one-shot URL grant (?admin=<token>) sets the cookie so the operator can
+  // unlock from a phone without DevTools. The WhatsApp bot has its own
+  // allowlist gate in app/api/whatsapp/route.ts.
+  // Pattern cloned from nisria-techops platform/middleware.ts (Sasa 727 sweep).
+  if (process.env.MAINTENANCE_MODE === "1") {
+    const grant = req.nextUrl.searchParams.get("admin");
+    if (grant && grant === process.env.MAINTENANCE_ADMIN_TOKEN) {
+      const url = req.nextUrl.clone();
+      url.searchParams.delete("admin");
+      const res = NextResponse.redirect(url);
+      res.cookies.set("maintenance_admin", grant, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+      return res;
+    }
+    const adminToken = req.cookies.get("maintenance_admin")?.value;
+    const isAdmin = adminToken && adminToken === process.env.MAINTENANCE_ADMIN_TOKEN;
+    if (!isAdmin) {
+      if (pathname === "/maintenance") return NextResponse.next();
+      const url = req.nextUrl.clone();
+      url.pathname = "/maintenance";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  if (AUTH_PUBLIC.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
   const ok = await verifyToken(req.cookies.get(COOKIE)?.value);

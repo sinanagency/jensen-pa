@@ -8,8 +8,25 @@ export function waConfigured(): boolean {
   return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
 }
 
-export async function sendWhatsApp(to: string, body: string): Promise<boolean> {
+export async function sendWhatsApp(to: string, body: string, opts?: { force?: boolean }): Promise<boolean> {
   if (!waConfigured()) return false;
+  // TRAINING-mode chokepoint gate. While JENSEN_MODE=TRAINING, drop every
+  // outbound addressed to a number NOT in MAINTENANCE_ALLOWLIST. Kills daily
+  // briefs, reminders, system alerts in one line — no per-cron surgery. The
+  // one-shot maintenance notice (Jensen pings, we reply once) bypasses with
+  // {force:true}. Same pattern as nisria platform sendTextAndLog. Cloned per
+  // HOW-TO-SWEEP playbook step 1 (lockdown).
+  if (process.env.JENSEN_MODE === "TRAINING" && !opts?.force) {
+    const allow = (process.env.MAINTENANCE_ALLOWLIST || "")
+      .split(",")
+      .map((s) => s.replace(/[^0-9]/g, ""))
+      .filter(Boolean);
+    const toDigits = (to || "").replace(/[^0-9]/g, "");
+    if (!allow.includes(toDigits)) {
+      console.log(`[JENSEN_MODE=TRAINING] suppressed outbound to ${toDigits}: ${body.slice(0, 100)}`);
+      return false;
+    }
+  }
   try {
     const res = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
       method: "POST",

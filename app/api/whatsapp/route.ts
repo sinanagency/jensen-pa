@@ -64,6 +64,35 @@ export async function POST(req: NextRequest) {
     if (!from || !msg?.id) return NextResponse.json({ ok: true });
     if (await seen(msg.id)) return NextResponse.json({ ok: true });
 
+    // MAINTENANCE GATE. While JENSEN_MODE=TRAINING:
+    //   - allowlist (Taona): full bot, drives the sweep
+    //   - Jensen: one training-notice per day, then silent (no leak of activity)
+    //   - anyone else: silent drop (no reply, no log noise)
+    // Cloned from nisria-techops Sasa 727 sweep (HOW-TO-SWEEP playbook step 1).
+    if (process.env.JENSEN_MODE === "TRAINING") {
+      const allow = (process.env.MAINTENANCE_ALLOWLIST || "")
+        .split(",")
+        .map((s) => s.replace(/[^0-9]/g, ""))
+        .filter(Boolean);
+      const fromDigits = from.replace(/[^0-9]/g, "");
+      if (!allow.includes(fromDigits)) {
+        const isJensen = whoIs(from).role === "owner";
+        if (isJensen) {
+          const today = new Date().toISOString().slice(0, 10);
+          const noticeKey = `maintenance_notice_${fromDigits}_${today}`;
+          if (!(await kvGet<boolean>(noticeKey, false))) {
+            await sendWhatsApp(
+              from,
+              "Hi Jensen. I'm going through training and upgrades right now. I will notify you the moment I am back online. Your data is safe, nothing is lost. — Rencontre",
+              { force: true },
+            );
+            await kvSet(noticeKey, true);
+          }
+        }
+        return NextResponse.json({ ok: true });
+      }
+    }
+
     // owner gate: Jensen (and Taona) drive the concierge; anyone else is gently
     // redirected to Jensen's direct WhatsApp. Don't leak that this is a bot.
     if (!isOwner(from)) {
