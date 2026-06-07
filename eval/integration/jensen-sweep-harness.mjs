@@ -235,17 +235,39 @@ const cases = [
   {
     n: 11,
     fm: "FM-11 'Done' resolves the latest reminder",
-    setup: tag("Add a task: prep for the harness-rehearsal Don meeting today"),
-    setupSoakMs: 22000,
-    input: tag("Done"),
-    soakMs: 25000,
+    // FM-11 tests the DETERMINISTIC DONE-route, which is owner/sweep-eligible
+    // and doesn't depend on the brain creating the setup task. The bot's new
+    // peer-skeptic behaviour rightly asks "are you testing?" when an admin
+    // sends harness-tagged setup text, which broke the model-created setup
+    // path. Pre-seed the task directly via Supabase REST so we're testing
+    // ONLY the deterministic DONE resolution, not the bot's task-creation
+    // judgment. The seed title is unique per RUN_ID so dedup never triggers.
+    async preSetup() {
+      const seedTitle = `FM11 ${RUN_ID} pre-seeded open task`;
+      const row = {
+        id: `t${RUN_ID}11`,
+        title: seedTitle,
+        quadrant: 1,
+        entity_id: null,
+        done: false,
+        due: null,
+        created_at: Date.now(),
+      };
+      await sbFetch(`tasks`, {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(row),
+      });
+      return seedTitle;
+    },
+    input: "Done",
+    soakMs: 18000,
     async assert() {
-      const tasks = await sbFetch(`tasks?${sinceFilter()}&select=id,title,done&order=created_at.desc&limit=10`);
-      const hit = (tasks || []).filter((t) => /(don|rehearsal|harness)/i.test(t.title));
-      if (hit.length === 0) return { ok: false, reason: "setup task not visible" };
-      const done = hit.find((t) => t.done === true);
-      if (!done) return { ok: false, reason: `task exists but done=false after 'Done' — context resolution failed (titles: ${hit.map((t) => t.title.slice(0, 30)).join(" | ")})` };
-      return { ok: true, observed: `task "${done.title.slice(0, 50)}" marked done` };
+      const tasks = await sbFetch(`tasks?title=ilike.*FM11*${RUN_ID}*&select=id,title,done&order=created_at.desc&limit=2`);
+      if (!tasks || tasks.length === 0) return { ok: false, reason: "pre-seeded task not found" };
+      const t = tasks[0];
+      if (!t.done) return { ok: false, reason: `pre-seeded task exists but done=false after 'Done' — deterministic route failed` };
+      return { ok: true, observed: `pre-seeded task marked done by deterministic DONE route` };
     },
   },
 ];
@@ -295,6 +317,10 @@ async function main() {
     cursor();
     let result;
     try {
+      if (c.preSetup) {
+        const seeded = await c.preSetup();
+        console.log(`   pre-seed → "${String(seeded || "").slice(0, 70)}"`);
+      }
       if (c.setup) {
         console.log(`   setup → "${c.setup.slice(0, 70)}..."`);
         const s = await postWebhook(c.setup);
