@@ -157,6 +157,13 @@ export async function POST(req: NextRequest) {
     const text = (msg.text?.body || "").trim();
     if (!text) return NextResponse.json({ ok: true });
 
+    // NO-CHAT-LOST. Persist every inbound to chat_messages BEFORE the brain
+    // runs, so an Anthropic / Vercel failure mid-runConcierge does not lose
+    // what Jensen sent. The runConcierge end-path also appends, but Jensen's
+    // message must be safe before any failure can swallow it.
+    const inboundParty = sender.role === "admin" ? "taona" : "jensen";
+    await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
+
     // FM-11 DETERMINISTIC DONE-RESOLUTION. Bare confirmations from JENSEN
     // (owner tier only) route the most recently created open task to done
     // WITHOUT model dispatch. KT #127: when the model is brittle for a

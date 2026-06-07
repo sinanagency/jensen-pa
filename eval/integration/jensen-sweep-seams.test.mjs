@@ -232,6 +232,37 @@ check("seam.20 system prompt uses peer-counsel framing (persona tree)", () => {
   return null;
 });
 
+check("seam.21bis WA route persists inbound to chat_messages BEFORE runConcierge (NO-CHAT-LOST)", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  if (!/NO-CHAT-LOST/.test(src)) return "no NO-CHAT-LOST marker";
+  // The chatAppend for inbound must run BEFORE runConcierge in plain-text path
+  const inboundChat = src.indexOf('chatAppend("user", text');
+  const conciergeIdx = src.indexOf('runConcierge({ messages: [...history, { role: "user", content: text }]');
+  if (inboundChat === -1) return "no pre-brain chatAppend for inbound text";
+  if (conciergeIdx === -1) return "could not locate plain-text runConcierge";
+  if (inboundChat > conciergeIdx) return "inbound persistence runs AFTER runConcierge (would lose message on brain error)";
+  return null;
+});
+
+check("seam.21ter onboarding prompt is probing + capture-everything (Taona directive)", () => {
+  const src = read("lib/concierge/loop.ts");
+  if (!/DRAW HIM OUT/.test(src)) return "no DRAW HIM OUT instruction";
+  if (!/CAPTURE-EVERYTHING/.test(src)) return "no CAPTURE-EVERYTHING discipline";
+  if (!/WHAT YOU ARE PROBING FOR/.test(src)) return "no probing checklist";
+  if (!/never re-ask/i.test(src)) return "no anti-re-ask discipline";
+  return null;
+});
+
+check("seam.21quater captureSalience accepts onboarding option for liberal capture", () => {
+  const src = read("lib/concierge/brain.ts");
+  if (!/SALIENCE_ONBOARDING_SYS/.test(src)) return "no onboarding-specific salience prompt";
+  if (!/onboarding_fact/.test(src)) return "onboarding kind label missing on rememberFact call";
+  if (!/opts\?: \{ onboarding/.test(src)) return "captureSalience signature missing onboarding option";
+  const loopSrc = read("lib/concierge/loop.ts");
+  if (!/captureSalience\(lastUser, reply, \{ onboarding \}\)/.test(loopSrc)) return "loop does not pass onboarding flag to captureSalience";
+  return null;
+});
+
 check("seam.21 DONE-resolution route is owner-only post-unlock, sweep-permitted in TRAINING", () => {
   const src = read("app/api/whatsapp/route.ts");
   const doneIdx = src.indexOf("DETERMINISTIC DONE-RESOLUTION");

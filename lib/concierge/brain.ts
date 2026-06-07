@@ -107,11 +107,26 @@ const SALIENCE_SYS =
   "DO NOT capture: tasks, to-dos, one-off questions, money amounts, dates of single events, greetings, or anything transient. " +
   "Return JSON {facts: string[]}. Each fact one short self-contained sentence. Empty array if nothing durable.";
 
-export async function captureSalience(userMsg: string, assistantReply: string): Promise<number> {
+// Onboarding mode capture is MUCH more inclusive — we are building the deepest
+// possible picture of Jensen's world, so every detail counts. People, venues,
+// clients, partners, routines, preferences, constraints, ambitions, family,
+// languages, time zones, instincts, fears, wins, losses — all of it. The only
+// filter is "would Jensen confirm this if I read it back to him."
+const SALIENCE_ONBOARDING_SYS =
+  "You are building the deepest possible picture of Jensen's world from this turn. " +
+  "Capture LIBERALLY: every named person, every venue, every client, every partner, every routine, every preference, every constraint, every aspiration, every detail about how he works. " +
+  "Even small things: time zones, languages, family, hobbies, instincts, fears, wins, losses, what worked, what did not. " +
+  "DO NOT capture greetings, weather chit-chat, or things he is clearly speculating about. The filter is 'would Jensen confirm this if I read it back to him?' " +
+  "Return JSON {facts: string[]}. Each fact a short self-contained sentence in third person about Jensen or his world. Up to 8 facts. Empty array only if the turn is purely social.";
+
+export async function captureSalience(userMsg: string, assistantReply: string, opts?: { onboarding?: boolean }): Promise<number> {
+  const sys = opts?.onboarding ? SALIENCE_ONBOARDING_SYS : SALIENCE_SYS;
+  const maxFacts = opts?.onboarding ? 8 : 5;
+  const tokens = opts?.onboarding ? 700 : 400;
   try {
-    const out = await claudeJSON<{ facts: string[] }>(SALIENCE_SYS, `User: ${userMsg}\n\nAssistant: ${assistantReply}`, 400);
-    const facts = (out?.facts ?? []).filter((f) => typeof f === "string" && f.trim().length > 8).slice(0, 5);
-    for (const f of facts) await rememberFact(f, { source: "chat", kind: "auto_fact" });
+    const out = await claudeJSON<{ facts: string[] }>(sys, `User: ${userMsg}\n\nAssistant: ${assistantReply}`, tokens);
+    const facts = (out?.facts ?? []).filter((f) => typeof f === "string" && f.trim().length > 8).slice(0, maxFacts);
+    for (const f of facts) await rememberFact(f, { source: "chat", kind: opts?.onboarding ? "onboarding_fact" : "auto_fact" });
     return facts.length;
   } catch {
     return 0;
