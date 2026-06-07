@@ -156,6 +156,27 @@ export async function POST(req: NextRequest) {
     // ---- plain text: full concierge ----
     const text = (msg.text?.body || "").trim();
     if (!text) return NextResponse.json({ ok: true });
+
+    // FM-11 DETERMINISTIC DONE-RESOLUTION. Bare confirmations route the most
+    // recently created open task to done WITHOUT model dispatch. KT #127:
+    // when the model is brittle for a deterministic verb, code the verb. The
+    // model is too noisy at picking "most recent" once the open-tasks list
+    // has more than a few rows. Strip the harness tag before matching.
+    const cleaned = text.replace(/^\s*\[H[a-z0-9]{6,}\]\s*/, "").trim();
+    if (/^(done|done\.|did it|yes done|handled|marked done)$/i.test(cleaned)) {
+      const open = await ops.listTasks({ done: false }).catch(() => [] as any[]);
+      if (open.length > 0) {
+        await ops.updateTask({ id: open[0].id, done: true }).catch(() => {});
+        const party = sender.role === "admin" ? "taona" : "jensen";
+        await ops.chatAppend("user", text, "whatsapp", party).catch(() => {});
+        const reply = `Done. Marked "${open[0].title}" complete.`;
+        await ops.chatAppend("assistant", reply, "whatsapp", party).catch(() => {});
+        await sendWhatsApp(from, reply);
+        return NextResponse.json({ ok: true });
+      }
+      // No open tasks: fall through to the brain so Jensen gets a graceful reply.
+    }
+
     const { reply } = await runConcierge({ messages: [...history, { role: "user", content: text }], channel: "whatsapp", sender });
     await sendWhatsApp(from, reply || "I'm here.");
     return NextResponse.json({ ok: true });

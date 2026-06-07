@@ -202,6 +202,36 @@ check("seam.17 listTasks order is deterministic (created_at descending)", () => 
   return null;
 });
 
+check("seam.18 WA route has deterministic DONE-resolution before runConcierge", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  if (!/DETERMINISTIC DONE-RESOLUTION/.test(src)) return "no DONE-resolution comment marker";
+  // The regex match for bare 'done' must run BEFORE the runConcierge call
+  const doneIdx = src.indexOf("done|done\\.|did it|yes done");
+  const conciergeIdx = src.indexOf("runConcierge({");
+  // Both indexes must exist and DONE must come first (it shortcircuits)
+  if (doneIdx === -1) return "no bare-done regex";
+  // There are multiple runConcierge calls (media path uses one); find the LAST plain-text one
+  const plainTextConcierge = src.lastIndexOf("runConcierge({ messages: [...history, { role: \"user\", content: text }]");
+  if (plainTextConcierge === -1) return "could not locate plain-text runConcierge dispatch";
+  if (doneIdx > plainTextConcierge) return "DONE-resolution runs AFTER runConcierge (would never short-circuit)";
+  return null;
+});
+
+check("seam.19 system prompt injects RECENT OPEN TASKS with ids", () => {
+  const src = read("lib/concierge/loop.ts");
+  if (!/RECENT OPEN TASKS/.test(src)) return "no RECENT OPEN TASKS section in system prompt";
+  if (!/listTasks\(\{ done: false \}\)/.test(src)) return "open tasks not loaded with done:false filter";
+  return null;
+});
+
+check("seam.20 system prompt uses peer-counsel framing (persona tree)", () => {
+  const src = read("lib/concierge/loop.ts");
+  if (!/strategic counsel|trusted partner/i.test(src)) return "persona not peer-counsel (still concierge-butler framing)";
+  if (!/Upaya/.test(src)) return "Upaya Festival context missing from persona";
+  if (!/Mauritian|Vatel/.test(src)) return "Jensen's background context missing";
+  return null;
+});
+
 // ============================================================================
 // REPORT
 // ============================================================================
