@@ -31,19 +31,17 @@ export default function MaintenancePage() {
           textAlign: "center",
         }}
       >
-        <div
+        <img
+          src="/lr-lockup.png"
+          alt="La Rencontre"
           style={{
-            fontFamily: "'Fraunces', Georgia, serif",
-            fontWeight: 500,
-            fontStyle: "italic",
-            fontSize: 22,
-            letterSpacing: "0.04em",
-            color: "#1A1814",
+            height: 44,
+            width: "auto",
+            display: "inline-block",
+            objectFit: "contain",
             marginBottom: 56,
           }}
-        >
-          La Rencontre
-        </div>
+        />
 
         <div
           style={{
