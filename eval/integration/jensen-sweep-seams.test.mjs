@@ -232,6 +232,20 @@ check("seam.20 system prompt uses peer-counsel framing (persona tree)", () => {
   return null;
 });
 
+check("seam.21 DONE-resolution route is owner-only post-unlock, sweep-permitted in TRAINING", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  const doneIdx = src.indexOf("DETERMINISTIC DONE-RESOLUTION");
+  if (doneIdx === -1) return "DONE-resolution marker missing";
+  const conditional = src.slice(doneIdx, doneIdx + 1000);
+  if (!/sender\.role === ["']owner["']/.test(conditional)) {
+    return "DONE-resolution does not gate on owner tier — admin 'Done' would corrupt Jensen's board post-unlock";
+  }
+  if (!/JENSEN_MODE === ["']TRAINING["']/.test(conditional)) {
+    return "no JENSEN_MODE=TRAINING override — harness from Taona's admin number cannot exercise this path";
+  }
+  return null;
+});
+
 // ============================================================================
 // REPORT
 // ============================================================================
