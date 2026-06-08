@@ -141,6 +141,9 @@ export async function runAction(name: string, input: any): Promise<{ ok: boolean
       case "set_goals": result = await ops.setGoals(input.goals); break;
       // store
       case "store_summary": { const summary = await ordersContext(); result = summary ? { connected: true, summary } : { connected: false, note: "Shopify store not reachable or not configured." }; break; }
+      // sanad (UAE legal brain via Jensen-side API)
+      case "sanad_draft_contract": { result = await ops.sanadStartDraft(input); break; }
+      case "sanad_review_contract": { result = await ops.sanadReview(input); break; }
       default: return { ok: false, error: `unknown tool ${name}` };
     }
     return { ok: true, result };
