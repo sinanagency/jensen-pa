@@ -17,7 +17,7 @@ export const TOOLS: Tool[] = [
   { name: "delete_entity", description: "Delete a venue/client/event.", input_schema: obj({ id: str("entity id") }, ["id"]) },
 
   // ---- Tasks ----
-  { name: "list_tasks", description: "List tasks. Quadrant 1=urgent+important,2=important,3=urgent-only,4=noise.", input_schema: obj({ quadrant: num("1-4"), entityId: str(""), done: bool("") }) },
+  { name: "list_tasks", description: "List tasks. Quadrant 1=urgent+important,2=important,3=urgent-only,4=noise. CRITICAL: the 'done' filter defaults to no filter (all states). If you query done=false and get empty, that ONLY means 'no open tasks matched'; it does NOT mean the task doesn't exist. Before claiming a task 'isn't in the system' or 'doesn't exist', re-query without the done filter to confirm absence.", input_schema: obj({ quadrant: num("1-4"), entityId: str(""), done: bool("") }) },
   { name: "create_task", description: "Add a task to the Covey board.", input_schema: obj({ title: str("task"), quadrant: num("1-4, default 2"), entityId: str("link to entity"), due: str("YYYY-MM-DD") }, ["title"]) },
   { name: "update_task", description: "Update a task (title/quadrant/due/done).", input_schema: obj({ id: str(""), title: str(""), quadrant: num(""), due: str(""), done: bool("") }, ["id"]) },
   { name: "complete_task", description: "Mark a task done.", input_schema: obj({ id: str("") }, ["id"]) },

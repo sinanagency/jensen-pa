@@ -6,6 +6,7 @@ import { SONNET, NO_DASHES } from "../anthropic";
 import { TOOLS, ADMIN_ONLY } from "./tools";
 import { runAction } from "./dispatch";
 import { verifyReply } from "./verify";
+import { stripDashes } from "../whatsapp";
 import { recall, captureSalience, listDirectives } from "./brain";
 import * as ops from "./ops";
 import { dubaiNow, dayPart } from "../time";
@@ -190,6 +191,11 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
       if (!v.ok) reply += `\n\n(Honest note: I could not fully confirm that action just now. Tell me to retry if needed.)`;
     } catch { /* fail-open */ }
   }
+
+  // JENSEN-DOCTRINE Law 5 enforcement — strip every em/en dash from the reply
+  // BEFORE persisting + delivery. Same canonical form lands in chat_messages
+  // and on the user's WhatsApp. Belt-and-braces with the chokepoint in sendWhatsApp.
+  reply = stripDashes(reply);
 
   // persist to the shared chat log + capture durable facts (non-blocking best-effort).
   // WhatsApp inbound is already persisted at the top of app/api/whatsapp/route.ts
