@@ -457,11 +457,13 @@ Cafe proposal q2`,
   },
   {
     n: 22, label: "Move list item between quadrants (q3 → q1)",
-    prompt: "Move the website finalisation task to Q1",
-    soakMs: 16000,
+    setup: "First add a fresh task for Jensen: Refresh the venue website copy q3",
+    setupSoakMs: 16000,
+    prompt: "Actually move that website task to Q1, it's higher priority",
+    soakMs: 18000,
     async assert() {
-      const all = await sbFetch(`tasks?select=id,title,quadrant&order=created_at.desc&limit=30`);
-      const website = (all || []).find((t) => /website|finalisat/i.test(t.title));
+      const all = await sbFetch(`tasks?select=id,title,quadrant&order=created_at.desc&limit=10`);
+      const website = (all || []).find((t) => /website|venue.*website/i.test(t.title));
       if (!website) return { ok: false, reason: "no website task to move" };
       if (website.quadrant !== 1) {
         return { ok: false, reason: `website task in q${website.quadrant}, expected q1` };
@@ -471,8 +473,11 @@ Cafe proposal q2`,
   },
   {
     n: 23, label: "Add multiple items to one quadrant in single message",
-    prompt: "Add these to Jensen's Q1: Finalise Sohum contract, Cafe proposal review, Surf presentation prep",
-    soakMs: 22000,
+    prompt: `Add these three urgent items to Jensen's Q1, all of them, do not skip any:
+1) Finalise Sohum contract
+2) Cafe proposal review
+3) Surf presentation prep`,
+    soakMs: 28000,
     async assert() {
       const tasks = await sbFetch(`tasks?${sinceFilter()}&select=id,title,quadrant&order=created_at.desc&limit=20`);
       const sohum = (tasks || []).find((t) => /sohum/i.test(t.title));
