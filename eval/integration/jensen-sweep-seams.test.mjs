@@ -285,6 +285,55 @@ check("seam.21 DONE-resolution route is owner-only post-unlock, sweep-permitted 
 });
 
 // ============================================================================
+// DOCTRINE LAW 8 SEAM — destructive-tool confirmation gate
+// ============================================================================
+
+check("seam.22 dispatch.ts has destructiveGate intercepting before switch", () => {
+  const src = read("lib/concierge/dispatch.ts");
+  if (!/destructiveGate\(/.test(src)) return "destructiveGate function not present";
+  if (!/const DESTRUCTIVE = new Set\(/.test(src)) return "DESTRUCTIVE set not defined";
+  // Gate must be called BEFORE the switch in runAction
+  const gateCallIdx = src.indexOf("destructiveGate(name");
+  const switchIdx = src.indexOf("switch (name)");
+  if (gateCallIdx === -1) return "destructiveGate not called in runAction";
+  if (switchIdx === -1) return "switch(name) not found in runAction";
+  if (gateCallIdx > switchIdx) return "destructiveGate called AFTER switch (action would execute before refusal)";
+  return null;
+});
+
+check("seam.23 DESTRUCTIVE set covers all delete_*, reply_email, call_owner, forget_memory", () => {
+  const src = read("lib/concierge/dispatch.ts");
+  const required = ["delete_entity", "delete_task", "delete_event", "delete_finance",
+                    "delete_document", "delete_contact", "delete_note", "forget_memory",
+                    "reply_email", "call_owner"];
+  const destSet = src.match(/const DESTRUCTIVE = new Set\(\[([\s\S]*?)\]\)/);
+  if (!destSet) return "DESTRUCTIVE set not parseable";
+  const block = destSet[1];
+  const missing = required.filter((name) => !new RegExp(`["']${name}["']`).test(block));
+  if (missing.length) return `DESTRUCTIVE set missing: ${missing.join(", ")}`;
+  return null;
+});
+
+check("seam.24 dispatch destructiveGate honors confirm:true bypass", () => {
+  const src = read("lib/concierge/dispatch.ts");
+  const fnMatch = src.match(/function destructiveGate\([^)]*\)[\s\S]*?\n\}/);
+  if (!fnMatch) return "destructiveGate function body not parseable";
+  const body = fnMatch[0];
+  if (!/input\?\.confirm\s*===\s*true/.test(body)) return "no confirm:true bypass — model can never execute confirmed deletes";
+  return null;
+});
+
+check("seam.25 outbound chokepoint strips em/en dashes (Law 5 hard enforcement)", () => {
+  const src = read("lib/whatsapp.ts");
+  if (!/export function stripDashes/.test(src)) return "stripDashes not exported";
+  if (!/replace\(\/.*[—–].*\//.test(src)) return "stripDashes does not actually strip em-/en-dashes";
+  if (!/stripDashes\(body\)/.test(src)) return "sendWhatsApp does not call stripDashes on outbound body";
+  const loopSrc = read("lib/concierge/loop.ts");
+  if (!/stripDashes\(reply\)/.test(loopSrc)) return "concierge loop does not strip reply before persist (DB will diverge from delivery)";
+  return null;
+});
+
+// ============================================================================
 // REPORT
 // ============================================================================
 
