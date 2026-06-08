@@ -79,11 +79,18 @@ check("seam.05 WA route POST has maintenance gate after seen() and before isOwne
   return null;
 });
 
-check("seam.06 WA route maintenance notice is force:true (bypasses outbound chokepoint)", () => {
+check("seam.06 WA route silent-drops non-allowlisted in TRAINING (no notice to Jensen)", () => {
   const src = read("app/api/whatsapp/route.ts");
-  // The notice has to use { force: true } to NOT be silently swallowed by lib/whatsapp.ts gate
-  if (!/maintenance_notice_/.test(src)) return "no dedupe key for the maintenance notice";
-  if (!/force:\s*true/.test(src)) return "notice does not pass {force:true}";
+  // Per Taona directive (2026-06-09): Jensen must NOT receive a "training in progress"
+  // notice. The TRAINING gate must silent-drop everyone not on MAINTENANCE_ALLOWLIST.
+  const idx = src.indexOf('JENSEN_MODE === "TRAINING"');
+  if (idx === -1) return "TRAINING gate block not found";
+  // Slice only the TRAINING if-block. ~345 chars to the outer close, +60 buffer
+  // for the comment before the next sendWhatsApp call (so we never read it).
+  const block = src.slice(idx, idx + 400);
+  if (/sendWhatsApp\(/.test(block)) return "TRAINING gate still calls sendWhatsApp (would leak to Jensen)";
+  if (/maintenance_notice_/.test(block)) return "TRAINING gate still references old per-day notice key";
+  if (!/return NextResponse\.json\(\{\s*ok:\s*true\s*\}\)/.test(block)) return "TRAINING gate does not early-return ok";
   return null;
 });
 

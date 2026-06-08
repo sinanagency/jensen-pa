@@ -66,9 +66,11 @@ export async function POST(req: NextRequest) {
 
     // MAINTENANCE GATE. While JENSEN_MODE=TRAINING:
     //   - allowlist (Taona): full bot, drives the sweep
-    //   - Jensen: one training-notice per day, then silent (no leak of activity)
-    //   - anyone else: silent drop (no reply, no log noise)
-    // Cloned from nisria-techops Sasa 727 sweep (HOW-TO-SWEEP playbook step 1).
+    //   - everyone else (Jensen, randoms): silent drop. Per Taona directive
+    //     (2026-06-09): Jensen must NOT receive any training/upgrade notice;
+    //     from his side the bot must appear to remain in onboarding mode
+    //     (silent listening). Inbound is intentionally NOT persisted in this
+    //     window; resume normal flow when JENSEN_MODE is cleared.
     if (process.env.JENSEN_MODE === "TRAINING") {
       const allow = (process.env.MAINTENANCE_ALLOWLIST || "")
         .split(",")
@@ -76,19 +78,6 @@ export async function POST(req: NextRequest) {
         .filter(Boolean);
       const fromDigits = from.replace(/[^0-9]/g, "");
       if (!allow.includes(fromDigits)) {
-        const isJensen = whoIs(from).role === "owner";
-        if (isJensen) {
-          const today = new Date().toISOString().slice(0, 10);
-          const noticeKey = `maintenance_notice_${fromDigits}_${today}`;
-          if (!(await kvGet<boolean>(noticeKey, false))) {
-            await sendWhatsApp(
-              from,
-              "Hi Jensen. I'm going through training and upgrades right now. I will notify you the moment I am back online. Your data is safe, nothing is lost. — Rencontre",
-              { force: true },
-            );
-            await kvSet(noticeKey, true);
-          }
-        }
         return NextResponse.json({ ok: true });
       }
     }
