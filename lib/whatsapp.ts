@@ -8,6 +8,23 @@ export function waConfigured(): boolean {
   return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
 }
 
+// JENSEN-DOCTRINE Law 5 (NO EM-DASHES) chokepoint enforcement. Belt-and-braces
+// with the system prompt: the model still drifts on formatted list outputs
+// (Q1 — Urgent + Important, Tuesday — reminder, etc.) so we strip every
+// em-dash / en-dash from outbound text before it hits Meta. Comma replaces
+// "X — Y" pattern (sentence break), space replaces standalone hyphen-like use.
+// Applied to every text and document caption that goes through the chokepoint.
+export function stripDashes(text: string): string {
+  if (!text) return text;
+  // Em-dash and en-dash → comma+space when used as sentence/clause separator
+  // ("A — B" or "A—B"). Then collapse any "A ,B" or " , " artifacts.
+  return text
+    .replace(/\s*[—–]\s*/g, ", ")
+    .replace(/\s+,\s+/g, ", ")
+    .replace(/,\s*,/g, ",")
+    .replace(/\s*,\s*$/gm, "");
+}
+
 // Shared TRAINING-mode chokepoint gate used by every outbound WA function below.
 // Returns true when the outbound is allowed; false when suppressed (already
 // logged so caller can return false unchanged).
@@ -29,11 +46,12 @@ function passesTrainingGate(to: string, contextBody: string, opts?: { force?: bo
 export async function sendWhatsApp(to: string, body: string, opts?: { force?: boolean }): Promise<boolean> {
   if (!waConfigured()) return false;
   if (!passesTrainingGate(to, body, opts)) return false;
+  const cleaned = stripDashes(body); // Law 5: no em/en dashes leave this chokepoint
   try {
     const res = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "content-type": "application/json" },
-      body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: body.slice(0, 4000) } }),
+      body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: cleaned.slice(0, 4000) } }),
     });
     return res.ok;
   } catch {
@@ -54,6 +72,7 @@ export async function sendWhatsAppDocument(
 ): Promise<string | null> {
   if (!waConfigured()) return null;
   if (!passesTrainingGate(to, caption || filename, opts)) return null;
+  const cleanedCaption = caption ? stripDashes(caption) : caption;
   try {
     // Step 1: upload the media to Meta's media endpoint.
     const form = new FormData();
@@ -83,7 +102,7 @@ export async function sendWhatsAppDocument(
         document: {
           id: upJson.id,
           filename,
-          caption: caption ? caption.slice(0, 900) : undefined
+          caption: cleanedCaption ? cleanedCaption.slice(0, 900) : undefined
         }
       })
     });
