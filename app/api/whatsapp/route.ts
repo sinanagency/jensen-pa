@@ -140,12 +140,26 @@ export async function POST(req: NextRequest) {
       try { const parts = chunk(text); const vecs = parts.length ? await embed(parts) : []; chunks = parts.map((t, i) => ({ text: t, embedding: vecs[i] })); } catch { /* no embedder: keyword only */ }
       await ops.addDoc({ id, title, fileName: media.filename || "whatsapp-upload", mime: dl.mime, kind: "document", text, chunks, createdAt: Date.now() });
 
-      // Intake runs directly (NOT through the chat brain) so it works even during
-      // onboarding: stored + embedded + foldered + (invoice -> finance) + noted.
-      const filed = await classifyAndFile({ id, title, text });
-      let msg = `Filed *${title}* under *${filed.folder}*.`;
-      if (filed.finance) msg += ` Logged an expense of AED ${filed.finance.amount} (${filed.finance.label}).`;
-      msg += ` I've read it, so I can pull it up or send it whenever you need.`;
+      // Intake runs out-of-band from the chat brain. During onboarding it
+      // READS (chunks, embeds, remembers) but does NOT WRITE (no finance
+      // row, no expense logged). Listen-only means listen-only.
+      const prefs = await ops.getPrefs().catch(() => ({} as any));
+      const ownerOnboarding = sender.role === "owner" && (prefs as any)?.onboarding !== false;
+      const filed = await classifyAndFile({ id, title, text }, { onboarding: ownerOnboarding });
+      let msg: string;
+      if (ownerOnboarding) {
+        msg = `Got it. I've read *${title}* and it's in my memory.`;
+        if (filed.summary) msg += ` ${filed.summary}`;
+        if (filed.pending) {
+          msg += ` Looks like an invoice for ${filed.pending.currency || "AED"} ${filed.pending.amount} from ${filed.pending.label}. I'm in listening mode right now so I am not logging it to your books yet; the moment you switch me on I'll file it properly.`;
+        } else {
+          msg += ` I'll bring it up when it's relevant.`;
+        }
+      } else {
+        msg = `Filed *${title}* under *${filed.folder}*.`;
+        if (filed.finance) msg += ` Logged an expense of AED ${filed.finance.amount} (${filed.finance.label}).`;
+        msg += ` I've read it, so I can pull it up or send it whenever you need.`;
+      }
       const party = sender.role === "admin" ? "taona" : "jensen";
       await ops.chatAppend("user", `[sent a document: ${title}]`, "whatsapp", party).catch(() => {});
       await ops.chatAppend("assistant", msg, "whatsapp", party).catch(() => {});
