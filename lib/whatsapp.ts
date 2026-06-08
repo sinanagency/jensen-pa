@@ -8,14 +8,10 @@ export function waConfigured(): boolean {
   return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
 }
 
-export async function sendWhatsApp(to: string, body: string, opts?: { force?: boolean }): Promise<boolean> {
-  if (!waConfigured()) return false;
-  // TRAINING-mode chokepoint gate. While JENSEN_MODE=TRAINING, drop every
-  // outbound addressed to a number NOT in MAINTENANCE_ALLOWLIST. Kills daily
-  // briefs, reminders, system alerts in one line — no per-cron surgery. The
-  // one-shot maintenance notice (Jensen pings, we reply once) bypasses with
-  // {force:true}. Same pattern as nisria platform sendTextAndLog. Cloned per
-  // HOW-TO-SWEEP playbook step 1 (lockdown).
+// Shared TRAINING-mode chokepoint gate used by every outbound WA function below.
+// Returns true when the outbound is allowed; false when suppressed (already
+// logged so caller can return false unchanged).
+function passesTrainingGate(to: string, contextBody: string, opts?: { force?: boolean }): boolean {
   if (process.env.JENSEN_MODE === "TRAINING" && !opts?.force) {
     const allow = (process.env.MAINTENANCE_ALLOWLIST || "")
       .split(",")
@@ -23,10 +19,16 @@ export async function sendWhatsApp(to: string, body: string, opts?: { force?: bo
       .filter(Boolean);
     const toDigits = (to || "").replace(/[^0-9]/g, "");
     if (!allow.includes(toDigits)) {
-      console.log(`[JENSEN_MODE=TRAINING] suppressed outbound to ${toDigits}: ${body.slice(0, 100)}`);
+      console.log(`[JENSEN_MODE=TRAINING] suppressed outbound to ${toDigits}: ${contextBody.slice(0, 100)}`);
       return false;
     }
   }
+  return true;
+}
+
+export async function sendWhatsApp(to: string, body: string, opts?: { force?: boolean }): Promise<boolean> {
+  if (!waConfigured()) return false;
+  if (!passesTrainingGate(to, body, opts)) return false;
   try {
     const res = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
       method: "POST",
@@ -36,6 +38,64 @@ export async function sendWhatsApp(to: string, body: string, opts?: { force?: bo
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+// Send a PDF (or any binary) document via WhatsApp.
+// Used by /api/cron/sanad-deliver to hand back Sanad-generated contracts.
+// Two Meta hops: (1) POST /media to upload, (2) POST /messages with media id.
+// Returns the WA message id on success, null on failure.
+export async function sendWhatsAppDocument(
+  to: string,
+  pdf: Buffer,
+  filename: string,
+  caption?: string,
+  opts?: { force?: boolean }
+): Promise<string | null> {
+  if (!waConfigured()) return null;
+  if (!passesTrainingGate(to, caption || filename, opts)) return null;
+  try {
+    // Step 1: upload the media to Meta's media endpoint.
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", "application/pdf");
+    form.append("file", new Blob([new Uint8Array(pdf)], { type: "application/pdf" }), filename);
+    const up = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` },
+      body: form
+    });
+    if (!up.ok) {
+      console.log(`[sendWhatsAppDocument] upload failed ${up.status}`);
+      return null;
+    }
+    const upJson = (await up.json()) as { id?: string };
+    if (!upJson.id) return null;
+
+    // Step 2: send the message referencing the media id.
+    const msg = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "document",
+        document: {
+          id: upJson.id,
+          filename,
+          caption: caption ? caption.slice(0, 900) : undefined
+        }
+      })
+    });
+    if (!msg.ok) {
+      console.log(`[sendWhatsAppDocument] send failed ${msg.status}`);
+      return null;
+    }
+    const msgJson = (await msg.json()) as { messages?: Array<{ id: string }> };
+    return msgJson.messages?.[0]?.id || null;
+  } catch (e) {
+    console.log(`[sendWhatsAppDocument] error`, e);
+    return null;
   }
 }
 

@@ -90,6 +90,36 @@ export const TOOLS: Tool[] = [
 
   // ---- Store ----
   { name: "store_summary", description: "Live Shopify store data: order count, revenue, and recent orders with customer, items, fulfillment status and tracking. Use for any question about orders, sales, revenue, customers, or deliveries.", input_schema: obj({}) },
+
+  // ---- Sanad (UAE legal brain via Jensen-side API) ----
+  // Use these when a contact asks for a FORMAL UAE contract or wants a contract
+  // they received reviewed. For quick informal letters keep using generate_legal
+  // (which uses Jensen's own blueprint). Sanad is slower (~2 min) but cites the
+  // exact UAE article and produces a courtroom-format PDF.
+  {
+    name: "sanad_draft_contract",
+    description: "Draft a formal UAE contract via Sanad. ASYNC: returns a job_id and an avg 2-minute wait. The delivery cron sends the PDF to the user automatically when ready. Use for NDAs, services agreements, contractor agreements, founders agreements, SAFE, term sheets, MOHRE annexes, DIFC/ADGM employment, IP licences, MOUs.",
+    input_schema: obj({
+      kind: { type: "string", enum: ["nda", "services_agreement", "msa", "sow", "contractor_agreement", "consultancy_agreement", "engagement_letter", "founder_agreement", "shareholders_agreement", "safe_uae", "term_sheet", "convertible_note", "share_subscription", "esop_plan", "distribution_agreement", "ip_license", "ip_assignment", "mou_loi", "settlement_agreement", "privacy_policy", "dpa", "terms_of_service", "mohre_annex", "difc_employment", "adgm_employment", "ejari_tenancy", "commercial_lease", "termination_letter", "power_of_attorney"] },
+      jurisdiction: { type: "string", enum: ["mainland", "difc", "adgm", "free-zone"] },
+      party_a_name: str("First party legal name"),
+      party_a_details: str("First party details (entity type, jurisdiction of incorporation, address) - optional"),
+      party_b_name: str("Second party legal name"),
+      party_b_details: str("Second party details - optional"),
+      effective_date: str("YYYY-MM-DD - optional, defaults to today"),
+      additional_context: str("Extra clauses, fees, scope of work, special terms - optional"),
+      recipient_wa: str("WhatsApp E.164 of the user the PDF should be sent to when ready")
+    }, ["kind", "jurisdiction", "party_a_name", "party_b_name", "recipient_wa"])
+  },
+  {
+    name: "sanad_review_contract",
+    description: "Review a UAE contract text via Sanad. SYNC under 30 seconds. Returns verdict (GREEN/YELLOW/RED), 2-3 sentence summary, top 3 things to flag, red flags with severity, suggested redlines with rationale, and citations from UAE law. Use when a contact pastes a contract.",
+    input_schema: obj({
+      text: str("Full contract text the user pasted, minimum 200 chars"),
+      kind: str("optional contract kind hint, e.g. 'nda', 'services_agreement'"),
+      jurisdiction: { type: "string", enum: ["mainland", "difc", "adgm", "free-zone"] }
+    }, ["text"])
+  },
 ];
 
 export const TOOL_NAMES = TOOLS.map((t) => t.name);

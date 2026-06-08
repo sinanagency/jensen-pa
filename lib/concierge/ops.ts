@@ -185,3 +185,71 @@ export async function getGoals() { const r = await sbSelect<any>("kv", `key=eq.g
 export async function setGoals(g: string[]) { await sbUpsert("kv", { key: "goals", value: g, updated_at: now() }, "key"); return { ok: true, goals: g }; }
 export async function getBlueprint() { const r = await sbSelect<any>("kv", `key=eq.legalBlueprint&select=value`); return (r[0]?.value as string) ?? ""; }
 export async function setBlueprint(t: string) { await sbUpsert("kv", { key: "legalBlueprint", value: t, updated_at: now() }, "key"); return { ok: true }; }
+
+// ---------- SANAD (UAE legal brain via /api/v1/*) ----------
+// sanadStartDraft enqueues an async draft job on Sanad and records the pending
+// row locally so the cron at /api/cron/sanad-deliver can poll it and deliver
+// the PDF to the recipient WA when ready. Returns context the model uses to
+// tell the user "I will have that ready in two minutes" in first person.
+import { sanadDraftContract, sanadReviewContract, type SanadKind, type SanadJurisdiction } from "../sanad/client";
+
+interface SanadDraftToolInput {
+  kind: SanadKind;
+  jurisdiction: SanadJurisdiction;
+  party_a_name: string;
+  party_a_details?: string;
+  party_b_name: string;
+  party_b_details?: string;
+  effective_date?: string;
+  additional_context?: string;
+  recipient_wa: string;
+}
+
+export async function sanadStartDraft(input: SanadDraftToolInput) {
+  if (!input?.recipient_wa) {
+    return { ok: false, error: "recipient_wa is required so the PDF can be delivered when ready." };
+  }
+  const r = await sanadDraftContract({
+    kind: input.kind,
+    jurisdiction: input.jurisdiction,
+    party_a: { name: input.party_a_name, details: input.party_a_details },
+    party_b: { name: input.party_b_name, details: input.party_b_details },
+    effective_date: input.effective_date,
+    additional_context: input.additional_context
+  });
+  if (!r.ok) {
+    return { ok: false, error: r.reason, status: r.status, hint: r.reason === "sanad_disabled" ? "Sanad v1 env vars (SANAD_V1_BASE_URL + SANAD_V1_API_KEY) are not set on this deployment." : undefined };
+  }
+  await sbInsert("sanad_pending_drafts", {
+    job_id: r.data.job_id,
+    recipient_wa: input.recipient_wa,
+    kind: input.kind,
+    jurisdiction: input.jurisdiction,
+    status: "queued",
+    poll_url: r.data.poll_url,
+    metadata: {
+      party_a_name: input.party_a_name,
+      party_b_name: input.party_b_name,
+      effective_date: input.effective_date,
+      additional_context: input.additional_context
+    }
+  });
+  return {
+    ok: true,
+    job_id: r.data.job_id,
+    eta_seconds: r.data.eta_seconds,
+    message_to_user: r.data.message,
+    note: "Job queued. The cron at /api/cron/sanad-deliver polls Sanad and delivers the PDF to recipient_wa via sendTextAndLog when ready."
+  };
+}
+
+export async function sanadReview(input: { text: string; kind?: SanadKind; jurisdiction?: SanadJurisdiction }) {
+  if (!input?.text || input.text.length < 200) {
+    return { ok: false, error: "text must be at least 200 chars." };
+  }
+  const r = await sanadReviewContract(input);
+  if (!r.ok) {
+    return { ok: false, error: r.reason, status: r.status, hint: r.reason === "sanad_disabled" ? "Sanad v1 env vars not set." : undefined };
+  }
+  return { ok: true, ...r.data };
+}
