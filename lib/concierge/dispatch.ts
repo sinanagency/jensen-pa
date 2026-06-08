@@ -12,6 +12,40 @@ import { aggregateInbox, readUnified, sendUnified, unpackId } from "../mail-prov
 
 type Result = any;
 
+// JENSEN-DOCTRINE Law 8 (tool-call safety) enforcement.
+// Destructive or money-moving tools must NOT run inline. The model must ask
+// the user to confirm; only when the next call comes back with confirm:true
+// (or _confirmed:true) does the action execute.
+//
+// This is the chokepoint pattern again: one place that decides whether the
+// dangerous action gets through, rather than asking the model to remember
+// the rule every turn.
+const DESTRUCTIVE = new Set([
+  "delete_entity",
+  "delete_task",
+  "delete_event",
+  "delete_finance",
+  "delete_document",
+  "delete_contact",
+  "delete_note",
+  "forget_memory",
+  "reply_email",   // sends real outbound mail
+  "call_owner",    // places a real Twilio phone call
+]);
+
+function destructiveGate(name: string, input: any): { ok: boolean; error?: string } | null {
+  if (!DESTRUCTIVE.has(name)) return null;
+  const confirmed = input?.confirm === true || input?._confirmed === true;
+  if (confirmed) return null;
+  return {
+    ok: false,
+    error:
+      `Destructive tool '${name}' refused without explicit confirmation. ` +
+      `JENSEN-DOCTRINE Law 8: write tools never run inline. ` +
+      `Ask the user a clear yes/no confirmation ('Delete X? Reply yes to confirm'), wait for their answer, then retry this tool with confirm:true.`,
+  };
+}
+
 async function financeSummary(i: { entityId?: string; from?: string; to?: string }) {
   let rows = await ops.listFinance({ entityId: i.entityId });
   if (i.from) rows = rows.filter((r: any) => r.date >= i.from!);
@@ -50,6 +84,8 @@ const LEGAL_SYS = (kind: string, blueprint: string) =>
 
 export async function runAction(name: string, input: any): Promise<{ ok: boolean; result?: Result; error?: string }> {
   try {
+    const gated = destructiveGate(name, input);
+    if (gated) return gated;
     let result: Result;
     switch (name) {
       // entities
