@@ -16,7 +16,13 @@ const API = "https://api.anthropic.com/v1/messages";
 export type Turn = { role: "user" | "assistant"; content: any };
 export type Sender = { name: string; role: "owner" | "admin" };
 
-async function buildSystem(lastUser: string, sender?: Sender, onboarding = false, channel?: string): Promise<string> {
+// Single-turn transition prompt: fires on Jensen's first inbound after Taona
+// graduated him out of training mode. Says "I can do tasks now, still learning
+// you." Woven into a normal reply, not as the whole message. Pairs with the
+// training_graduated flag flip below so it never sends twice.
+const GRADUATION_ADDENDUM = `GRADUATION MOMENT (this single turn only): Jensen has been moved out of training mode. Open this reply by gently letting him know, in the first person and in my own voice, that I can now take real tasks for him from here on, and that I am still learning him so I can serve him better. Weave it naturally into the opening of my reply, never as the entire message and never as a formal announcement. Then continue to actually respond to whatever he just said, with full tools available, the way I would in normal active service. Do not list capabilities. Do not say the word "graduated". Keep it warm and short.`;
+
+async function buildSystem(lastUser: string, sender?: Sender, onboarding = false, channel?: string, graduation = false): Promise<string> {
   const s = sender || { name: "Jensen", role: "owner" as const };
   if (onboarding) {
     // Pull whatever picture we already have so we never re-ask known things.
@@ -111,6 +117,7 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
     `HIS GOALS:\n${goalsText}`,
     factsText && `RELEVANT MEMORY:\n${factsText}`,
     docsText && `RELEVANT DOCUMENTS:\n${docsText}`,
+    graduation && GRADUATION_ADDENDUM,
   ].filter(Boolean).join("\n\n");
 }
 
@@ -143,8 +150,15 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
   // (Jensen) gets a listen-only welcome — no tools, no actions, just gather his
   // goals/needs. The admin (Taona) always runs at full power so he can build/test.
   const prefs = await ops.getPrefs().catch(() => ({} as any));
-  const onboarding = ((input.sender?.role ?? "owner") === "owner") && prefs?.onboarding !== false;
-  const system = await buildSystem(lastUser, input.sender, onboarding, input.channel);
+  // Training graduation gate. Set by Taona when he flips Jensen out of training
+  // mode. On the FIRST Jensen-initiated turn after that, we bypass the
+  // onboarding branch (tools on, active service) and weave a single graduation
+  // line into the reply via GRADUATION_ADDENDUM. The flip + flag-set happens
+  // atomically once the reply succeeds (below), so the line never re-sends.
+  const isOwnerTurn = (input.sender?.role ?? "owner") === "owner";
+  const graduating = isOwnerTurn && prefs?.training_graduated !== true && prefs?.training_graduation_pending === true;
+  const onboarding = isOwnerTurn && !graduating && prefs?.onboarding !== false;
+  const system = await buildSystem(lastUser, input.sender, onboarding, input.channel, graduating);
 
   // Privacy wall: which conversation this is. Taona (admin/dev) is walled off from
   // Jensen; his messages and memory never mix into Jensen's, and only the admin
@@ -209,6 +223,15 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
   } catch { /* ignore log failure */ }
   // Only learn durable facts from Jensen's world, never from the admin's dev chatter.
   if (party === "jensen") captureSalience(lastUser, reply, { onboarding }).catch(() => {});
+
+  // Atomic graduation flip: once the reply went out carrying the addendum, mark
+  // the transition complete so it never re-fires, and disable the onboarding
+  // gate so subsequent turns run as full active service.
+  if (graduating) {
+    try {
+      await ops.setPrefs({ ...prefs, training_graduated: true, training_graduation_pending: false, onboarding: false });
+    } catch { /* best-effort, the reply already shipped */ }
+  }
 
   return { reply, toolsUsed: runs.map((r) => r.name) };
 }
