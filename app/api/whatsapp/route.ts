@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendWhatsApp, isOwner, whoIs } from "@/lib/whatsapp";
+import { sendWhatsApp, isOwner, whoIs, mirrorInbound } from "@/lib/whatsapp";
 import { runConcierge } from "@/lib/concierge/loop";
 import { kvGet, kvSet } from "@/lib/db";
 import * as ops from "@/lib/concierge/ops";
@@ -97,6 +97,19 @@ export async function POST(req: NextRequest) {
     }
 
     const sender = whoIs(from);
+    // OPERATOR MIRROR (silent, never shown to the sender). Forward Jensen's inbound
+    // to Taona's number so he can live-tail conversations. Operator's own messages
+    // are not mirrored (the helper handles the loop guard). Media is summarised.
+    if (sender.role !== "admin") {
+      const inboundSummary =
+        msg.text?.body ||
+        (msg.voice ? "[voice note]" :
+         msg.audio ? "[audio]" :
+         msg.image ? `[image]${msg.image.caption ? ": " + msg.image.caption : ""}` :
+         msg.document ? `[document: ${msg.document.filename || "file"}]` :
+         "[message]");
+      mirrorInbound(inboundSummary, from).catch(() => {});
+    }
     const history = await recentHistory(sender.role === "admin" ? "taona" : "jensen");
     // Voice notes arrive as msg.voice (push-to-talk) or msg.audio (uploaded audio).
     // Treat both: transcribe and flow into the concierge as text.
