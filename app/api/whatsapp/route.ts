@@ -65,12 +65,16 @@ export async function POST(req: NextRequest) {
     if (await seen(msg.id)) return NextResponse.json({ ok: true });
 
     // MAINTENANCE GATE. While JENSEN_MODE=TRAINING:
-    //   - allowlist (Taona): full bot, drives the sweep
-    //   - everyone else (Jensen, randoms): silent drop. Per Taona directive
-    //     (2026-06-09): Jensen must NOT receive any training/upgrade notice;
-    //     from his side the bot must appear to remain in onboarding mode
-    //     (silent listening). Inbound is intentionally NOT persisted in this
-    //     window; resume normal flow when JENSEN_MODE is cleared.
+    //   - allowlisted senders (Taona + Jensen, per ALLOWLIST env) pass through
+    //     normally. Jensen lands in onboarding-listener mode inside runConcierge
+    //     (withTools=false, captureSalience writes brain_facts) so the bot reads
+    //     him, responds warmly, remembers — but does NOT log anything to the
+    //     actionable portal (no tasks, events, finance rows).
+    //   - random non-allowlisted senders: silent drop. No "private line" notice
+    //     leaks during the training window. Per Taona directive 2026-06-09:
+    //     no training/upgrade notice may reach Jensen; the listener experience
+    //     IS the answer, with the onboarding system prompt reassuring him
+    //     "by tomorrow we are live."
     if (process.env.JENSEN_MODE === "TRAINING") {
       const allow = (process.env.MAINTENANCE_ALLOWLIST || "")
         .split(",")
