@@ -70,8 +70,11 @@ export async function GET(req: NextRequest) {
     // Jensen to engage, so the rich brief flows on his reply turn. The full
     // text is still logged via the chokepoint regardless (the bot's memory
     // never lies about what it tried to say).
-    const tmplName = process.env.MORNING_BRIEF_TEMPLATE;     // e.g. "morning_brief_v1"
-    const tmplLang = process.env.MORNING_BRIEF_TEMPLATE_LANG || "en_US";
+    // .trim() defends against Vercel's "env vars get a trailing newline" trap
+    // that also bit JENSEN_MODE earlier this week. Without trim, the template
+    // name "morning_brief_v1\n" never matches Meta's "morning_brief_v1".
+    const tmplName = (process.env.MORNING_BRIEF_TEMPLATE || "").trim();
+    const tmplLang = (process.env.MORNING_BRIEF_TEMPLATE_LANG || "en_US").trim();
 
     const sent: Record<string, any> = {};
     const pendingMail = await peekCount().catch(() => 0);
@@ -80,7 +83,7 @@ export async function GET(req: NextRequest) {
       if (win.open) {
         const ok = await sendWhatsApp(n, brief.text);
         sent[n] = { mode: "text", ok, hoursSince: Number(win.hoursSince.toFixed(1)) };
-      } else if (tmplName) {
+      } else if (tmplName && tmplName.length > 0) {
         // Template parameters: [q1 count, q2 count, today events count]. Must
         // match the body slots in the template Meta approved. Adjust template
         // body wording in WhatsApp Manager, not here.
