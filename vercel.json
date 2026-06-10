@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sanad-deliver",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/mail-triage",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
