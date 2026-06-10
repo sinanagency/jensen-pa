@@ -25,12 +25,17 @@ async function buildBrief(): Promise<{ text: string; q1: number; call: string }>
     ops.listTasks({ quadrant: 2, done: false }).catch(() => []),
     ops.queryCalendar({ from: today, to: today }).catch(() => []),
   ]);
-  const lines: string[] = [`Good ${dayPart()}. Here is your board for today.`];
+  // Open warm, peer-counsel tone (matches Jensen's persona tree), then drop
+  // into the board. Greeting first so the brief never reads sterile.
+  const greeting = dayPart() === "morning"
+    ? `Morning, Jensen. How's the head?`
+    : `Good ${dayPart()}, Jensen.`;
+  const lines: string[] = [greeting, "", `Here is your board for today.`];
   if (q1.length) {
     lines.push(`\n*Do first (${q1.length}):*`);
     q1.slice(0, 5).forEach((t: any) => lines.push(`• ${t.title}`));
   } else {
-    lines.push(`\n*Do first:* nothing urgent. Clean board. 🤍`);
+    lines.push(`\n*Do first:* nothing urgent. Clean board.`);
   }
   if (events.length) {
     lines.push(`\n*Today's schedule:*`);
