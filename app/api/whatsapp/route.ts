@@ -61,12 +61,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     // WABA AUTO-CAPTURE. The Meta system-user token can manage templates ON
     // a known WABA but cannot enumerate WABAs (missing business_management
-    // scope, by design). We capture the WABA id from the first webhook hit
+    // scope, by design). We capture the WABA id from the webhook payload
     // (Meta puts it on entry[0].id) and, the first time we see one, also
     // submit the morning_brief_v1 utility template so the daily cron stops
-    // skipping when Jensen is off-window. Background, fire-and-forget so it
-    // never blocks the inbound. Idempotent via two kv flags.
-    captureWabaAndMaybeSubmitTemplate(body).catch(() => {});
+    // skipping when Jensen is off-window. AWAITED (not fire-and-forget): in
+    // Vercel serverless, post-response async work gets killed when the
+    // response returns. Costs ~200ms on the webhook path but guarantees the
+    // kv write + template POST actually run. Wrapped in try/catch so a
+    // capture failure never breaks the message processing below.
+    try { await captureWabaAndMaybeSubmitTemplate(body); } catch {}
 
     const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     const from: string = msg?.from || "";
