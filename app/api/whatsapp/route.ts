@@ -59,17 +59,13 @@ async function recentHistory(party: string): Promise<{ role: "user" | "assistant
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    // WABA AUTO-CAPTURE. The Meta system-user token can manage templates ON
-    // a known WABA but cannot enumerate WABAs (missing business_management
-    // scope, by design). We capture the WABA id from the webhook payload
-    // (Meta puts it on entry[0].id) and, the first time we see one, also
-    // submit the morning_brief_v1 utility template so the daily cron stops
-    // skipping when Jensen is off-window. AWAITED (not fire-and-forget): in
-    // Vercel serverless, post-response async work gets killed when the
-    // response returns. Costs ~200ms on the webhook path but guarantees the
-    // kv write + template POST actually run. Wrapped in try/catch so a
-    // capture failure never breaks the message processing below.
-    try { await captureWabaAndMaybeSubmitTemplate(body); } catch {}
+    // WABA payload diagnostic. Empirically Meta's webhook entry[0].id on THIS
+    // account surfaces the system-user id, not the WABA id, so a fully-auto
+    // template submission path is not possible from the webhook. We still
+    // stash the most recent webhook payload (heavily truncated) and the seen
+    // entry[0].id in kv so the operator has something to inspect when looking
+    // up the real WABA_ID in Meta's dashboard.
+    try { await captureWebhookDiagnostic(body); } catch {}
 
     const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     const from: string = msg?.from || "";
@@ -227,75 +223,27 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// WABA AUTO-CAPTURE + ONE-TIME TEMPLATE SUBMISSION
-//
-// The Meta system-user token has whatsapp_business_management scope (can
-// manage templates) but NOT business_management scope (can't enumerate
-// WABAs). So we cannot auto-discover the WABA_ID via Graph API alone. But
-// every Meta webhook payload puts the WABA id at body.entry[0].id, so the
-// next inbound message gives us the answer for free. We stash it in kv,
-// then immediately POST the morning_brief_v1 utility template so the daily
-// cron has a real off-window send path. Submission is idempotent (kv flag
-// prevents re-posting), and runs background so a slow Graph call never
-// blocks the user's inbound.
-// ---------------------------------------------------------------------------
-async function captureWabaAndMaybeSubmitTemplate(body: any): Promise<void> {
+// Lightweight webhook diagnostic. The auto-WABA-discovery path failed for this
+// account because Meta surfaces the system-user id at entry[0].id (not the
+// WABA id), and the token lacks business_management scope to enumerate WABAs.
+// We still capture the last entry[0].id and a truncated payload preview in kv
+// so the operator can compare them against their WhatsApp Manager dashboard
+// when looking up the real WABA_ID. No template submission attempted: that
+// path is blocked until lr_meta_waba_id is set by the operator (a number
+// looked up in business.facebook.com/wa/manage and saved by a one-shot
+// helper). Once set, /api/cron/daily uses MORNING_BRIEF_TEMPLATE env to know
+// which approved template to fire.
+async function captureWebhookDiagnostic(body: any): Promise<void> {
   try {
-    const wabaFromPayload = body?.entry?.[0]?.id;
-    if (!wabaFromPayload || !/^\d{10,20}$/.test(String(wabaFromPayload))) return;
-
-    const existing = await kvGet<string | null>("lr_meta_waba_id", null);
-    if (!existing) {
-      await kvSet("lr_meta_waba_id", String(wabaFromPayload));
-      console.log(`[waba-capture] stored ${wabaFromPayload}`);
+    const entryId = body?.entry?.[0]?.id;
+    if (entryId && /^\d{10,20}$/.test(String(entryId))) {
+      await kvSet("lr_meta_last_entry_id", { id: String(entryId), at: Date.now() });
     }
-    const wabaId = existing || String(wabaFromPayload);
-
-    const submitted = await kvGet<boolean>("lr_morning_template_submitted", false);
-    if (submitted) return;
-
-    const token = process.env.WHATSAPP_TOKEN;
-    if (!token) return;
-
-    // Utility template, English (US). Body matches the [q1, q2, today events,
-    // pending mail] parameter order in app/api/cron/daily/route.ts.
-    const tpl = {
-      name: "morning_brief_v1",
-      category: "UTILITY",
-      language: "en_US",
-      components: [
-        {
-          type: "BODY",
-          text: "Morning, Jensen. {{1}} on your board today, {{2}} I am protecting, {{3}} on schedule, {{4}} email proposals waiting. Reply here to see the full brief.",
-          example: { body_text: [["2 items", "5 items", "3 events", "1"]] },
-        },
-      ],
-    };
-
-    const res = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify(tpl),
-    });
-    const j: any = await res.json().catch(() => ({}));
-    if (res.ok && j?.id) {
-      await kvSet("lr_morning_template_submitted", true);
-      await kvSet("lr_morning_template_id", String(j.id));
-      console.log(`[waba-capture] template submitted id=${j.id} status=${j.status || "in_review"}`);
-    } else {
-      // If the template already exists from a prior submission attempt, Meta
-      // returns a specific error subcode — treat as "already done" and stop
-      // retrying so a flaky tick doesn't spam Meta.
-      const msg = j?.error?.message || "";
-      if (/already exists|conflict/i.test(msg)) {
-        await kvSet("lr_morning_template_submitted", true);
-        console.log(`[waba-capture] template already exists, marked submitted`);
-      } else {
-        console.log(`[waba-capture] template submit failed: ${res.status} ${msg.slice(0, 240)}`);
-      }
-    }
-  } catch (e: any) {
-    console.log(`[waba-capture] threw: ${e?.message || e}`);
+    // Truncated preview — first 1.5KB of the JSON. Helpful for spotting the
+    // real WABA in case Meta drops it at a different key for some payloads.
+    const preview = JSON.stringify(body || {}).slice(0, 1500);
+    await kvSet("lr_meta_last_webhook_preview", { preview, at: Date.now() });
+  } catch {
+    // Diagnostic failure must never block message processing.
   }
 }
