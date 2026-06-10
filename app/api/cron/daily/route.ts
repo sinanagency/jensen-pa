@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as ops from "@/lib/concierge/ops";
-import { sendWhatsApp, whoIs } from "@/lib/whatsapp";
+import { sendWhatsApp, sendWhatsAppTemplate, whoIs } from "@/lib/whatsapp";
 import { callOwner, twilioConfigured } from "@/lib/voice-call";
 import { dubaiToday, dayPart } from "@/lib/time";
+import { isInWindow } from "@/lib/whatsapp-window";
+import { peekCount } from "@/lib/mail-pending";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -61,8 +63,48 @@ export async function GET(req: NextRequest) {
     const brief = await buildBrief();
     // Brief goes to JENSEN only (the owner), never the admin/developer.
     const to = owners().filter((n) => whoIs(n).role === "owner");
-    const sent: Record<string, boolean> = {};
-    for (const n of to) sent[n] = await sendWhatsApp(n, brief.text);
+
+    // 24-hour customer-service window split. Free-text inside the window lands
+    // (the rich brief). Outside the window, free-text is silently dropped by
+    // Meta — we MUST switch to a pre-approved utility template that nudges
+    // Jensen to engage, so the rich brief flows on his reply turn. The full
+    // text is still logged via the chokepoint regardless (the bot's memory
+    // never lies about what it tried to say).
+    const tmplName = process.env.MORNING_BRIEF_TEMPLATE;     // e.g. "morning_brief_v1"
+    const tmplLang = process.env.MORNING_BRIEF_TEMPLATE_LANG || "en_US";
+
+    const sent: Record<string, any> = {};
+    const pendingMail = await peekCount().catch(() => 0);
+    for (const n of to) {
+      const win = await isInWindow("jensen");
+      if (win.open) {
+        const ok = await sendWhatsApp(n, brief.text);
+        sent[n] = { mode: "text", ok, hoursSince: Number(win.hoursSince.toFixed(1)) };
+      } else if (tmplName) {
+        // Template parameters: [q1 count, q2 count, today events count]. Must
+        // match the body slots in the template Meta approved. Adjust template
+        // body wording in WhatsApp Manager, not here.
+        const today = dubaiToday();
+        const [q1, q2, events] = await Promise.all([
+          ops.listTasks({ quadrant: 1, done: false }).catch(() => []),
+          ops.listTasks({ quadrant: 2, done: false }).catch(() => []),
+          ops.queryCalendar({ from: today, to: today }).catch(() => []),
+        ]);
+        const wamid = await sendWhatsAppTemplate(n, tmplName, tmplLang, [
+          String((q1 || []).length),
+          String((q2 || []).length),
+          String((events || []).length),
+          String(pendingMail),
+        ]);
+        sent[n] = { mode: "template", template: tmplName, ok: !!wamid, hoursSinceLast: Number(win.hoursSince.toFixed(1)) };
+      } else {
+        // No template configured + window closed: skip rather than silently
+        // fail. Operator sees this in the response payload and knows to submit
+        // a Meta template (instructions in MEMORY.md project note).
+        console.log(`[daily-brief] off-window (${win.hoursSince.toFixed(1)}h since last inbound) and MORNING_BRIEF_TEMPLATE not set — suppressing send to ${n.replace(/[^0-9]/g, "").slice(-4)}`);
+        sent[n] = { mode: "skipped", reason: "off-window, no template configured", hoursSince: Number(win.hoursSince.toFixed(1)) };
+      }
+    }
 
     // Optional voice call to the primary owner (Jensen) when enabled + configured.
     let call: any = { attempted: false };

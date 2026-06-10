@@ -16,6 +16,8 @@ import { triageInbox, type TriagedMail } from "@/lib/mail-triage";
 import { sendTextAndLog } from "@/lib/sendTextAndLog";
 import { kvGet, kvSet } from "@/lib/db";
 import { whoIs } from "@/lib/whatsapp";
+import { isInWindow } from "@/lib/whatsapp-window";
+import { enqueue, drain, peekCount, type PendingProposal } from "@/lib/mail-pending";
 
 const SEEN_KEY = "lr_mail_seen";
 const SEEN_CAP = 500;
@@ -103,6 +105,9 @@ export type SweepResult = {
   filteredNoise: number;
   notNeedingReply: number;
   seeded: boolean;
+  windowOpen: boolean;
+  queued: number;        // proposals added to off-window queue on this run
+  drained: number;       // proposals delivered from a previously-queued backlog
   errors?: string[];
 };
 
@@ -131,7 +136,7 @@ export async function sweepAndPropose(): Promise<SweepResult> {
     aggregated = await aggregateInbox(25);
   } catch (e: any) {
     errors.push(`aggregate: ${e?.message || String(e)}`);
-    return { ok: false, scanned: 0, newUnseen: 0, proposed: 0, filteredNoise: 0, notNeedingReply: 0, seeded: false, errors };
+    return { ok: false, scanned: 0, newUnseen: 0, proposed: 0, filteredNoise: 0, notNeedingReply: 0, seeded: false, windowOpen: false, queued: 0, drained: 0, errors };
   }
 
   const seen = await loadSeen();
@@ -147,23 +152,32 @@ export async function sweepAndPropose(): Promise<SweepResult> {
   // First run: seed only, don't propose. Otherwise a freshly-deployed cron
   // would dump 50 historical proposals into WhatsApp the first time it fires.
   if (seededFirstRun) {
-    return { ok: true, scanned: aggregated.length, newUnseen: unseen.length, proposed: 0, filteredNoise: 0, notNeedingReply: 0, seeded: true, errors };
+    return { ok: true, scanned: aggregated.length, newUnseen: unseen.length, proposed: 0, filteredNoise: 0, notNeedingReply: 0, seeded: true, windowOpen: false, queued: 0, drained: 0, errors };
   }
+
+  // 24-hour customer-service window check. If Jensen has not messaged the bot
+  // in 24h, free-text sends look successful at the HTTP layer but Meta drops
+  // them silently. Cache once per sweep so the per-uid loop can branch on it.
+  const win = await isInWindow("jensen");
 
   // Drop obvious noise BEFORE the triage call so we don't spend Haiku tokens on
   // LinkedIn job alerts and sevenrooms confirmations.
   const candidates = unseen.filter((m) => !isNoise(m.fromEmail));
   const filteredNoise = unseen.length - candidates.length;
-  if (candidates.length === 0) {
-    return { ok: true, scanned: aggregated.length, newUnseen: unseen.length, proposed: 0, filteredNoise, notNeedingReply: 0, seeded: false, errors };
+  if (candidates.length === 0 && (!win.open || (await peekCount()) === 0)) {
+    // Nothing new to triage AND no backlog to drain. Honest empty tick.
+    return { ok: true, scanned: aggregated.length, newUnseen: unseen.length, proposed: 0, filteredNoise, notNeedingReply: 0, seeded: false, windowOpen: win.open, queued: 0, drained: 0, errors };
   }
 
   let triaged: TriagedMail[] = [];
-  try {
-    triaged = await triageInbox(candidates);
-  } catch (e: any) {
-    errors.push(`triage: ${e?.message || String(e)}`);
-    return { ok: false, scanned: aggregated.length, newUnseen: unseen.length, proposed: 0, filteredNoise, notNeedingReply: 0, seeded: false, errors };
+  if (candidates.length > 0) {
+    try {
+      triaged = await triageInbox(candidates);
+    } catch (e: any) {
+      errors.push(`triage: ${e?.message || String(e)}`);
+      // Soft-fail: we still want the off-window-drain logic below to run if the
+      // window just opened, even if this tick's triage hiccupped.
+    }
   }
 
   const needsReply = triaged.filter((m) => m.needsReply && (m.draft || "").trim().length > 0);
@@ -172,20 +186,69 @@ export async function sweepAndPropose(): Promise<SweepResult> {
   const to = recipientNumber();
   if (!to) {
     errors.push("OWNER_WHATSAPP not configured");
-    return { ok: false, scanned: aggregated.length, newUnseen: unseen.length, proposed: 0, filteredNoise, notNeedingReply, seeded: false, errors };
+    return { ok: false, scanned: aggregated.length, newUnseen: unseen.length, proposed: 0, filteredNoise, notNeedingReply, seeded: false, windowOpen: win.open, queued: 0, drained: 0, errors };
   }
 
   let proposed = 0;
+  let queued = 0;
+  let drained = 0;
+
+  // 1) Drain the off-window backlog FIRST if the window just reopened.
+  // Order matters: catching Jensen up on what piled up while he was away
+  // before showing him anything new from this tick.
+  if (win.open) {
+    const backlog = await drain();
+    // Hard cap on a single drain so a long-away Jensen does not get hit by
+    // 20 messages back-to-back the moment he says hi. Anything past the cap
+    // stays unsurfaced; he can still ask "what's in my inbox" via list_inbox.
+    const DRAIN_CAP = 5;
+    const batch = backlog.slice(0, DRAIN_CAP);
+    for (const p of batch) {
+      try {
+        const m: TriagedMail = {
+          id: p.id, accountId: p.accountId, accountEmail: p.accountEmail,
+          provider: "imap", from: p.from, fromEmail: p.fromEmail, subject: p.subject,
+          date: "", snippet: "", seen: false, attachments: 0,
+          important: p.quadrant === 1 || p.quadrant === 2,
+          urgent: p.quadrant === 1 || p.quadrant === 3,
+          needsReply: true, quadrant: p.quadrant, summary: p.summary, draft: p.draft,
+        };
+        const body = `(catching up while you were away)\n\n` + buildProposal(m);
+        const r = await sendTextAndLog(to, body, { party: "jensen" });
+        if (r.ok) drained++;
+        else errors.push(`drain send failed for ${p.id}`);
+      } catch (e: any) {
+        errors.push(`drain ${p.id}: ${e?.message || String(e)}`);
+      }
+    }
+    if (backlog.length > DRAIN_CAP) {
+      errors.push(`${backlog.length - DRAIN_CAP} more queued proposals dropped (over drain cap)`);
+    }
+  }
+
+  // 2) Handle THIS tick's new needsReply items. In-window → propose now.
+  // Off-window → queue for the next sweep that finds the window open.
   for (const m of needsReply) {
     try {
-      const body = buildProposal(m);
-      const r = await sendTextAndLog(to, body, { party: "jensen" });
-      if (r.ok) proposed++;
-      else errors.push(`whatsapp send failed for ${m.id}`);
+      if (win.open) {
+        const body = buildProposal(m);
+        const r = await sendTextAndLog(to, body, { party: "jensen" });
+        if (r.ok) proposed++;
+        else errors.push(`whatsapp send failed for ${m.id}`);
+      } else {
+        const p: PendingProposal = {
+          id: m.id, accountId: m.accountId, accountEmail: m.accountEmail,
+          from: m.from, fromEmail: m.fromEmail, subject: m.subject,
+          summary: m.summary, draft: m.draft, quadrant: m.quadrant,
+          queuedAt: Date.now(),
+        };
+        await enqueue(p);
+        queued++;
+      }
     } catch (e: any) {
       errors.push(`propose ${m.id}: ${e?.message || String(e)}`);
     }
   }
 
-  return { ok: errors.length === 0, scanned: aggregated.length, newUnseen: unseen.length, proposed, filteredNoise, notNeedingReply, seeded: false, errors: errors.length ? errors : undefined };
+  return { ok: errors.length === 0, scanned: aggregated.length, newUnseen: unseen.length, proposed, filteredNoise, notNeedingReply, seeded: false, windowOpen: win.open, queued, drained, errors: errors.length ? errors : undefined };
 }

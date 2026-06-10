@@ -60,6 +60,52 @@ export async function sendWhatsApp(to: string, body: string, opts?: { force?: bo
   }
 }
 
+// Send a pre-approved Meta template message. Templates are the ONLY way to
+// reach a user outside the 24-hour customer-service window: free-text returns
+// 200 OK but is silently dropped if the window is closed. The template must
+// already be approved in WhatsApp Manager (Business Manager → Account Tools →
+// Message Templates) under the configured WABA. Used by /api/cron/daily when
+// Jensen's window is closed: a single utility template nudges him to reopen,
+// then the rich free-text brief flows on his reply.
+//
+// `name` is the template name (e.g. "morning_brief_v1"), `lang` is the BCP-47
+// code Meta uses ("en_US"). `body` is the ordered list of {{1}}, {{2}}, ...
+// values for the template body. Returns Meta's wamid on success, null on fail.
+export async function sendWhatsAppTemplate(
+  to: string,
+  name: string,
+  lang: string,
+  body: string[] = [],
+  opts?: { force?: boolean }
+): Promise<string | null> {
+  if (!waConfigured()) return null;
+  if (!passesTrainingGate(to, `template:${name}`, opts)) return null;
+  const components = body.length
+    ? [{ type: "body", parameters: body.map((v) => ({ type: "text", text: stripDashes(String(v || "")) })) }]
+    : undefined;
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: { name, language: { code: lang }, ...(components ? { components } : {}) },
+      }),
+    });
+    if (!res.ok) {
+      console.log(`[wa-template] ${name} → ${to.replace(/[^0-9]/g, "").slice(-4)} failed: ${res.status} ${(await res.text()).slice(0, 240)}`);
+      return null;
+    }
+    const j: any = await res.json();
+    return j?.messages?.[0]?.id || null;
+  } catch (e: any) {
+    console.log(`[wa-template] ${name} threw: ${e?.message || e}`);
+    return null;
+  }
+}
+
 // Send a PDF (or any binary) document via WhatsApp.
 // Used by /api/cron/sanad-deliver to hand back Sanad-generated contracts.
 // Two Meta hops: (1) POST /media to upload, (2) POST /messages with media id.
