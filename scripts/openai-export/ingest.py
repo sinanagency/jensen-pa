@@ -36,7 +36,7 @@ def load_env():
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        os.environ[k.strip()] = v.strip().strip('"').strip("'")  # override, not setdefault
 
 load_env()
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -111,6 +111,24 @@ def walk_user_messages(c: dict) -> Iterator[dict]:
         }
 
 
+def detect_paste_back(content: str) -> bool:
+    """Heuristic: text Jensen pasted IN from somewhere (his own past draft, or
+    GPT's earlier output) to be polished, rather than his native composition.
+
+    Signals:
+      - em-dashes / en-dashes (Jensen does not type these in WhatsApp/email)
+      - extreme length (>400 words in a single user turn is almost always a
+        draft pasted in for polish)
+    Both are conservative — false positives = the corpus is slightly smaller
+    for voice modelling but RAG still has everything (we tag, not drop).
+    """
+    if "—" in content or "–" in content:
+        return True
+    if len(content.split()) > 400:
+        return True
+    return False
+
+
 def build_row(raw: dict) -> dict:
     redacted, pii_kinds = redact(raw["raw_content"])
     domain, intent = classify(redacted, raw.get("conv_title") or "", raw.get("_siblings") or "")
@@ -129,6 +147,7 @@ def build_row(raw: dict) -> dict:
         "intent": intent,
         "contains_pii": bool(pii_kinds),
         "pii_kinds": pii_kinds,
+        "looks_pasted": detect_paste_back(redacted),
         "source": SOURCE_TAG,
     }
 

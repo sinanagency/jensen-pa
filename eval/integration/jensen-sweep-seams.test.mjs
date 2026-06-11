@@ -334,6 +334,41 @@ check("seam.25 outbound chokepoint strips em/en dashes (Law 5 hard enforcement)"
 });
 
 // ============================================================================
+// OPERATOR MIRROR SEAM — silent live-tail to MIRROR_TO
+// ============================================================================
+
+check("seam.26 mirrorToOperator exists with loop-guard + delegates through sendWhatsApp", () => {
+  const src = read("lib/whatsapp.ts");
+  if (!/async function mirrorToOperator/.test(src)) return "mirrorToOperator not defined";
+  const fn = src.slice(src.indexOf("async function mirrorToOperator"));
+  const body = fn.slice(0, fn.indexOf("\n}\n") + 2);
+  if (!/MIRROR_TO/.test(body)) return "no MIRROR_TO env reference";
+  if (!/fromDigits === op \|\| toDigits === op/.test(body)) return "no loop guard on operator number";
+  if (!/sendWhatsApp\(op,/.test(body)) return "mirror does not delegate through sendWhatsApp (would bypass chokepoints)";
+  if (!/force:\s*true/.test(body)) return "mirror does not pass force:true (would be silently swallowed by TRAINING gate)";
+  return null;
+});
+
+check("seam.27 sendWhatsApp fires mirror after successful outbound", () => {
+  const src = read("lib/whatsapp.ts");
+  const fn = src.slice(src.indexOf("export async function sendWhatsApp"));
+  const body = fn.slice(0, fn.indexOf("\n}\n") + 2);
+  if (!/mirrorToOperator\(/.test(body)) return "sendWhatsApp does not call mirrorToOperator";
+  // mirror call must come AFTER the graph fetch (otherwise we mirror unsent text)
+  const fetchIdx = body.indexOf("graph.facebook.com");
+  const mirrorIdx = body.indexOf("mirrorToOperator");
+  if (mirrorIdx < fetchIdx) return "mirror call runs BEFORE the actual outbound fetch";
+  return null;
+});
+
+check("seam.28 WA route fires mirror on non-admin inbound", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  if (!/mirrorInbound\(/.test(src)) return "WA route does not call mirrorInbound";
+  if (!/sender\.role !== ["']admin["']/.test(src)) return "mirror not gated to non-admin senders (would mirror operator's own messages)";
+  return null;
+});
+
+// ============================================================================
 // REPORT
 // ============================================================================
 
