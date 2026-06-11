@@ -14,3 +14,4 @@ node_modules
 specs/001-export-mining/raw/
 __pycache__/
 *.pyc
+supabase/.temp/

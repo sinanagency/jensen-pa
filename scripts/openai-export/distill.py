@@ -232,9 +232,11 @@ def main():
                 "source": "openai-export-2026-06-11",
                 "status": "active",
                 "created_at": int(time.time() * 1000),
+                # Always include embedding key so all rows in a batch share keys
+                # (PostgREST requires uniform shape; embed-failure rows otherwise
+                # poison the entire batch with "All object keys must match").
+                "embedding": "[" + ",".join(str(x) for x in emb) + "]" if emb else None,
             }
-            if emb:
-                row["embedding"] = "[" + ",".join(str(x) for x in emb) + "]"
             rows.append(row)
         code, body = sb_post("brain_facts", rows)
         if code >= 300:
