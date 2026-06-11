@@ -1,0 +1,88 @@
+// Calendar-reminder cron. Scans events for ones whose Dubai time falls 4-6
+// minutes ahead of now and pings Jensen via the chokepoint. Single-fire per
+// event (reminded_at is the latch). Doctrine: Law 1 first-person Rencontre
+// voice, Law 2 sendTextAndLog chokepoint, Law 5 no em-dashes.
+//
+// Runs every minute via vercel.json. The window is [4, 6] so a one-minute
+// drift in cron firing time still catches the event. Skips events titled
+// "Reminder: ..." (legacy sibling rows the bot used to create before this
+// cron existed) so they do not double-fire alongside the parent event.
+
+import { NextRequest, NextResponse } from "next/server";
+import { sendTextAndLog } from "@/lib/sendTextAndLog";
+import { whoIs } from "@/lib/whatsapp";
+import { dubaiToday } from "@/lib/time";
+import { sbSelect, sbUpdate, enc } from "@/lib/concierge/rest";
+
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
+const LEAD_MIN = 5;
+const WINDOW = 1;
+
+function authed(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const hdr = req.headers.get("authorization") || "";
+  const key = new URL(req.url).searchParams.get("key") || "";
+  return hdr === `Bearer ${secret}` || key === secret;
+}
+
+function owners(): string[] {
+  return (process.env.OWNER_WHATSAPP || "").split(",").map((n) => n.trim()).filter(Boolean);
+}
+
+function dubaiNowMinutes(): number {
+  const s = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Dubai",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+  const [h, m] = s.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function parseHHMM(t: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t || "");
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+async function handle(req: NextRequest) {
+  if (!authed(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const today = dubaiToday();
+  const nowMin = dubaiNowMinutes();
+
+  const rows = await sbSelect<any>("events", `date=eq.${enc(today)}&reminded_at=is.null&order=time.asc`).catch(() => []);
+
+  const due = rows.filter((ev: any) => {
+    if (!ev?.time) return false;
+    if (typeof ev.title === "string" && /^Reminder:/i.test(ev.title)) return false;
+    const evMin = parseHHMM(ev.time);
+    if (evMin == null) return false;
+    const delta = evMin - nowMin;
+    return delta >= LEAD_MIN - WINDOW && delta <= LEAD_MIN + WINDOW;
+  });
+
+  if (!due.length) return NextResponse.json({ ok: true, dubaiTime: today, nowMin, scanned: rows.length, fired: 0 });
+
+  const to = owners().filter((n) => whoIs(n).role === "owner");
+  if (!to.length) return NextResponse.json({ ok: false, reason: "no_owner_phone", fired: 0 });
+
+  const fired: any[] = [];
+  for (const ev of due) {
+    const body = `Reminder. ${ev.title} at ${ev.time}.`;
+    for (const num of to) {
+      await sendTextAndLog(num, body, { force: true, party: "jensen" });
+    }
+    await sbUpdate("events", `id=eq.${enc(ev.id)}`, { reminded_at: Date.now() }).catch(() => {});
+    fired.push({ id: ev.id, title: ev.title, time: ev.time });
+  }
+
+  return NextResponse.json({ ok: true, dubaiTime: today, nowMin, scanned: rows.length, fired: fired.length, events: fired });
+}
+
+export async function GET(req: NextRequest) { return handle(req); }
+export async function POST(req: NextRequest) { return handle(req); }
