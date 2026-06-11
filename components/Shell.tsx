@@ -85,8 +85,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       <header className="topnav">
         <div className="topnav-inner">
           <Link href="/" className="brand">
-            <Logo variant="mark" size={36} />
-            <span className="brand-name">LA RENCONTRE</span>
+            <Logo variant="mark" size={40} />
+            <span className="brand-name">La Rencontre</span>
           </Link>
 
           <nav className="navpills" ref={ref}>

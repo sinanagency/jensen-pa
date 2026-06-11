@@ -69,10 +69,10 @@ export default function LoginPage() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         >
-          <Logo variant="lockup" size={52} />
+          <Logo variant="lockup" size={84} />
         </motion.div>
-        <div className="portal">PORTAL</div>
-        <div className="tag">Your private concierge. Run the whole house from one place.</div>
+        <div className="eyebrow">Private Concierge</div>
+        <div className="tag">Run the whole house from one place.</div>
 
         <form onSubmit={submit} className="card">
           {canRegister && (
@@ -117,10 +117,10 @@ export default function LoginPage() {
         .lr-login{position:fixed;inset:0;overflow:hidden;display:grid;place-items:center;background:#08070a;color:#fff;font-family:var(--font-body,system-ui)}
         .bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:saturate(118%) brightness(1.14);z-index:0}
         .veil{position:absolute;inset:0;z-index:1;background:radial-gradient(42% 46% at 50% 46%,rgba(8,7,10,.74),rgba(8,7,10,.32) 70%,rgba(8,7,10,.12))}
-        .stage{position:relative;z-index:2;text-align:center;width:min(420px,90vw)}
-        .mark{display:inline-flex;margin-bottom:14px;filter:drop-shadow(0 10px 34px rgba(167,139,250,.30))}
-        .portal{font-size:clamp(13px,2vw,15px);letter-spacing:.55em;font-weight:500;color:#b3aac6;font-family:-apple-system,system-ui,sans-serif;text-indent:.55em}
-        .tag{margin-top:14px;color:#a9a2b6;font-size:13.5px;letter-spacing:.02em}
+        .stage{position:relative;z-index:2;text-align:center;width:min(440px,90vw)}
+        .mark{display:inline-flex;margin-bottom:28px;filter:drop-shadow(0 18px 44px rgba(167,139,250,.32))}
+        .eyebrow{font-size:11px;letter-spacing:.42em;font-weight:500;color:#b3aac6;text-transform:uppercase;text-indent:.42em}
+        .tag{margin-top:10px;color:#a9a2b6;font-size:13px;letter-spacing:.01em;font-style:italic;font-family:var(--font-serif),Cormorant Garamond,Georgia,serif}
         .card{margin-top:30px;text-align:left;background:rgba(20,18,26,.55);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:22px;backdrop-filter:blur(16px)}
         .tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:4px;margin-bottom:18px}
         .tabs button{height:34px;border:0;border-radius:9px;background:transparent;color:#9a93a8;font-size:13px;font-weight:600;cursor:pointer;transition:all .18s}

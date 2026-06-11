@@ -32,7 +32,9 @@ Each is fixable. Below is the ranked list with code locations + the fix.
 
 ---
 
-### P0-2. Migrate theme tokens from dark/purple to white/serif/gold
+### P0-2. Tighten the dark/purple execution to Mayfair grade
+
+**OVERRIDE 2026-06-12, operator note:** Purple is part of his brand and stays. The doctrine's "white editorial luxury" applies to OTHER brands; jensen-pa keeps the dark-purple identity. The fix below is now about EXECUTION grade, not palette swap.
 
 **Evidence:** `app/globals.css:1-10` opens with the comment *"Dark luxury. Black canvas, white and grey type, purple as a restrained accent."* That is the precise opposite of doctrine Law 4 (*"white editorial luxury, generous whitespace, sparing gold accents on white. Dark mode is opt-in, never default. No glassmorphism."*).
 
@@ -40,13 +42,15 @@ Token-level violations:
 
 | What | Current | Should be |
 |---|---|---|
-| Canvas | `#0a0a0c` near-black | `#fafaf7` ivory |
-| Type | `#f6f6f8` white-on-dark | `#1a1a1d` near-black-on-ivory |
-| Accent | `#7c6bb0` lavender / `#8b5cf6` violet | `#a07d3a` muted gold |
-| Cards | `rgba(255,255,255,0.04)` glass | Solid card, hairline border |
-| Body bg | `radial-gradient` purple haze | None. Flat canvas. |
-| Fonts | Space Grotesk + Cormorant Garamond | Fraunces + Inter |
-| Body bg layer | `<video autoPlay loop>` looping video | Remove. Static. |
+| What | Current | Tighten to |
+|---|---|---|
+| Canvas | `#0a0a0c` near-black | KEEP (his brand) |
+| Type | `#f6f6f8` white-on-dark | KEEP |
+| Accent | `#7c6bb0` lavender / `#8b5cf6` violet | KEEP, use sparingly |
+| Cards | `rgba(255,255,255,0.04)` glass | Tighter glass: less blur, hairline gold-purple border on hover only |
+| Body bg | `radial-gradient` purple haze | Slow it down, single haze not double radial |
+| Fonts | Space Grotesk + Cormorant Garamond | KEEP Cormorant for wordmarks. Replace Space Grotesk with Inter for body, keep Cormorant as serif accent. |
+| Body bg layer | `<video autoPlay loop>` looping video | Replace looping video with a static low-poly PNG (the poster). Same visual, no shimmer. |
 
 **Why this matters:** A guest at a Mayfair hotel sees the lobby first. The portal IS the lobby. Dark + purple + glass + ambient video reads "crypto startup" not "private concierge."
 

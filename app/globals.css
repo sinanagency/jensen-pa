@@ -207,8 +207,8 @@ label.inline { display: inline-flex; text-transform: none; letter-spacing: norma
 .iconbtn { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--glass);
   border: 1px solid var(--line); color: var(--muted); transition: all 0.16s var(--ease); flex: none; }
 .iconbtn:hover { color: var(--ink); border-color: var(--line-2); }
-.brand { display: flex; align-items: center; gap: 9px; padding: 0 10px 0 6px; }
-.brand-name { font-family: var(--font-serif-stack); font-size: 18px; font-weight: 600; letter-spacing: 0.6px; }
+.brand { display: flex; align-items: center; gap: 13px; padding: 0 14px 0 6px; }
+.brand-name { font-family: var(--font-serif-stack); font-size: 19px; font-weight: 500; letter-spacing: 1.6px; text-transform: uppercase; }
 @media (max-width: 720px) { .brand-name { display: none; } }
 
 .navpills { display: flex; align-items: center; gap: 2px; }
