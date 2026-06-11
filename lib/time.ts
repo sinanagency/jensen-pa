@@ -1,13 +1,17 @@
 // The concierge ALWAYS reasons in Dubai time. Vercel runs UTC, so without this
 // the bot would think it is 4 hours behind and mislabel morning/night and "today".
+// 24-hour format only: en-AE returns "11:53 AM" and the LLM subtracts that as
+// 11:53 instead of crossing the AM/PM boundary (cost: a "38 min" reply when the
+// answer was 97 min, 2026-06-11). en-GB returns "11:53" and the tz is stated.
 export const TZ = "Asia/Dubai";
 
 export function dubaiNow(): string {
-  return new Date().toLocaleString("en-AE", { timeZone: TZ, dateStyle: "full", timeStyle: "short" });
+  const s = new Date().toLocaleString("en-GB", { timeZone: TZ, dateStyle: "full", timeStyle: "short" });
+  return `${s} (Asia/Dubai, 24-hour)`;
 }
 
 export function dubaiStamp(ts: number): string {
-  return new Date(ts).toLocaleString("en-AE", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" });
+  return new Date(ts).toLocaleString("en-GB", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" });
 }
 
 export function dubaiToday(): string {
