@@ -18,10 +18,15 @@
 export const PAUSE_MS_BETWEEN_BUBBLES = 2500;
 
 export const ONBOARDING_BUBBLES = [
-  // Bubble 1 — scale
+  // Bubble 0 — timeline anchor (the "since yesterday" frame)
   `Jensen.
 
-I've been reading the last two and a half years of you.
+Yesterday afternoon you sent over your archive. I went straight in.
+
+I'm ready.`,
+
+  // Bubble 1 — scale
+  `I've been reading the last two and a half years of you.
 
 1,180 conversations. 9,485 messages. 271,283 of your own words. Every contract you talked yourself through. Every email you wanted to land just right. Every late-night polish you couldn't quite leave alone. Every caption you rewrote until it felt like you.
 
