@@ -9,3 +9,8 @@ node_modules
 
 # Local doctrine + agent worktrees (kept untracked — see CLAUDE.md)
 .claude/worktrees/
+
+# OpenAI export raw — too large for git, lives locally
+specs/001-export-mining/raw/
+__pycache__/
+*.pyc

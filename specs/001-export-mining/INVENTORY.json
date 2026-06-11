@@ -1,0 +1,648 @@
+{
+  "shards": 12,
+  "shard_files": [
+    {
+      "file": "conversations-000.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-001.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-002.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-003.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-004.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-005.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-006.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-007.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-008.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-009.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-010.json",
+      "convos": 100
+    },
+    {
+      "file": "conversations-011.json",
+      "convos": 80
+    }
+  ],
+  "conversations_total": 1180,
+  "messages_total": 9485,
+  "by_role": {
+    "assistant": 4815,
+    "user": 4670
+  },
+  "user_word_count": 271283,
+  "assistant_word_count": 948992,
+  "earliest_create": 1705005028.612329,
+  "latest_update": 1780927394.39464,
+  "by_month": {
+    "2024-01": 8,
+    "2024-02": 5,
+    "2024-03": 7,
+    "2024-04": 19,
+    "2024-05": 10,
+    "2024-06": 8,
+    "2024-07": 14,
+    "2024-08": 16,
+    "2024-09": 30,
+    "2024-10": 38,
+    "2024-11": 11,
+    "2024-12": 25,
+    "2025-01": 44,
+    "2025-02": 25,
+    "2025-03": 34,
+    "2025-04": 50,
+    "2025-05": 66,
+    "2025-06": 38,
+    "2025-07": 34,
+    "2025-08": 28,
+    "2025-09": 78,
+    "2025-10": 67,
+    "2025-11": 47,
+    "2025-12": 79,
+    "2026-01": 89,
+    "2026-02": 58,
+    "2026-03": 67,
+    "2026-04": 61,
+    "2026-05": 94,
+    "2026-06": 30
+  },
+  "by_year": {
+    "2024": 191,
+    "2025": 590,
+    "2026": 399
+  },
+  "title_top": [
+    {
+      "title": "The Three Jewels",
+      "msgs": 177
+    },
+    {
+      "title": "Cloud Kitchen Business Model",
+      "msgs": 133
+    },
+    {
+      "title": "Community Event Access Codes",
+      "msgs": 116
+    },
+    {
+      "title": "Dubai Downtown Visitor Growth",
+      "msgs": 99
+    },
+    {
+      "title": "Holistic House Labels",
+      "msgs": 82
+    },
+    {
+      "title": "Staff Resignation and Hiring",
+      "msgs": 71
+    },
+    {
+      "title": "Contract Update for Sohum",
+      "msgs": 68
+    },
+    {
+      "title": "Permanent URL Shorteners",
+      "msgs": 66
+    },
+    {
+      "title": "Proofreading and Document Download",
+      "msgs": 65
+    },
+    {
+      "title": "Nocturnal Birds List",
+      "msgs": 57
+    },
+    {
+      "title": "Partnership Agreement Overview",
+      "msgs": 55
+    },
+    {
+      "title": "Contacting LinkedIn Employees",
+      "msgs": 50
+    },
+    {
+      "title": "After Glow Meditation Update",
+      "msgs": 46
+    },
+    {
+      "title": "Commission Agreement Update",
+      "msgs": 46
+    },
+    {
+      "title": "F7B Optimization Overview",
+      "msgs": 45
+    },
+    {
+      "title": "Ula Restaurant Strategy Overview",
+      "msgs": 42
+    },
+    {
+      "title": "Branding and Restaurant Collaboration",
+      "msgs": 42
+    },
+    {
+      "title": "F&B Consultant Benefit Models",
+      "msgs": 42
+    },
+    {
+      "title": "SCBD LinkedIn Group Welcome",
+      "msgs": 40
+    },
+    {
+      "title": "Commission Agreement Clarification",
+      "msgs": 40
+    },
+    {
+      "title": "Proofreading and Enhancement",
+      "msgs": 40
+    },
+    {
+      "title": "Dharma Duel Card Game",
+      "msgs": 40
+    },
+    {
+      "title": "Taichi class package sales",
+      "msgs": 40
+    },
+    {
+      "title": "4 Lineages of Mahayana",
+      "msgs": 39
+    },
+    {
+      "title": "Dress Code Message",
+      "msgs": 38
+    },
+    {
+      "title": "Document Update Request",
+      "msgs": 38
+    },
+    {
+      "title": "RGM Candidate Sourcing Update",
+      "msgs": 37
+    },
+    {
+      "title": "SCBD Weekly Meetings Info",
+      "msgs": 37
+    },
+    {
+      "title": "Benchmarking Footfall and Retention",
+      "msgs": 37
+    },
+    {
+      "title": "Template for Guest Responses",
+      "msgs": 36
+    },
+    {
+      "title": "Laguna Brunch Revamp Dubai",
+      "msgs": 36
+    },
+    {
+      "title": "Sohum commission SOP",
+      "msgs": 36
+    },
+    {
+      "title": "Selling Price Calculation",
+      "msgs": 35
+    },
+    {
+      "title": "Upaya Event Invitation Draft",
+      "msgs": 34
+    },
+    {
+      "title": "Premium Beachfront Partnership",
+      "msgs": 34
+    },
+    {
+      "title": "RGB Color Conversion",
+      "msgs": 32
+    },
+    {
+      "title": "Currency Conversion Request",
+      "msgs": 32
+    },
+    {
+      "title": "Greeting Interaction",
+      "msgs": 32
+    },
+    {
+      "title": "Learn French Flyer Design",
+      "msgs": 30
+    },
+    {
+      "title": "A Hospitable Journey",
+      "msgs": 30
+    },
+    {
+      "title": "NutRitional Ration Play",
+      "msgs": 29
+    },
+    {
+      "title": "Sober Parties Future",
+      "msgs": 29
+    },
+    {
+      "title": "Retainer Fee Agreement Options",
+      "msgs": 28
+    },
+    {
+      "title": "Instagram Poll Suggestion",
+      "msgs": 28
+    },
+    {
+      "title": "TWICH Entertainment Consultancy Agreement",
+      "msgs": 28
+    },
+    {
+      "title": "Gratitude for Interview",
+      "msgs": 28
+    },
+    {
+      "title": "F&B Consulting Agreement Duration",
+      "msgs": 27
+    },
+    {
+      "title": "Meeting Time Conversion",
+      "msgs": 27
+    },
+    {
+      "title": "Birds Dubai Activation Ideas",
+      "msgs": 26
+    },
+    {
+      "title": "Upaya verbiage edit",
+      "msgs": 26
+    }
+  ],
+  "title_token_freq": [
+    [
+      "upaya",
+      109
+    ],
+    [
+      "request",
+      91
+    ],
+    [
+      "proofread",
+      81
+    ],
+    [
+      "proofreading",
+      75
+    ],
+    [
+      "event",
+      71
+    ],
+    [
+      "message",
+      60
+    ],
+    [
+      "email",
+      54
+    ],
+    [
+      "update",
+      51
+    ],
+    [
+      "agreement",
+      41
+    ],
+    [
+      "draft",
+      34
+    ],
+    [
+      "refinement",
+      34
+    ],
+    [
+      "conversion",
+      31
+    ],
+    [
+      "summary",
+      29
+    ],
+    [
+      "collaboration",
+      29
+    ],
+    [
+      "invitation",
+      29
+    ],
+    [
+      "aed",
+      28
+    ],
+    [
+      "caption",
+      26
+    ],
+    [
+      "dubai",
+      25
+    ],
+    [
+      "festival",
+      23
+    ],
+    [
+      "meeting",
+      21
+    ],
+    [
+      "contract",
+      19
+    ],
+    [
+      "overview",
+      19
+    ],
+    [
+      "revision",
+      18
+    ],
+    [
+      "announcement",
+      18
+    ],
+    [
+      "text",
+      17
+    ],
+    [
+      "scbd",
+      16
+    ],
+    [
+      "rewrite",
+      16
+    ],
+    [
+      "verbiage",
+      16
+    ],
+    [
+      "usd",
+      14
+    ],
+    [
+      "new",
+      14
+    ],
+    [
+      "instagram",
+      14
+    ],
+    [
+      "restaurant",
+      13
+    ],
+    [
+      "proposal",
+      13
+    ],
+    [
+      "partnership",
+      13
+    ],
+    [
+      "options",
+      13
+    ],
+    [
+      "payment",
+      12
+    ],
+    [
+      "nda",
+      12
+    ],
+    [
+      "whatsapp",
+      12
+    ],
+    [
+      "panther",
+      12
+    ],
+    [
+      "details",
+      11
+    ],
+    [
+      "inquiry",
+      11
+    ],
+    [
+      "review",
+      11
+    ],
+    [
+      "ideas",
+      11
+    ],
+    [
+      "assistance",
+      11
+    ],
+    [
+      "follow-up",
+      11
+    ],
+    [
+      "reel",
+      11
+    ],
+    [
+      "creation",
+      11
+    ],
+    [
+      "confirmation",
+      10
+    ],
+    [
+      "template",
+      10
+    ],
+    [
+      "party",
+      10
+    ],
+    [
+      "design",
+      10
+    ],
+    [
+      "time",
+      10
+    ],
+    [
+      "year",
+      10
+    ],
+    [
+      "uae",
+      10
+    ],
+    [
+      "carousel",
+      10
+    ],
+    [
+      "wellness",
+      10
+    ],
+    [
+      "ticket",
+      10
+    ],
+    [
+      "prelude",
+      10
+    ],
+    [
+      "chat",
+      10
+    ],
+    [
+      "offer",
+      9
+    ],
+    [
+      "club",
+      9
+    ],
+    [
+      "concept",
+      9
+    ],
+    [
+      "application",
+      9
+    ],
+    [
+      "explanation",
+      9
+    ],
+    [
+      "suggestions",
+      9
+    ],
+    [
+      "business",
+      9
+    ],
+    [
+      "free",
+      9
+    ],
+    [
+      "consultancy",
+      9
+    ],
+    [
+      "session",
+      9
+    ],
+    [
+      "cigar",
+      9
+    ],
+    [
+      "sober",
+      9
+    ],
+    [
+      "refined",
+      9
+    ],
+    [
+      "wedding",
+      9
+    ],
+    [
+      "conversation",
+      8
+    ],
+    [
+      "clarification",
+      8
+    ],
+    [
+      "promotion",
+      8
+    ],
+    [
+      "tips",
+      8
+    ],
+    [
+      "job",
+      8
+    ],
+    [
+      "sohum",
+      8
+    ],
+    [
+      "community",
+      8
+    ]
+  ],
+  "convos_with_attachments": 56,
+  "convos_using_voice": 0,
+  "convos_using_canvas": 11,
+  "convos_using_dalle": 0,
+  "models_seen": {
+    "gpt-4o": 2422,
+    "text-davinci-002-render-sha": 97,
+    "gpt-4o-mini": 28,
+    "o3-mini-high": 12,
+    "gpt-5": 514,
+    "gpt-5-thinking": 30,
+    "gpt-5-1": 162,
+    "gpt-5-1-thinking": 9,
+    "gpt-5-2": 594,
+    "gpt-5-2-thinking": 13,
+    "gpt-5-3": 459,
+    "gpt-5-4-thinking": 12,
+    "gpt-5-5-thinking": 7,
+    "gpt-5-5": 440
+  },
+  "avg_msgs_per_convo": 8.0,
+  "median_msgs_per_convo": 4,
+  "earliest_create_iso": "2024-01-11T20:30:28.612329+00:00",
+  "latest_update_iso": "2026-06-08T14:03:14.394640+00:00"
+}
