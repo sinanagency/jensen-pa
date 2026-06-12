@@ -15,3 +15,9 @@ specs/001-export-mining/raw/
 __pycache__/
 *.pyc
 supabase/.temp/
+
+# Vercel CLI env dumps - NEVER commit (added 2026-06-12 after leak)
+.env.vercel*
+.env.production
+*.env
+
