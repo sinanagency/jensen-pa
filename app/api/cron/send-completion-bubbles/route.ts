@@ -35,8 +35,13 @@ export async function POST(req: NextRequest) {
   const url = new URL(req.url);
   const dry = url.searchParams.get("dry") === "1";
   const force = url.searchParams.get("force") === "1";
+  const devmode = url.searchParams.get("devmode") === "1";
 
-  const to = process.env.OWNER_WHATSAPP || "";
+  // OWNER_WHATSAPP is "+jensen,+taona" for the inbound owner gate. Meta's
+  // outbound API needs a SINGLE E.164. Take the first entry (Jensen by
+  // convention, see whoIs() defaults), then strip "+".
+  const rawOwners = process.env.OWNER_WHATSAPP || "";
+  const to = rawOwners.split(",")[0]?.trim().replace(/^\+/, "") || "";
   if (!to) {
     return NextResponse.json({ ok: false, error: "OWNER_WHATSAPP not set" }, { status: 500 });
   }
@@ -58,6 +63,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       dry: true,
       to,
+      devmode,
       bubble_count: COMPLETION_BUBBLES.length,
       pause_ms: COMPLETION_PAUSE_MS_BETWEEN_BUBBLES,
       previews: COMPLETION_BUBBLES.map((b) => b.split("\n")[0].slice(0, 80)),
@@ -68,7 +74,9 @@ export async function POST(req: NextRequest) {
   const results: { idx: number; ok: boolean }[] = [];
   for (let i = 0; i < COMPLETION_BUBBLES.length; i++) {
     const body = COMPLETION_BUBBLES[i];
-    const r = await sendTextAndLog(to, body, { force: true, party: "jensen" });
+    // Law 10: devmode reroutes to devPhone() + skips chat_messages so Taona can
+    // preview the exact rendered bubble before firing the real one to Jensen.
+    const r = await sendTextAndLog(to, body, { force: true, party: "jensen", dev: devmode });
     results.push({ idx: i, ok: r.ok });
     if (i < COMPLETION_BUBBLES.length - 1) {
       await sleep(COMPLETION_PAUSE_MS_BETWEEN_BUBBLES);
@@ -76,16 +84,19 @@ export async function POST(req: NextRequest) {
   }
 
   const allOk = results.every((r) => r.ok);
-  if (allOk) {
+  // Only flip the idempotency flag on REAL sends. Devmode previews should be
+  // re-runnable without touching prod state.
+  if (allOk && !devmode) {
     await kvSet(FLAG_KEY, startedAt);
   }
 
   return NextResponse.json({
     ok: allOk,
     to,
+    devmode,
     results,
     elapsed_ms: Date.now() - startedAt,
-    flag_set: allOk,
+    flag_set: allOk && !devmode,
   });
 }
 
