@@ -30,6 +30,40 @@ function siteUrl(): string {
   return "https://jensen.zanii.agency";
 }
 
+// Detect "make the bot leave the meeting" intent in a WhatsApp inbound. We are
+// generous about phrasing (Jensen will type things like "yo get out", "stop
+// it", "kill the bot", "leave", "cancel") and conservative about false
+// positives: the verb must be the dominant intent of the message, NOT a
+// phrase inside a longer thought ("stop me if I am wrong" should not fire).
+// Returns true only when the message is essentially the cancel verb on its
+// own (with optional bot-direction prefix like "digital jensen").
+const CANCEL_RE = /^(?:(?:digital\s+jensen\b)|(?:hey\s+(?:digital\s+jensen|bot|jensen))\b)?\s*[,.:]?\s*(stop(?:\s+it)?|leave(?:\s+(?:the\s+)?(?:meeting|call|room))?|cancel|abort|get\s+out|kill\s+(?:it|the\s+bot)|quit|exit)\s*[.!]?\s*$/i;
+
+export function isCancelIntent(text: string): boolean {
+  const t = String(text || "").trim();
+  if (!t || t.length > 80) return false; // long messages are not cancels
+  return CANCEL_RE.test(t);
+}
+
+// Fire the cancel on the meeting-bot. Returns { ok, title?, error? }.
+export async function cancelActiveBot(): Promise<{ ok: boolean; title?: string; botId?: string; error?: string }> {
+  const base = (process.env.MEETING_BOT_URL || "").replace(/\/$/, "");
+  const key = process.env.MEETING_BOT_API_KEY;
+  if (!base || !key) return { ok: false, error: "MEETING_BOT_URL or MEETING_BOT_API_KEY not configured" };
+  try {
+    const r = await fetch(`${base}/api/dispatch/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key },
+      body: JSON.stringify({}),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, error: body?.error || `${r.status} ${r.statusText}` };
+    return { ok: true, title: body?.title, botId: body?.botId };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 // Fire a dispatch at the meeting-bot. If scheduledAt is omitted, the bot joins
 // immediately. Returns { ok, mode?, error? }.
 export async function dispatchMeetingBot(opts: {

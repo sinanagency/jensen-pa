@@ -10,7 +10,7 @@ import { readImage } from "@/lib/anthropic";
 import { extractTextFromBuffer } from "@/lib/extract-text";
 import { embed, chunk } from "@/lib/openai";
 import { transcribeAudio } from "@/lib/transcribe";
-import { extractMeetingLink, dispatchMeetingBot } from "@/lib/digital-u";
+import { extractMeetingLink, dispatchMeetingBot, isCancelIntent, cancelActiveBot } from "@/lib/digital-u";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -225,6 +225,25 @@ export async function POST(req: NextRequest) {
     // ---- plain text: full concierge ----
     const text = (msg.text?.body || "").trim();
     if (!text) return NextResponse.json({ ok: true });
+
+    // DETERMINISTIC CANCEL CHOKEPOINT. "stop" / "leave" / "cancel" / "get out"
+    // when sent alone (or with the "digital jensen" prefix) kills the active
+    // meeting-bot. Whatever was captured before the cancel still flows back
+    // to /api/ingest, so Jensen gets partial notes + tasks for what the bot
+    // caught. Same pattern as the link-detection below: deterministic verbs
+    // deserve deterministic code (KT #127).
+    if (isCancelIntent(text)) {
+      const inboundParty = sender.role === "admin" ? "taona" : "jensen";
+      await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
+      const r = await cancelActiveBot();
+      const ack = r.ok
+        ? `Stopping. I am leaving ${r.title || "the meeting"} now. Anything I caught up to this point will land here with the notes and tasks in a moment.`
+        : r.error === "no active bot to cancel"
+          ? `There is no notetaker in a meeting right now, so nothing to stop. If you meant something else, send it again with a couple more words.`
+          : `I tried to stop the notetaker and the service returned: ${r.error}. Try again or check on it directly.`;
+      await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
+      return NextResponse.json({ ok: true });
+    }
 
     // DETERMINISTIC MEETING-LINK CHOKEPOINT. If the inbound contains a Meet,
     // Zoom or Teams link, fire the meeting-bot dispatch immediately. We do not
