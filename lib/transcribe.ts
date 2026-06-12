@@ -1,26 +1,19 @@
-// Voice-note transcription via OpenAI Whisper. WhatsApp voice notes arrive as
-// OGG/Opus; Whisper handles that natively. Server-only.
+// Voice-note transcription. Thin Jensen adapter over @sinanagency/intake's
+// transcribeAudio primitive. WhatsApp voice notes arrive as OGG/Opus; Whisper
+// handles that natively. Server-only.
+//
+// Signature preserved (Buffer in, Promise<string | null> out — null on missing
+// key or empty result, so the WhatsApp handler can degrade gracefully).
+// Intake's primitive takes base64 + opts and returns "" on failure, so we
+// convert at the boundary and re-emit null for the legacy null contract.
+
+import { transcribeAudio as intakeTranscribeAudio } from "./intake/index.js";
 
 export async function transcribeAudio(buf: Buffer, mime: string): Promise<string | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
-  const form = new FormData();
-  const blob = new Blob([new Uint8Array(buf)], { type: mime || "audio/ogg" });
-  const filename = mime?.includes("ogg") ? "audio.ogg"
-    : mime?.includes("mp3") || mime?.includes("mpeg") ? "audio.mp3"
-    : mime?.includes("wav") ? "audio.wav"
-    : mime?.includes("m4a") || mime?.includes("mp4") ? "audio.m4a"
-    : "audio.bin";
-  form.append("file", blob, filename);
-  form.append("model", "whisper-1");
-  // No language pin — Jensen may speak English, French (Mauritian background),
-  // or a mix. Whisper auto-detects and that's safer than forcing en.
-  const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
-    body: form,
-  });
-  if (!r.ok) return null;
-  const j: any = await r.json().catch(() => null);
-  return (j?.text || "").trim() || null;
+  const base64 = buf.toString("base64");
+  const out = await intakeTranscribeAudio(base64, mime || "audio/ogg", { openaiKey: key });
+  const trimmed = (out || "").trim();
+  return trimmed || null;
 }
