@@ -1,265 +1,337 @@
 "use client";
 
-import { useState } from "react";
+// Apple Calendar grade month view, skinned in La Rencontre. Monday-first 6-week
+// matrix, soft event chips per day, today ring, click a day for the full list
+// + quick compose. Single source: db.events.
+import { useMemo, useState } from "react";
 import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
 import { CalEvent, uid } from "@/lib/store";
-import { Plus, Trash2, CalendarDays, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ChevronLeft, ChevronRight, Plus, Trash2, Clock, X, CalendarDays,
+} from "lucide-react";
 
-type View = "month" | "week" | "agenda";
+const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const iso = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function iso(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function parse(s: string) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
+
+function monthMatrix(year: number, month: number): Date[][] {
+  const lead = (new Date(year, month, 1).getDay() + 6) % 7;
+  const start = new Date(year, month, 1 - lead, 12, 0, 0);
+  const weeks: Date[][] = [];
+  for (let w = 0; w < 6; w++) {
+    const row: Date[] = [];
+    for (let d = 0; d < 7; d++) {
+      const cur = new Date(start);
+      cur.setDate(start.getDate() + w * 7 + d);
+      row.push(cur);
+    }
+    weeks.push(row);
+  }
+  return weeks;
+}
+
+function formatTime(t?: string) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+}
 
 export default function CalendarPage() {
   const { db, mutate } = useDB();
-
-  const [view, setView] = useState<View>("month");
-  const [cursor, setCursor] = useState<Date>(new Date());
-  const [selected, setSelected] = useState<string>("");
-
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [entityId, setEntityId] = useState("");
-  const [note, setNote] = useState("");
+  const [cursor, setCursor] = useState(new Date());
+  const [view, setView] = useState<"month" | "agenda">("month");
+  const [dayOpen, setDayOpen] = useState<string | null>(null);
+  const [composeFor, setComposeFor] = useState<string | null>(null);
+  const [compTitle, setCompTitle] = useState("");
+  const [compTime, setCompTime] = useState("");
+  const [compNote, setCompNote] = useState("");
 
   if (!db) return <Shell><div className="muted">Loading…</div></Shell>;
 
   const today = iso(new Date());
-  const entityMap = new Map(db.entities.map((e) => [e.id, e.name]));
+  const month = cursor.getMonth();
+  const year = cursor.getFullYear();
+  const matrix = useMemo(() => monthMatrix(year, month), [year, month]);
 
-  const byDate = new Map<string, CalEvent[]>();
-  for (const ev of db.events) {
-    const arr = byDate.get(ev.date) || [];
-    arr.push(ev);
-    byDate.set(ev.date, arr);
-  }
-  const dayEvents = (d: string) =>
-    (byDate.get(d) || []).slice().sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
-
-  function handleAdd(target?: string) {
-    const t = title.trim();
-    const d = target || date;
-    if (!t || !d) return;
-    mutate((db2) => {
-      db2.events.push({ id: uid(), title: t, date: d, time: time || undefined, note: note.trim() || undefined, entityId: entityId || undefined, createdAt: Date.now() });
-    });
-    setTitle(""); setDate(""); setTime(""); setEntityId(""); setNote("");
-  }
-  const handleDelete = (id: string) => mutate((db2) => { db2.events = db2.events.filter((e) => e.id !== id); });
-
-  // ---- month matrix (6 weeks, Sunday start) ----
-  const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-  const gridStart = new Date(first);
-  gridStart.setDate(1 - first.getDay());
-  const weeks: Date[][] = Array.from({ length: 6 }, (_, w) =>
-    Array.from({ length: 7 }, (_, d) => {
-      const cell = new Date(gridStart);
-      cell.setDate(gridStart.getDate() + w * 7 + d);
-      return cell;
-    })
-  );
-
-  // ---- current week (Sunday start) ----
-  const wkStart = new Date(cursor);
-  wkStart.setDate(cursor.getDate() - cursor.getDay());
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(wkStart);
-    d.setDate(wkStart.getDate() + i);
-    return d;
-  });
-
-  const shift = (n: number) => {
-    const d = new Date(cursor);
-    if (view === "month") d.setMonth(d.getMonth() + n);
-    else d.setDate(d.getDate() + n * 7);
-    setCursor(d);
-  };
-  const label = view === "week"
-    ? `${weekDays[0].toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${weekDays[6].toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
-    : cursor.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-
-  function eventRow(ev: CalEvent) {
-    const en = ev.entityId ? entityMap.get(ev.entityId) : undefined;
-    return (
-      <div key={ev.id} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 0", borderTop: "1px solid var(--line)" }}>
-        <div style={{ paddingTop: 2, color: "var(--muted)", flexShrink: 0 }}><Clock size={14} /></div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700, fontSize: 14.5, color: "var(--ink)", lineHeight: 1.4 }}>{ev.title}</span>
-            <span className="pill" style={{ fontSize: 11 }}>{ev.time || "All day"}</span>
-            {en && <span className="pill accent" style={{ fontSize: 11 }}>{en}</span>}
-          </div>
-          {ev.note && <div className="muted" style={{ fontSize: 12.5, marginTop: 5, lineHeight: 1.5 }}>{ev.note}</div>}
-        </div>
-        <button className="btn ghost sm" onClick={() => handleDelete(ev.id)} style={{ padding: "0 8px", height: 28, flexShrink: 0, color: "var(--faint)" }} title="Delete event"><Trash2 size={13} /></button>
-      </div>
-    );
-  }
-
-  // agenda groups
-  const upcoming = db.events.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""));
-  const past = db.events.filter((e) => e.date < today).sort((a, b) => b.date.localeCompare(a.date));
-  const groupBy = (evs: CalEvent[]) => {
-    const m = new Map<string, CalEvent[]>();
-    for (const e of evs) { const a = m.get(e.date) || []; a.push(e); m.set(e.date, a); }
+  const byDate = useMemo(() => {
+    const m: Record<string, CalEvent[]> = {};
+    for (const e of db.events) (m[e.date] ||= []).push(e);
+    for (const k of Object.keys(m)) m[k].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
     return m;
-  };
-  const fmtHead = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString("en-GB", { weekday: "long", month: "long", day: "numeric" }); };
-  const renderGroup = (s: string, evs: CalEvent[]) => (
-    <div key={s} style={{ marginBottom: 24 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-        <CalendarDays size={14} style={{ color: "var(--purple)", flexShrink: 0 }} />
-        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: s === today ? "var(--purple)" : "var(--ink-2)", fontFamily: "var(--font-display)" }}>
-          {fmtHead(s)}{s === today && <span className="pill accent" style={{ marginLeft: 8, fontSize: 10 }}>Today</span>}
-        </span>
-      </div>
-      <div className="card" style={{ padding: "0 20px" }}>{evs.map(eventRow)}</div>
-    </div>
-  );
+  }, [db.events]);
+
+  const monthEvents = useMemo(() => {
+    return db.events
+      .filter((e) => {
+        const d = parse(e.date);
+        return d.getMonth() === month && d.getFullYear() === year;
+      })
+      .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+  }, [db.events, month, year]);
+
+  function prevMonth() { const d = new Date(cursor); d.setMonth(d.getMonth() - 1); setCursor(d); }
+  function nextMonth() { const d = new Date(cursor); d.setMonth(d.getMonth() + 1); setCursor(d); }
+  function goToday()   { setCursor(new Date()); }
+
+  function openCompose(dateStr: string) {
+    setComposeFor(dateStr); setCompTitle(""); setCompTime(""); setCompNote("");
+  }
+  function saveCompose() {
+    const t = compTitle.trim();
+    if (!t || !composeFor) return;
+    mutate((d) => {
+      d.events.push({
+        id: uid(), title: t, date: composeFor, time: compTime.trim() || undefined,
+        note: compNote.trim() || undefined, createdAt: Date.now(),
+      } as CalEvent);
+    });
+    setComposeFor(null);
+  }
+  function deleteEvent(id: string) {
+    mutate((d) => { d.events = d.events.filter((e) => e.id !== id); });
+  }
+
+  const openDay = dayOpen ? parse(dayOpen) : null;
+  const openDayEvents = dayOpen ? (byDate[dayOpen] || []) : [];
 
   return (
     <Shell>
-      <div className="page-hero fade-up">
-        <div className="eyebrow">Calendar</div>
-        <h1>What is coming up.</h1>
-      </div>
-
-      {/* Add event */}
-      <div className="card fade-up" style={{ padding: 20, marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <input className="input" style={{ flex: "2 1 180px", minWidth: 140 }} placeholder="Event title…" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }} />
-        <input className="input" type="date" style={{ flex: "1 1 140px", minWidth: 130 }} value={date} onChange={(e) => setDate(e.target.value)} />
-        <input className="input" type="time" style={{ flex: "0 1 120px", minWidth: 110 }} value={time} onChange={(e) => setTime(e.target.value)} />
-        <select className="input" style={{ flex: "1 1 160px", minWidth: 130 }} value={entityId} onChange={(e) => setEntityId(e.target.value)}>
-          <option value="">No entity</option>
-          {db.entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-        </select>
-        <input className="input" style={{ flex: "2 1 180px", minWidth: 140 }} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-        <button className="btn purple sm" onClick={() => handleAdd()} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}><Plus size={14} /> Add</button>
-      </div>
-
-      {/* Controls */}
-      <div className="cal-bar fade-up">
-        <div className="cal-seg">
-          {(["month", "week", "agenda"] as View[]).map((v) => (
-            <button key={v} className={`cal-segbtn ${view === v ? "on" : ""}`} onClick={() => setView(v)}>{v[0].toUpperCase() + v.slice(1)}</button>
-          ))}
-        </div>
-        {view !== "agenda" && (
+      <div className="cal-page">
+        <header className="cal-head">
+          <div>
+            <div className="eyebrow">Calendar</div>
+            <h1 className="month-name">{MONTHS[month]} <span className="year">{year}</span></h1>
+          </div>
           <div className="cal-nav">
-            <button className="iconbtn" onClick={() => shift(-1)} aria-label="Previous"><ChevronLeft size={16} /></button>
-            <button className="btn ghost sm" onClick={() => setCursor(new Date())}>Today</button>
-            <button className="iconbtn" onClick={() => shift(1)} aria-label="Next"><ChevronRight size={16} /></button>
-            <span className="cal-label">{label}</span>
+            <button className="cal-btn" onClick={prevMonth} aria-label="Previous month"><ChevronLeft size={16} /></button>
+            <button className="cal-btn today-btn" onClick={goToday}>Today</button>
+            <button className="cal-btn" onClick={nextMonth} aria-label="Next month"><ChevronRight size={16} /></button>
+            <div className="cal-view">
+              <button className={`v-pill ${view === "month" ? "on" : ""}`} onClick={() => setView("month")}>Month</button>
+              <button className={`v-pill ${view === "agenda" ? "on" : ""}`} onClick={() => setView("agenda")}>Agenda</button>
+            </div>
+            <button className="cal-btn add-btn" onClick={() => openCompose(today)}><Plus size={14} /> Add</button>
+          </div>
+        </header>
+
+        {view === "month" ? (
+          <div className="cal-grid">
+            <div className="cal-row cal-row-head">
+              {WD.map((d) => <div key={d} className="cal-dow">{d}</div>)}
+            </div>
+            {matrix.map((week, wi) => (
+              <div key={wi} className="cal-row">
+                {week.map((d) => {
+                  const k = iso(d);
+                  const isOther = d.getMonth() !== month;
+                  const isToday = k === today;
+                  const events = byDate[k] || [];
+                  return (
+                    <button
+                      key={k}
+                      className={`cal-cell ${isOther ? "other" : ""} ${isToday ? "today" : ""}`}
+                      onClick={() => setDayOpen(k)}
+                    >
+                      <div className="cell-head">
+                        <span className={`cell-day ${isToday ? "today-ring" : ""}`}>{d.getDate()}</span>
+                      </div>
+                      <div className="cell-events">
+                        {events.slice(0, 3).map((e) => (
+                          <div key={e.id} className="ev-chip" title={`${e.title}${e.time ? " · " + formatTime(e.time) : ""}`}>
+                            {e.time && <span className="ev-time">{formatTime(e.time)}</span>}
+                            <span className="ev-title">{e.title}</span>
+                          </div>
+                        ))}
+                        {events.length > 3 && <div className="ev-more">+{events.length - 3} more</div>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="agenda">
+            {monthEvents.length === 0 ? (
+              <div className="empty">
+                <CalendarDays size={28} />
+                <div>Nothing on the calendar this month.</div>
+                <button className="cal-btn add-btn" onClick={() => openCompose(today)}><Plus size={14} /> Add an event</button>
+              </div>
+            ) : (
+              monthEvents.map((e) => (
+                <div key={e.id} className="ag-row" onClick={() => setDayOpen(e.date)}>
+                  <div className="ag-date">
+                    <div className="ag-day">{parse(e.date).getDate()}</div>
+                    <div className="ag-mon">{MONTHS[parse(e.date).getMonth()].slice(0, 3)}</div>
+                  </div>
+                  <div className="ag-body">
+                    <div className="ag-title">{e.title}</div>
+                    {e.time && <div className="ag-time"><Clock size={12} /> {formatTime(e.time)}</div>}
+                    {e.note && <div className="ag-note">{e.note}</div>}
+                  </div>
+                  <button className="ag-del" onClick={(ev) => { ev.stopPropagation(); deleteEvent(e.id); }} aria-label="Delete"><Trash2 size={14} /></button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {dayOpen && (
+          <div className="modal-bg" onClick={() => setDayOpen(null)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-head">
+                <div>
+                  <div className="modal-eyebrow">{openDay && WD[(openDay.getDay() + 6) % 7]}</div>
+                  <h2 className="modal-title">{openDay && `${MONTHS[openDay.getMonth()]} ${openDay.getDate()}`}</h2>
+                </div>
+                <button className="modal-x" onClick={() => setDayOpen(null)} aria-label="Close"><X size={16} /></button>
+              </div>
+              <div className="modal-body">
+                {openDayEvents.length === 0 ? (
+                  <div className="day-empty">Nothing scheduled.</div>
+                ) : (
+                  openDayEvents.map((e) => (
+                    <div key={e.id} className="day-ev">
+                      <div className="day-ev-main">
+                        {e.time && <div className="day-ev-time">{formatTime(e.time)}</div>}
+                        <div className="day-ev-title">{e.title}</div>
+                        {e.note && <div className="day-ev-note">{e.note}</div>}
+                      </div>
+                      <button className="day-ev-del" onClick={() => deleteEvent(e.id)} aria-label="Delete"><Trash2 size={14} /></button>
+                    </div>
+                  ))
+                )}
+                <button className="add-day-btn" onClick={() => { setDayOpen(null); openCompose(iso(openDay!)); }}>
+                  <Plus size={14} /> Add to this day
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {composeFor && (
+          <div className="modal-bg" onClick={() => setComposeFor(null)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-head">
+                <div>
+                  <div className="modal-eyebrow">New event</div>
+                  <h2 className="modal-title">{(() => { const d = parse(composeFor); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; })()}</h2>
+                </div>
+                <button className="modal-x" onClick={() => setComposeFor(null)} aria-label="Close"><X size={16} /></button>
+              </div>
+              <div className="modal-body">
+                <label className="lbl">Title</label>
+                <input className="inp" placeholder="What is it?" value={compTitle} onChange={(e) => setCompTitle(e.target.value)} autoFocus />
+                <label className="lbl">Time (optional)</label>
+                <input className="inp" type="time" value={compTime} onChange={(e) => setCompTime(e.target.value)} />
+                <label className="lbl">Note (optional)</label>
+                <textarea className="inp" rows={3} placeholder="Anything else?" value={compNote} onChange={(e) => setCompNote(e.target.value)} />
+                <button className="save-btn" onClick={saveCompose} disabled={!compTitle.trim()}>Save</button>
+              </div>
+            </div>
           </div>
         )}
       </div>
 
-      {/* MONTH */}
-      {view === "month" && (
-        <div className="fade-up">
-          <div className="cal-dow">{DOW.map((d) => <div key={d}>{d}</div>)}</div>
-          <div className="cal-grid card" style={{ padding: 0, overflow: "hidden" }}>
-            {weeks.flat().map((cell, i) => {
-              const key = iso(cell);
-              const out = cell.getMonth() !== cursor.getMonth();
-              const evs = dayEvents(key);
-              return (
-                <button key={i} className={`cal-cell ${out ? "out" : ""} ${key === today ? "today" : ""} ${key === selected ? "sel" : ""}`} onClick={() => { setSelected(key); setDate(key); }}>
-                  <span className="cal-daynum">{cell.getDate()}</span>
-                  <span className="cal-chips">
-                    {evs.slice(0, 3).map((ev) => <span key={ev.id} className="cal-chip">{ev.time ? ev.time + " " : ""}{ev.title}</span>)}
-                    {evs.length > 3 && <span className="cal-more">+{evs.length - 3} more</span>}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          {selected && (
-            <div style={{ marginTop: 18 }}>
-              <div className="eyebrow" style={{ marginBottom: 8 }}>{fmtHead(selected)}</div>
-              <div className="card" style={{ padding: "0 20px" }}>
-                {dayEvents(selected).length ? dayEvents(selected).map(eventRow) : <div className="muted" style={{ padding: "14px 0" }}>Nothing on this day. Add an event above (date is filled in).</div>}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* WEEK */}
-      {view === "week" && (
-        <div className="cal-week fade-up">
-          {weekDays.map((d) => {
-            const key = iso(d);
-            const evs = dayEvents(key);
-            return (
-              <div key={key} className={`card cal-wkcol ${key === today ? "today" : ""}`} style={{ padding: 0 }}>
-                <div className="cal-wkhead" onClick={() => setDate(key)}>
-                  <div className="cal-wkdow">{DOW[d.getDay()]}</div>
-                  <div className="cal-wknum">{d.getDate()}</div>
-                </div>
-                <div className="cal-wkbody">
-                  {evs.length ? evs.map((ev) => (
-                    <div key={ev.id} className="cal-wkev" title={ev.note || ""}>
-                      <span className="cal-wktime">{ev.time || "all day"}</span>
-                      <span className="cal-wktitle">{ev.title}</span>
-                    </div>
-                  )) : <div className="faint" style={{ fontSize: 11.5, padding: "8px 0" }}>—</div>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* AGENDA */}
-      {view === "agenda" && (
-        <div className="fade-up">
-          {upcoming.length === 0 && past.length === 0 && <div className="muted" style={{ padding: "32px 0", textAlign: "center", fontSize: 14 }}>Nothing scheduled. Add your first event above.</div>}
-          {Array.from(groupBy(upcoming).entries()).map(([s, evs]) => renderGroup(s, evs))}
-          {past.length > 0 && (
-            <div style={{ marginTop: 36, opacity: 0.45 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 16 }}>Earlier</div>
-              {Array.from(groupBy(past).entries()).map(([s, evs]) => renderGroup(s, evs))}
-            </div>
-          )}
-        </div>
-      )}
-
       <style>{`
-        .cal-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap}
-        .cal-seg{display:inline-flex;background:var(--glass);border:1px solid var(--line);border-radius:var(--radius-pill);padding:3px}
-        .cal-segbtn{border:0;background:none;color:var(--ink-2);font:inherit;font-size:13px;padding:6px 16px;border-radius:var(--radius-pill);cursor:pointer}
-        .cal-segbtn.on{background:rgba(124,107,176,0.26);color:#e7e1f7;box-shadow:inset 0 0 0 1px rgba(124,107,176,0.5)}
-        .cal-nav{display:flex;align-items:center;gap:8px}
-        .cal-label{font-family:var(--font-serif-stack);font-size:18px;margin-left:6px}
-        .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:0;padding:0 2px 8px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-        .cal-dow div{text-align:center}
-        .cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
-        .cal-cell{min-height:104px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:none;text-align:left;padding:7px 7px 9px;display:flex;flex-direction:column;gap:5px;cursor:pointer;font:inherit;color:inherit}
-        .cal-cell:nth-child(7n){border-right:0}
-        .cal-cell:hover{background:var(--purple-soft)}
-        .cal-cell.out{opacity:.4}
-        .cal-cell.sel{background:var(--purple-soft);box-shadow:inset 0 0 0 1.5px var(--purple-line)}
-        .cal-daynum{font-size:12.5px;font-weight:600;width:24px;height:24px;display:grid;place-items:center;border-radius:50%}
-        .cal-cell.today .cal-daynum{background:var(--purple);color:#fff}
-        .cal-chips{display:flex;flex-direction:column;gap:3px;min-width:0}
-        .cal-chip{font-size:10.5px;background:rgba(124,107,176,0.16);color:#5b4b8a;border-radius:5px;padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .cal-more{font-size:10px;color:var(--muted)}
-        .cal-week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
-        .cal-wkcol{overflow:hidden}
-        .cal-wkcol.today{box-shadow:inset 0 0 0 1.5px var(--purple-line)}
-        .cal-wkhead{padding:10px;text-align:center;border-bottom:1px solid var(--line);cursor:pointer}
-        .cal-wkdow{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-        .cal-wknum{font-family:var(--font-display);font-size:18px;margin-top:2px}
-        .cal-wkcol.today .cal-wknum{color:var(--purple)}
-        .cal-wkbody{padding:8px;display:flex;flex-direction:column;gap:6px}
-        .cal-wkev{font-size:11.5px;display:flex;flex-direction:column;background:var(--purple-soft);border:1px solid var(--purple-line);border-radius:7px;padding:5px 7px}
-        .cal-wktime{font-size:10px;color:#5b4b8a;font-weight:700}
-        .cal-wktitle{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis}
-        @media(max-width:820px){.cal-week{grid-template-columns:1fr;gap:6px}.cal-cell{min-height:78px}.cal-chip:nth-child(n+3){display:none}}
+        .cal-page { padding: 26px 32px 60px; max-width: 1200px; margin: 0 auto; }
+        .cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; flex-wrap: wrap; gap: 14px; }
+        .eyebrow { font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--purple-2); margin-bottom: 6px; }
+        .month-name { font-family: var(--font-serif-stack); font-size: 36px; font-weight: 500; letter-spacing: -0.01em; }
+        .month-name .year { color: var(--muted); font-weight: 400; margin-left: 8px; }
+        .cal-nav { display: flex; align-items: center; gap: 8px; }
+        .cal-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--glass-2); border: 1px solid var(--line); color: var(--ink); padding: 8px 13px; border-radius: 10px; cursor: pointer; font-size: 13px; transition: all 0.18s var(--ease); font-family: inherit; }
+        .cal-btn:hover { background: var(--glass); border-color: var(--line-2); }
+        .today-btn { font-weight: 500; }
+        .add-btn { background: var(--purple-soft); border-color: var(--purple-line); color: var(--ink); }
+        .add-btn:hover { background: rgba(124,107,176,0.24); }
+        .cal-view { display: inline-flex; gap: 2px; background: var(--glass-3); border: 1px solid var(--line); border-radius: 10px; padding: 3px; margin-left: 6px; }
+        .v-pill { padding: 5px 12px; border: 0; background: transparent; color: var(--ink-2); border-radius: 7px; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+        .v-pill.on { background: var(--glass); color: var(--ink); }
+
+        .cal-grid { border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--glass-3); }
+        .cal-row { display: grid; grid-template-columns: repeat(7, 1fr); }
+        .cal-row-head { background: var(--glass); border-bottom: 1px solid var(--line); }
+        .cal-dow { padding: 12px 14px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+        .cal-row:not(.cal-row-head) { border-top: 1px solid var(--line); }
+        .cal-row:not(.cal-row-head):first-of-type { border-top: 0; }
+
+        .cal-cell { min-height: 108px; padding: 8px 10px; border-left: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; cursor: pointer; transition: background 0.15s var(--ease); display: flex; flex-direction: column; gap: 6px; font-family: inherit; }
+        .cal-cell:first-child { border-left: 0; }
+        .cal-cell:hover { background: var(--glass-2); }
+        .cal-cell.other { color: var(--faint); background: rgba(255,255,255,0.01); }
+        .cal-cell.other .cell-day { color: var(--faint); }
+
+        .cell-head { display: flex; justify-content: flex-end; }
+        .cell-day { font-size: 13px; font-weight: 500; color: var(--ink-2); padding: 2px 6px; }
+        .cell-day.today-ring { background: var(--purple); color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+
+        .cell-events { display: flex; flex-direction: column; gap: 3px; }
+        .ev-chip { display: flex; align-items: center; gap: 6px; padding: 3px 7px; background: var(--purple-soft); border-left: 2px solid var(--purple); border-radius: 4px; font-size: 11.5px; color: var(--ink); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .ev-time { color: var(--purple-2); font-weight: 500; flex-shrink: 0; }
+        .ev-title { overflow: hidden; text-overflow: ellipsis; }
+        .ev-more { font-size: 11px; color: var(--muted); padding: 1px 6px; }
+
+        .agenda { display: flex; flex-direction: column; gap: 6px; }
+        .ag-row { display: flex; align-items: center; gap: 16px; padding: 14px 16px; background: var(--glass-2); border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s var(--ease); }
+        .ag-row:hover { background: var(--glass); border-color: var(--purple-line); }
+        .ag-date { text-align: center; min-width: 50px; }
+        .ag-day { font-family: var(--font-serif-stack); font-size: 26px; font-weight: 500; line-height: 1; }
+        .ag-mon { font-size: 11px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.1em; }
+        .ag-body { flex: 1; }
+        .ag-title { font-size: 14px; font-weight: 500; }
+        .ag-time { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--purple-2); margin-top: 3px; }
+        .ag-note { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+        .ag-del { background: transparent; border: 0; color: var(--faint); padding: 6px; cursor: pointer; border-radius: 6px; }
+        .ag-del:hover { color: var(--danger); background: var(--glass-3); }
+        .empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 80px 20px; color: var(--muted); }
+
+        .modal-bg { position: fixed; inset: 0; background: rgba(8,7,10,0.72); backdrop-filter: blur(10px); z-index: var(--z-modal); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+        .modal { width: min(440px, 92vw); background: var(--surface-elevated); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow-lg); animation: modalIn 0.22s var(--ease); }
+        @keyframes modalIn { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+        .modal-eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--purple-2); margin-bottom: 6px; }
+        .modal-title { font-family: var(--font-serif-stack); font-size: 22px; font-weight: 500; }
+        .modal-x { background: var(--glass-3); border: 1px solid var(--line); color: var(--ink-2); border-radius: 8px; padding: 7px; cursor: pointer; display: inline-flex; }
+        .modal-x:hover { color: var(--ink); }
+        .modal-body { display: flex; flex-direction: column; gap: 10px; }
+        .lbl { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+        .inp { background: var(--glass-3); border: 1px solid var(--line); border-radius: 9px; color: var(--ink); padding: 10px 12px; font-size: 13.5px; font-family: inherit; outline: none; }
+        .inp:focus { border-color: var(--purple-line); }
+        .save-btn { margin-top: 10px; background: var(--purple); color: white; border: 0; border-radius: 10px; padding: 11px; font-weight: 500; cursor: pointer; font-family: inherit; font-size: 14px; }
+        .save-btn:hover { background: #8c7bc0; }
+        .save-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .day-empty { color: var(--muted); padding: 16px 0; font-size: 13px; font-style: italic; }
+        .day-ev { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+        .day-ev:last-of-type { border-bottom: 0; }
+        .day-ev-main { flex: 1; }
+        .day-ev-time { font-size: 11.5px; color: var(--purple-2); font-weight: 500; margin-bottom: 3px; }
+        .day-ev-title { font-size: 14px; font-weight: 500; }
+        .day-ev-note { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+        .day-ev-del { background: transparent; border: 0; color: var(--faint); cursor: pointer; padding: 4px; }
+        .day-ev-del:hover { color: var(--danger); }
+        .add-day-btn { margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; background: var(--purple-soft); border: 1px solid var(--purple-line); color: var(--ink); padding: 9px 14px; border-radius: 9px; cursor: pointer; font-family: inherit; font-size: 13px; align-self: flex-start; }
+        .add-day-btn:hover { background: rgba(124,107,176,0.24); }
+
+        @media (max-width: 720px) {
+          .cal-page { padding: 18px 18px 60px; }
+          .cal-head { flex-direction: column; align-items: stretch; }
+          .cal-cell { min-height: 70px; padding: 5px 6px; }
+          .cell-day { font-size: 11px; }
+          .ev-chip { font-size: 10px; padding: 2px 4px; }
+          .modal { padding: 18px; }
+        }
       `}</style>
     </Shell>
   );
