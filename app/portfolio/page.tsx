@@ -30,6 +30,10 @@ export default function Portfolio() {
 
   // Selected entity for detail panel
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Active vs past view — default to active so the page focuses on his current
+  // retainers (Sohum, Panther, Upaya, La Rencontre, Buddha Shop), not his
+  // 8-year hotel history (Four Seasons, St Regis, Ritz, One&Only, etc).
+  const [view, setView] = useState<"active" | "past">("active");
   const formRef = useRef<HTMLDivElement>(null);
 
   if (!db) return <Shell><div className="muted">Loading…</div></Shell>;
@@ -37,9 +41,18 @@ export default function Portfolio() {
   // Capture narrowed non-null reference for use inside nested functions/closures.
   const store = db;
 
-  const venues = db.entities.filter((e: Entity) => e.kind === "venue");
-  const clients = db.entities.filter((e: Entity) => e.kind === "client");
-  const events = db.entities.filter((e: Entity) => e.kind === "event");
+  // Filter by status — anything without status defaults to active so newly-
+  // added entities still appear. 'past' / 'inactive' are explicit demotions.
+  const isActive = (e: Entity) => {
+    const s = (e.status || "active").toLowerCase();
+    return s === "active";
+  };
+  const inView = (e: Entity) => (view === "active" ? isActive(e) : !isActive(e));
+  const venues = db.entities.filter((e: Entity) => e.kind === "venue" && inView(e));
+  const clients = db.entities.filter((e: Entity) => e.kind === "client" && inView(e));
+  const events = db.entities.filter((e: Entity) => e.kind === "event" && inView(e));
+  const activeCount = db.entities.filter(isActive).length;
+  const pastCount = db.entities.length - activeCount;
 
   const selected = selectedId ? db.entities.find((e: Entity) => e.id === selectedId) ?? null : null;
 
@@ -223,6 +236,25 @@ export default function Portfolio() {
           </div>
         </div>
       )}
+
+      {/* Active vs Past toggle — focus on his current retainers, demote his
+          hotel history into the Past view. */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 22, alignItems: "center" }}>
+        <button
+          className={`pill${view === "active" ? " accent" : ""}`}
+          style={{ cursor: "pointer", border: "1px solid var(--line)" }}
+          onClick={() => setView("active")}
+        >
+          Active <span style={{ opacity: 0.6, marginLeft: 4 }}>{activeCount}</span>
+        </button>
+        <button
+          className={`pill${view === "past" ? " accent" : ""}`}
+          style={{ cursor: "pointer", border: "1px solid var(--line)" }}
+          onClick={() => setView("past")}
+        >
+          Past <span style={{ opacity: 0.6, marginLeft: 4 }}>{pastCount}</span>
+        </button>
+      </div>
 
       <Section label="Venues" items={venues} addKind="venue" />
       <Section label="Clients" items={clients} addKind="client" />

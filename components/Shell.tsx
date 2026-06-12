@@ -39,7 +39,6 @@ const GROUPS = [
   ]},
   { group: "Studio", items: [
     { href: "/docs", label: "Documents", icon: "docs" },
-    { href: "/brain", label: "Memory", icon: "brain" },
     { href: "/notes", label: "Notes", icon: "notes" },
     { href: "/meetings", label: "Meetings", icon: "meetings" },
     { href: "/legal", label: "Legal", icon: "legal" },
@@ -89,9 +88,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <div className="appframe">
       <header className="topnav">
         <div className="topnav-inner">
-          <Link href="/" className="brand">
-            <Logo variant="mark" size={40} />
-            <span className="brand-name">La Rencontre</span>
+          <Link href="/" className="brand" aria-label="La Rencontre">
+            <Logo variant="lockup" size={32} />
           </Link>
 
           <nav className="navpills" ref={ref}>
