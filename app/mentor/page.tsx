@@ -38,7 +38,14 @@ export default function Concierge() {
   const dragDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { if (db && msgs.length === 0) setMsgs(db.chat.map((c) => ({ role: c.role, content: c.content }))); /* eslint-disable-next-line */ }, [!!db]);
+  // The Concierge starts with a clean canvas every session — past conversations
+  // do NOT visually replay. They DO stay in the DB (chat_messages) and the
+  // brain_facts memory, so when Jensen says "remember what we said about Sohum",
+  // Rencontre recalls via grounded retrieval, not by re-showing the scrollback.
+  // Operator note 2026-06-12: "the concierge shouldnt keep the messages there
+  // at the end of each session it should go away right but stay in memory for
+  // context."
+  // (Was: setMsgs(db.chat.map(...)) on mount — removed.)
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs]);
   useEffect(() => {
     if (!db) return;

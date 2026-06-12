@@ -53,13 +53,6 @@ export default function TasksPage() {
     });
   }
 
-  function handleMove(id: string, q: Quadrant) {
-    mutate((d) => {
-      const t = d.tasks.find((x) => x.id === id);
-      if (t) t.quadrant = q;
-    });
-  }
-
   function handleDelete(id: string) {
     mutate((d) => {
       d.tasks = d.tasks.filter((t) => t.id !== id);
@@ -68,16 +61,88 @@ export default function TasksPage() {
 
   const entityMap = new Map(db.entities.map((e) => [e.id, e.name]));
 
+  // Top Q1 items for the "matters today" hero section
+  const q1Active = db.tasks
+    .filter((t) => t.quadrant === 1 && !t.done)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(0, 2);
+
   return (
     <Shell>
-      {/* Page hero */}
-      <div className="page-hero fade-up">
+      {/* Landing greeting */}
+      <div className="page-hero fade-up" style={{ marginBottom: 28 }}>
         <div className="eyebrow">Priorities</div>
-        <h1>The four quadrants.</h1>
-        <div className="muted" style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6 }}>
-          Q1: do first. Q2: schedule and protect. Q3: delegate. Q4: drop entirely.
-        </div>
+        <h1 style={{
+          fontFamily: "var(--font-serif-stack)",
+          fontSize: "clamp(30px, 4.5vw, 48px)",
+          fontWeight: 500,
+          letterSpacing: "-0.01em",
+          lineHeight: 1.1,
+          marginTop: 8,
+        }}>
+          Here is what matters today.
+        </h1>
       </div>
+
+      {/* Today's top Q1 items */}
+      {q1Active.length > 0 && (
+        <div className="fade-up" style={{ marginBottom: 32, display: "flex", flexDirection: "column", gap: 12 }}>
+          {q1Active.map((task: Task, i: number) => (
+            <div
+              key={task.id}
+              className="card"
+              style={{
+                padding: "22px 26px",
+                display: "flex",
+                alignItems: "center",
+                gap: 18,
+                borderLeft: "4px solid var(--q1)",
+                borderRadius: "var(--radius)",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={task.done}
+                onChange={() => handleToggle(task.id)}
+                style={{ width: 20, height: 20, accentColor: "var(--q1)", cursor: "pointer", flexShrink: 0 }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: "var(--font-serif-stack)",
+                  fontSize: i === 0 ? 22 : 18,
+                  fontWeight: 500,
+                  letterSpacing: "-0.01em",
+                  color: "var(--ink)",
+                  lineHeight: 1.3,
+                }}>
+                  {task.title}
+                </div>
+                {task.entityId && entityMap.get(task.entityId) && (
+                  <span className="pill" style={{ marginTop: 8, fontSize: 11, height: 22, display: "inline-flex" }}>
+                    {entityMap.get(task.entityId)}
+                  </span>
+                )}
+              </div>
+              <button
+                className="btn ghost sm"
+                onClick={() => handleDelete(task.id)}
+                style={{ padding: "0 8px", height: 28, flexShrink: 0, color: "var(--faint)" }}
+                title="Delete task"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {q1Active.length === 0 && (
+        <div className="card fade-up" style={{ padding: "22px 26px", marginBottom: 32, borderLeft: "4px solid var(--success)" }}>
+          <div style={{ fontFamily: "var(--font-serif-stack)", fontSize: 18, fontWeight: 500, color: "var(--ink)" }}>
+            Q1 is clear. No urgent items.
+          </div>
+        </div>
+      )}
 
       {/* Add row */}
       <div className="card fade-up" style={{ padding: 20, marginBottom: 22, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -205,6 +270,13 @@ export default function TasksPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* Footer explainer: muted, one line */}
+      <div className="fade-up" style={{ marginTop: 28, textAlign: "center" }}>
+        <span style={{ fontSize: 12, color: "var(--faint)", letterSpacing: "0.04em" }}>
+          Q1 do · Q2 schedule · Q3 delegate · Q4 drop
+        </span>
       </div>
     </Shell>
   );

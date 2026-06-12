@@ -8,7 +8,7 @@ import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
 import { CalEvent, uid } from "@/lib/store";
 import {
-  ChevronLeft, ChevronRight, Plus, Trash2, Clock, X, CalendarDays,
+  ChevronLeft, ChevronRight, Plus, Trash2, Clock, X, CalendarDays, Sun,
 } from "lucide-react";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -48,7 +48,7 @@ function formatTime(t?: string) {
 export default function CalendarPage() {
   const { db, mutate } = useDB();
   const [cursor, setCursor] = useState(new Date());
-  const [view, setView] = useState<"month" | "agenda">("month");
+  const [view, setView] = useState<"today" | "week" | "month" | "agenda">("month");
   const [dayOpen, setDayOpen] = useState<string | null>(null);
   const [composeFor, setComposeFor] = useState<string | null>(null);
   const [compTitle, setCompTitle] = useState("");
@@ -116,6 +116,8 @@ export default function CalendarPage() {
             <button className="cal-btn today-btn" onClick={goToday}>Today</button>
             <button className="cal-btn" onClick={nextMonth} aria-label="Next month"><ChevronRight size={16} /></button>
             <div className="cal-view">
+              <button className={`v-pill ${view === "today" ? "on" : ""}`} onClick={() => setView("today")}>Today</button>
+              <button className={`v-pill ${view === "week" ? "on" : ""}`} onClick={() => setView("week")}>Week</button>
               <button className={`v-pill ${view === "month" ? "on" : ""}`} onClick={() => setView("month")}>Month</button>
               <button className={`v-pill ${view === "agenda" ? "on" : ""}`} onClick={() => setView("agenda")}>Agenda</button>
             </div>
@@ -123,7 +125,80 @@ export default function CalendarPage() {
           </div>
         </header>
 
-        {view === "month" ? (
+        {view === "today" && (() => {
+          const todayEvents = byDate[today] || [];
+          return (
+            <div className="today-view">
+              <div className="today-header">
+                <Sun size={16} />
+                <span>{MONTHS[new Date().getMonth()]} {new Date().getDate()}, {new Date().getFullYear()}</span>
+                <span className="today-dow">{WD[(new Date().getDay() + 6) % 7]}</span>
+              </div>
+              {todayEvents.length === 0 ? (
+                <div className="empty">
+                  <CalendarDays size={28} />
+                  <div>Nothing on the calendar today.</div>
+                  <button className="cal-btn add-btn" onClick={() => openCompose(today)}><Plus size={14} /> Add an event</button>
+                </div>
+              ) : (
+                <div className="today-list">
+                  {todayEvents.map((e) => (
+                    <div key={e.id} className="today-ev">
+                      <div className="today-ev-time">{e.time ? formatTime(e.time) : "All day"}</div>
+                      <div className="today-ev-body">
+                        <div className="today-ev-title">{e.title}</div>
+                        {e.note && <div className="ag-note">{e.note}</div>}
+                      </div>
+                      <button className="ag-del" onClick={() => deleteEvent(e.id)} aria-label="Delete"><Trash2 size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button className="add-day-btn" style={{ marginTop: 20 }} onClick={() => openCompose(today)}>
+                <Plus size={14} /> Add to today
+              </button>
+            </div>
+          );
+        })()}
+
+        {view === "week" && (() => {
+          const now = new Date();
+          const dow = (now.getDay() + 6) % 7;
+          const weekDays: Date[] = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(now);
+            d.setDate(now.getDate() - dow + i);
+            return d;
+          });
+          return (
+            <div className="week-grid">
+              {weekDays.map((d) => {
+                const k = iso(d);
+                const isToday = k === today;
+                const evs = byDate[k] || [];
+                return (
+                  <div key={k} className={`week-col${isToday ? " week-today" : ""}`}>
+                    <div className="week-col-head">
+                      <div className="week-dow">{WD[(d.getDay() + 6) % 7]}</div>
+                      <div className={`week-day-num${isToday ? " today-ring" : ""}`}>{d.getDate()}</div>
+                    </div>
+                    <div className="week-events">
+                      {evs.length === 0 && <div className="week-empty" />}
+                      {evs.map((e) => (
+                        <div key={e.id} className="week-ev" onClick={() => setDayOpen(k)}>
+                          {e.time && <span className="ev-time">{formatTime(e.time)}</span>}
+                          <span className="ev-title">{e.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="week-add" onClick={() => openCompose(k)} aria-label="Add event"><Plus size={12} /></button>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {view === "month" && (
           <div className="cal-grid">
             <div className="cal-row cal-row-head">
               {WD.map((d) => <div key={d} className="cal-dow">{d}</div>)}
@@ -159,7 +234,9 @@ export default function CalendarPage() {
               </div>
             ))}
           </div>
-        ) : (
+        )}
+
+        {view === "agenda" && (
           <div className="agenda">
             {monthEvents.length === 0 ? (
               <div className="empty">
@@ -323,6 +400,32 @@ export default function CalendarPage() {
         .day-ev-del:hover { color: var(--danger); }
         .add-day-btn { margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; background: var(--purple-soft); border: 1px solid var(--purple-line); color: var(--ink); padding: 9px 14px; border-radius: 9px; cursor: pointer; font-family: inherit; font-size: 13px; align-self: flex-start; }
         .add-day-btn:hover { background: rgba(124,107,176,0.24); }
+
+        /* Today view */
+        .today-view { display: flex; flex-direction: column; gap: 0; }
+        .today-header { display: flex; align-items: center; gap: 10px; padding: 16px 0 20px; font-size: 15px; font-weight: 600; color: var(--ink); }
+        .today-dow { font-size: 12px; color: var(--muted); margin-left: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .today-list { display: flex; flex-direction: column; gap: 8px; }
+        .today-ev { display: flex; align-items: flex-start; gap: 18px; padding: 16px 20px; background: var(--glass-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+        .today-ev-time { min-width: 72px; font-size: 12px; color: var(--purple-2); font-weight: 600; margin-top: 2px; }
+        .today-ev-body { flex: 1; }
+        .today-ev-title { font-size: 15px; font-weight: 500; }
+
+        /* Week view */
+        .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+        .week-col { display: flex; flex-direction: column; min-height: 340px; border-left: 1px solid var(--line); position: relative; }
+        .week-col:first-child { border-left: 0; }
+        .week-col.week-today { background: rgba(124,107,176,0.05); }
+        .week-col-head { padding: 12px 10px 10px; text-align: center; border-bottom: 1px solid var(--line); background: var(--glass); }
+        .week-dow { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+        .week-day-num { font-size: 18px; font-weight: 500; color: var(--ink-2); width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
+        .week-day-num.today-ring { background: var(--purple); color: white; }
+        .week-events { flex: 1; padding: 8px 6px; display: flex; flex-direction: column; gap: 4px; }
+        .week-empty { flex: 1; }
+        .week-ev { display: flex; flex-direction: column; padding: 5px 8px; background: var(--purple-soft); border-left: 2px solid var(--purple); border-radius: 5px; font-size: 11.5px; cursor: pointer; overflow: hidden; }
+        .week-ev:hover { background: rgba(124,107,176,0.26); }
+        .week-add { background: none; border: 0; color: var(--faint); cursor: pointer; padding: 6px; font-size: 12px; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
+        .week-col:hover .week-add { opacity: 1; }
 
         @media (max-width: 720px) {
           .cal-page { padding: 18px 18px 60px; }
