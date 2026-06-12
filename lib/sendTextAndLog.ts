@@ -15,6 +15,7 @@ import { sendWhatsApp, devPhone } from "@/lib/whatsapp";
 import { admin } from "@/lib/db";
 import { sanitizeReply } from "@/lib/bot-guards/index.js";
 import { JENSEN_BOT_GUARDS_CONFIG } from "@/lib/bot/guards-config";
+import { mirrorToChatwoot } from "@/lib/chatwoot-mirror";
 
 // Law 10 (test-mode) branch: opts.dev === true reroutes the message to the
 // developer phone and SKIPS chat_messages + audit inserts. Test traffic never
@@ -58,6 +59,10 @@ export async function sendTextAndLog(
       // best-effort log; never block delivery
     }
   }
+  // Read-only Chatwoot mirror (Path B). Best-effort, never blocks delivery.
+  // Fires AFTER chat_messages insert so the source of truth still holds even
+  // if Chatwoot is down. Direction is "outgoing" because this is bot → Jensen.
+  mirrorToChatwoot("outgoing", to, sendBody).catch(() => {});
   const ok = await sendWhatsApp(to, sendBody, opts);
   return { ok };
 }

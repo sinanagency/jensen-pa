@@ -276,6 +276,9 @@ export async function POST(req: NextRequest) {
     // message must be safe before any failure can swallow it.
     const inboundParty = sender.role === "admin" ? "taona" : "jensen";
     await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
+    // Mirror inbound into Chatwoot (read-only, Path B). Best-effort.
+    const { mirrorToChatwoot } = await import("@/lib/chatwoot-mirror");
+    mirrorToChatwoot("incoming", from, text).catch(() => {});
 
     // FM-11 DETERMINISTIC DONE-RESOLUTION. Bare confirmations from JENSEN
     // (owner tier only) route the most recently created open task to done

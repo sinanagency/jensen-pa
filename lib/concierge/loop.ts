@@ -162,13 +162,28 @@ async function callRaw(system: string | { head: string; tail: string }, messages
     messages,
   };
   if (withTools) body.tools = tools.map((t, i) => (i === tools.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t));
+  const startedAt = Date.now();
   const res = await fetch(API, {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  return res.json();
+  const data = await res.json();
+  // Fire-and-forget Langfuse trace (lib/langfuse-trace.ts). Best-effort.
+  try {
+    const { traceLLM } = await import("@/lib/langfuse-trace");
+    traceLLM({
+      name: "concierge.callRaw",
+      model: body.model,
+      input: { system: typeof system === "string" ? system : "head+tail", messages: body.messages },
+      output: typeof data?.content?.[0]?.text === "string" ? data.content[0].text : JSON.stringify(data?.content || ""),
+      startedAt,
+      endedAt: Date.now(),
+      usage: { input: data?.usage?.input_tokens, output: data?.usage?.output_tokens },
+    });
+  } catch { /* never block */ }
+  return data;
 }
 
 export type ConciergeResult = { reply: string; toolsUsed: string[] };
