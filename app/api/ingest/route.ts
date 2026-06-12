@@ -8,6 +8,15 @@
 // Body shape (failure):
 //   { id, title, error, source }
 //
+// 2026-06-12 (KT #234): added outcome classifier. The Zomato call at 17:00
+// had the bot attended-and-recording but Jatin never spoke. The old code
+// path called the extractor on a near-empty transcript, got a hallucinated
+// summary, and shipped "I finished {title} and I have the notes for you"
+// to Jensen. Now: classify the transcript first. If empty (short audio +
+// thin transcript), skip the extractor entirely and ship a single
+// ask-once-then-silent message instead, marking events.outcome='empty'
+// so the rest of the system knows not to re-probe.
+//
 // Doctrine touchpoints:
 // - Law 1 (persona-purity): WhatsApp summary is first-person Jensen.
 // - Law 2 (send-chokepoint): outbound goes through sendTextAndLog.
@@ -20,6 +29,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { claudeJSON, NO_DASHES } from "@/lib/anthropic";
 import { createTask } from "@/lib/concierge/ops";
 import { sendTextAndLog } from "@/lib/sendTextAndLog";
+import { sbHeaders, sbRest } from "@/lib/db";
+import { classifyOutcome, buildEmptyOutcomeMessage, type MeetingOutcome } from "@/lib/meeting-outcome";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -53,6 +64,33 @@ function ownerJensenNumber(): string | null {
 
 function stripDashes(s: string): string {
   return String(s || "").replace(/—/g, ", ").replace(/–/g, ", ");
+}
+
+// Best-effort write of events.outcome. Schema migration events_outcome.sql
+// added the column with a CHECK constraint. We swallow errors so a Supabase
+// glitch never blocks the WhatsApp ack to Jensen (Law 2: send happens first,
+// state-write second). The id passed in is the meeting-bot's `body.id` which
+// is the same id the dispatcher picked up from events.id at queue time.
+// classifyOutcome + buildEmptyOutcomeMessage live in lib/meeting-outcome.ts
+// because Next.js App Router route files can only export route handlers, not
+// arbitrary helpers, and the verify script needs to import them.
+async function setEventOutcome(id: string, outcome: MeetingOutcome | "awaiting_human_verdict" | "resolved_by_email"): Promise<void> {
+  if (!id) return;
+  try {
+    const res = await fetch(sbRest(`events?id=eq.${encodeURIComponent(id)}`), {
+      method: "PATCH",
+      headers: { ...sbHeaders(), Prefer: "return=minimal" },
+      body: JSON.stringify({ outcome }),
+    });
+    if (!res.ok) {
+      // Don't throw, just log: a missing row or constraint mismatch must not
+      // break the ack to Jensen. The fallback is the system stays in the
+      // old null-outcome state, which the old code already handled.
+      console.warn("setEventOutcome: PATCH failed", res.status, await res.text().catch(() => ""));
+    }
+  } catch (e) {
+    console.warn("setEventOutcome: exception", e);
+  }
 }
 
 function buildWhatsAppBody(opts: {
@@ -119,6 +157,27 @@ export async function POST(req: NextRequest) {
     const transcript = String(body?.transcript || "").trim();
     if (!transcript) return NextResponse.json({ ok: false, error: "transcript required" }, { status: 400 });
 
+    // KT #234: classify the meeting OUTCOME before calling the extractor.
+    // An empty audio capture (Zomato 2026-06-12 incident) used to fall
+    // through to the extractor + the "I finished + here are notes" canned
+    // line, producing a hallucinated summary that broke trust. Now an empty
+    // outcome ships a single ask-once message and writes events.outcome so
+    // the rest of the system stops re-probing whether it happened.
+    const incomingNotes: IncomingNotes = (body?.notes && typeof body.notes === "object") ? body.notes : {};
+    const durationSec = typeof body?.durationSec === "number" ? body.durationSec : undefined;
+    const outcome = classifyOutcome({
+      transcript,
+      durationSec,
+      notesSummary: incomingNotes.summary,
+    });
+    if (outcome === "empty") {
+      const to = ownerJensenNumber();
+      const msg = buildEmptyOutcomeMessage(title, durationSec);
+      if (to) await sendTextAndLog(to, msg, { party: "jensen" });
+      await setEventOutcome(id, "empty");
+      return NextResponse.json({ ok: true, mode: "empty-outcome", meetingId: id });
+    }
+
     // Same extractor as /api/meeting-notes, kept inline so this route owns the
     // full contract (transcript -> tasks -> WhatsApp -> ack).
     const extracted = await claudeJSON<{
@@ -163,12 +222,18 @@ export async function POST(req: NextRequest) {
       msgOk = !!r.ok;
     }
 
+    // Mark the happened outcome only AFTER the ack has shipped. If the send
+    // failed we leave outcome null so a manual retry isn't blocked by a stale
+    // state.
+    if (msgOk) await setEventOutcome(id, "happened");
+
     return NextResponse.json({
       ok: true,
       meetingId: id,
       taskCount: created.length,
       decisionCount: decisions.length,
       whatsappOk: msgOk,
+      outcome: "happened",
     });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
