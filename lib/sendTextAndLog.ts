@@ -25,6 +25,11 @@ export async function sendTextAndLog(
   body: string,
   opts?: { force?: boolean; party?: string; dev?: boolean }
 ): Promise<{ ok: boolean }> {
+  // v0.2 (2026-06-12): the PRIMITIVE sendWhatsApp now enforces the wall for
+  // every caller. This wrapper still runs sanitizeReply FIRST so that the
+  // chat_messages transcript records exactly what ships (never diverging from
+  // the wire on a catch) and so the audit row carries the party. The second
+  // pass inside sendWhatsApp is a no-op on the already-clean body.
   const sanitized = sanitizeReply(body, JENSEN_BOT_GUARDS_CONFIG);
   const sendBody = sanitized.body;
   if (opts?.dev) {
@@ -40,11 +45,11 @@ export async function sendTextAndLog(
     party: opts?.party ?? "jensen",
     ts: Date.now(),
   });
-  if (sanitized.caught) {
+  if (sanitized.caught.length) {
     try {
       await admin().from("chat_messages").insert({
         role: "system",
-        content: `pre_send_caught_${sanitized.caught.kind}: pattern=${sanitized.caught.pattern.slice(0, 80)} | original=${sanitized.caught.original.slice(0, 400)}`,
+        content: `pre_send_caught: ${sanitized.caught.map((c) => `${c.kind}:${c.pattern}`).join(",")} | original=${String(sanitized.caught[0]?.original || "").slice(0, 400)}`,
         channel: "audit",
         party: opts?.party ?? "jensen",
         ts: Date.now(),

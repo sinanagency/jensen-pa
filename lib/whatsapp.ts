@@ -46,7 +46,34 @@ function passesTrainingGate(to: string, contextBody: string, opts?: { force?: bo
 export async function sendWhatsApp(to: string, body: string, opts?: { force?: boolean }): Promise<boolean> {
   if (!waConfigured()) return false;
   if (!passesTrainingGate(to, body, opts)) return false;
-  const cleaned = stripDashes(body); // Law 5: no em/en dashes leave this chokepoint
+  // ── THE WALL (Architecture 2, 2026-06-12). sanitizeReply runs HERE, in the
+  // primitive. Before this date it lived only in sendTextAndLog while the
+  // concierge webhook replies (all nine of them), the morning brief in
+  // cron/daily, and Shopify called sendWhatsApp directly — every one of those
+  // was unwalled LLM or composed text. Now every free-form outbound passes
+  // Jensen's BotGuardsConfig (brand wall) after Law 5's dash repair. A catch
+  // is audited to chat_messages best effort and never blocks delivery.
+  let cleaned = stripDashes(body); // Law 5: no em/en dashes leave this chokepoint
+  try {
+    const { sanitizeReply } = await import("@/lib/bot-guards/index.js");
+    const { JENSEN_BOT_GUARDS_CONFIG } = await import("@/lib/bot/guards-config");
+    const guarded = sanitizeReply(cleaned, JENSEN_BOT_GUARDS_CONFIG);
+    if (guarded.caught.length) {
+      cleaned = guarded.body;
+      import("@/lib/db").then(({ admin }) =>
+        admin().from("chat_messages").insert({
+          role: "system",
+          channel: "audit",
+          party: "jensen",
+          ts: Date.now(),
+          content: `pre_send_caught: ${guarded.caught.map((c) => `${c.kind}:${c.pattern}`).join(",")} | ${String(body).slice(0, 300)}`,
+        })
+      ).then(() => {}, () => {});
+    }
+  } catch {
+    // The wall must never break delivery; a guards failure ships the dash
+    // repaired body unfiltered this once and surfaces in logs.
+  }
   try {
     const res = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
       method: "POST",

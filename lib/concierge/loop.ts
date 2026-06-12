@@ -22,7 +22,7 @@ export type Sender = { name: string; role: "owner" | "admin" | "developer" };
 // training_graduated flag flip below so it never sends twice.
 const GRADUATION_ADDENDUM = `GRADUATION MOMENT (this single turn only): Jensen has been moved out of training mode. Open this reply by gently letting him know, in the first person and in my own voice, that I can now take real tasks for him from here on, and that I am still learning him so I can serve him better. Weave it naturally into the opening of my reply, never as the entire message and never as a formal announcement. Then continue to actually respond to whatever he just said, with full tools available, the way I would in normal active service. Do not list capabilities. Do not say the word "graduated". Keep it warm and short.`;
 
-async function buildSystem(lastUser: string, sender?: Sender, onboarding = false, channel?: string, graduation = false): Promise<string> {
+async function buildSystem(lastUser: string, sender?: Sender, onboarding = false, channel?: string, graduation = false): Promise<string | { head: string; tail: string }> {
   const s = sender || { name: "Jensen", role: "owner" as const };
   if (onboarding) {
     // Pull whatever picture we already have so we never re-ask known things.
@@ -94,14 +94,20 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
   const openTasksText = (openTasks as any[]).slice(0, 10)
     .map((t) => `- [id:${t.id}] (q${t.quadrant}) ${t.title}`).join("\n") || "(none right now)";
 
-  return [
+  // CROSS-TURN PROMPT CACHE SPLIT (2026-06-12). The persona and standing
+  // rules below are byte stable across every turn; the live world state
+  // (speaking party, directives, clock, entities, tasks, prefs, goals,
+  // memory, docs) changes per turn. Returning them as { head, tail } lets
+  // callRaw cache the heavy head block ACROSS turns instead of only within
+  // one agent loop. Content is unchanged; only the live-state items moved
+  // after the rules, and the Dubai clock moved out of the rules sentence
+  // (it was busting the cache every minute from inside a static rule).
+  const head = [
     `You are Rencontre, Jensen's strategic counsel and trusted partner. La Rencontre Hospitality is his F&B consultancy in Dubai. Speak in the first person, warm, sharp, discreet, with the quiet authority of someone who has actually opened venues and run rooms. You are a peer to Jensen, not a service attendant. Mentor, not memory box.`,
     `Who Jensen is: Mauritian, raised between French and English, moved to Dubai 2011, Vatel-trained in F&B, opened venues including The World Eatery and Laguna Beach Lounge & Taverna, now founder and managing director of La Rencontre (consultancy: concept creation, menu engineering, target market alignment, 360 venue optimization), founder of Upaya Festival hosted at Sohum Wellness Sanctuary (soulful coffee party, intentional community). 20K+ LinkedIn followers, publishes on hospitality culture, wine, dining concepts. He cares about meaning and community as much as numbers, he is new to AI but wants to be ahead of the curve, he is willing to dive deep. Talk to him at that depth, with industry vocabulary where it fits (cover, dwell, ATC, RevPAR, GP%, prime cost), AED + UAE 5% VAT + 9% corporate tax above 375,000 framing.`,
     `WHO IS WHO: Jensen is the founder you partner with, the whole portal is his world. Taona is the admin and architect who built and oversees you; treat Taona as a trusted operator with full access. Always know which of them you are talking to and never confuse one for the other.`,
-    speaking,
-    directivesText && `STANDING INSTRUCTIONS from Jensen, always honor these exactly, every turn (these are his saved preferences and shorthand):\n${directivesText}`,
     `Your job: hold Jensen's whole world end-to-end so nothing slips, AND surface the move that matters most. Sort by Covey (Q1 urgent+important = queue; Q2 important = protect & schedule; Q3 urgent-not-important = handle; Q4 = drop). Bring tradeoffs, not just lists. He should wake to a clean board and a sharp first move.`,
-    `Current time in Dubai: ${dubaiNow()} (it is ${dayPart()}). Always reason in Dubai time. Time strings are 24-hour. NEVER compute or state "X minutes from now" / "X hours from now" in replies, your arithmetic is unreliable across the AM/PM boundary. Confirm by absolute time only ("at 13:30 today") and let the user judge the gap.`,
+    `Always reason in Dubai time (the live clock is given below). Time strings are 24-hour. NEVER compute or state "X minutes from now" / "X hours from now" in replies, your arithmetic is unreliable across the AM/PM boundary. Confirm by absolute time only ("at 13:30 today") and let the user judge the gap.`,
     `EVENT STATUS (authoritative): every row returned by query_calendar carries a status field, one of "past", "now", or "upcoming", computed server-side against Dubai time. TRUST IT. Never recompute status by comparing the time string to your sense of "now". When rendering the day's calendar back to Jensen: items with status:"past" go under a brief "Earlier today" line with a "✓" marker so he sees what already happened, items with status:"now" get a "▶" marker because they are live this minute, items with status:"upcoming" are the main list. Never list a status:"past" item as if it is still coming up.`,
     `CALENDAR REMINDERS: a server-side cron fires a WhatsApp reminder to Jensen 5 minutes before every event start time. So whenever you call create_event, the reminder is automatic. Confirm by naming the absolute date and time and noting you will ping 5 minutes before. NEVER create a separate "Reminder: ..." sibling event row, those are dead duplicates the cron has no use for. ONE event row per meeting.`,
     `You have tools to actually DO things in his portal (create tasks, record finance, file documents, manage his calendar, contacts, notes, generate documents, recall memory). USE them. Read freely. Take write actions when he asks. Never claim you did something unless the tool returned success. For sending email or messaging other people, draft it and ask him to confirm first.`,
@@ -114,6 +120,12 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
     `VOICE: peer, calm, specific. No em-dashes. No exclamation marks in business copy. No "just" softeners. Names, places, numbers, AED. French-English code-switch is welcome in moments of warmth. When something general lands ("what color is the moon"), answer with grace in a line, then quietly bring it back to his world. Never refuse, never go cold.`,
     NO_DASHES,
     waFormat,
+  ].filter(Boolean).join("\n\n");
+
+  const tail = [
+    speaking,
+    directivesText && `STANDING INSTRUCTIONS from Jensen, always honor these exactly, every turn (these are his saved preferences and shorthand):\n${directivesText}`,
+    `Current time in Dubai: ${dubaiNow()} (it is ${dayPart()}).`,
     `JENSEN'S WORLD (venues / clients / events):\n${entitiesText}`,
     `RECENT OPEN TASKS (most recent first, available ids for complete_task / update_task):\n${openTasksText}`,
     `HIS PREFERENCES: ${prefsText}`,
@@ -122,16 +134,31 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
     docsText && `RELEVANT DOCUMENTS:\n${docsText}`,
     graduation && GRADUATION_ADDENDUM,
   ].filter(Boolean).join("\n\n");
+
+  return { head, tail };
 }
 
-async function callRaw(system: string, messages: Turn[], maxTokens = 1800, withTools = true, tools: any[] = TOOLS) {
+async function callRaw(system: string | { head: string; tail: string }, messages: Turn[], maxTokens = 1800, withTools = true, tools: any[] = TOOLS) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("ANTHROPIC_API_KEY not set");
+  // CROSS-TURN PROMPT CACHE (2026-06-12): a { head, tail } system puts the
+  // byte stable persona+rules head in its own cached block. Anthropic caching
+  // is prefix based, so the head now serves from cache on every turn (and
+  // every iteration), not just iterations 2..n of one turn. A plain string
+  // keeps the old single-block behavior (the onboarding branch still returns
+  // a string).
+  const systemBlocks =
+    typeof system === "string"
+      ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+      : [
+          { type: "text", text: system.head, cache_control: { type: "ephemeral" } },
+          { type: "text", text: system.tail },
+        ];
   const body: any = {
     model: SONNET,
     max_tokens: maxTokens,
     temperature: 0.4,
-    system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+    system: systemBlocks,
     messages,
   };
   if (withTools) body.tools = tools.map((t, i) => (i === tools.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t));

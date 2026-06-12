@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 import { sendWhatsApp, isOwner, whoIs, mirrorInbound } from "@/lib/whatsapp";
 import { runConcierge } from "@/lib/concierge/loop";
-import { kvGet, kvSet } from "@/lib/db";
+import { kvGet, kvSet, admin } from "@/lib/db";
 import * as ops from "@/lib/concierge/ops";
 import { classifyAndFile } from "@/lib/concierge/intake";
 import { readImage } from "@/lib/anthropic";
@@ -24,7 +25,26 @@ export async function GET(req: NextRequest) {
 }
 
 // Best-effort dedupe so Meta retries don't double-process a message.
+// v0.2 (2026-06-12): race proof. The old kv array (read, includes, write back)
+// lost ids when two Meta retries landed concurrently: both read the same
+// array, both missed, both processed, one write clobbered the other. Now the
+// truth is a wa_seen table with wamid as PRIMARY KEY: the insert IS the check,
+// atomically, in one round trip. A unique violation means a sibling owns it.
+// Falls back to the old kv path only if the table does not exist yet (apply
+// db/2026-06-12_wa_seen.sql), so this ships safely ahead of the migration.
 async function seen(id: string): Promise<boolean> {
+  try {
+    const { error } = await admin().from("wa_seen").insert({ wamid: id });
+    if (!error) return false;                                  // we own it: process
+    const msg = String(error.message || "");
+    if (/duplicate key|unique/i.test(msg) || (error as any).code === "23505") return true; // sibling owns it
+    if (!/does not exist|relation .*wa_seen/i.test(msg) && (error as any).code !== "42P01") {
+      // Unknown DB failure: fail open (process) rather than drop a message.
+      return false;
+    }
+  } catch {
+    // network blip: fall through to kv
+  }
   try {
     const arr = await kvGet<string[]>("wa_seen", []);
     if (arr.includes(id)) return true;
@@ -33,6 +53,21 @@ async function seen(id: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Meta webhook signature (Architecture 2, 2026-06-12). Jensen was the only
+// bot in the fleet accepting UNSIGNED POSTs: anyone who learned the URL could
+// forge an inbound and drive a concierge that holds mail, calendar, and
+// finance write tools. Mirrors Sasa's pattern: constant-time compare, and the
+// gate only arms once WHATSAPP_APP_SECRET is set (early-setup escape hatch).
+function verifyMetaSignature(raw: string, header: string | null): boolean {
+  const secret = process.env.WHATSAPP_APP_SECRET;
+  if (!secret) return true;
+  if (!header) return false;
+  const expected = "sha256=" + crypto.createHmac("sha256", secret).update(raw).digest("hex");
+  const a = Buffer.from(header);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 async function downloadMedia(mediaId: string): Promise<{ buf: Buffer; mime: string; base64: string } | null> {
@@ -58,7 +93,11 @@ async function recentHistory(party: string): Promise<{ role: "user" | "assistant
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const raw = await req.text();
+    if (!verifyMetaSignature(raw, req.headers.get("x-hub-signature-256"))) {
+      return new NextResponse("bad signature", { status: 401 });
+    }
+    const body = JSON.parse(raw || "{}");
     // WABA payload diagnostic. Empirically Meta's webhook entry[0].id on THIS
     // account surfaces the system-user id, not the WABA id, so a fully-auto
     // template submission path is not possible from the webhook. We still
