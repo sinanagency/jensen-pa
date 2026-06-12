@@ -80,7 +80,5 @@ export const COMPLETION_PAUSE_MS_BETWEEN_BUBBLES = 2500;
 export const COMPLETION_BUBBLES = [
   `Jensen, quick one.
 
-I'm done with my training. You'll feel it from here in how I understand you and how I come back to you.
-
-Carry on, I'll keep up.`,
+I've finished going through all 1,180 conversations of yours. I've learned a lot about you, and I'm ready to serve you better.`,
 ] as const;
