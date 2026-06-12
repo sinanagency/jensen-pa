@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { claudeJSON, NO_DASHES } from "@/lib/anthropic";
+import { transcribeAudio as intakeTranscribeAudio } from "@/lib/intake/index.js";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
 
-// Audio (base64) -> Whisper transcript -> Claude summary + extracted tasks.
+// Audio (base64) -> @sinanagency/intake transcript -> Claude summary + tasks.
 // Powers voice notes, the end-of-day debrief, and meeting notes.
 export async function POST(req: NextRequest) {
   try {
@@ -13,18 +14,11 @@ export async function POST(req: NextRequest) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) return NextResponse.json({ error: "OPENAI_API_KEY not set" }, { status: 500 });
 
-    const bytes = Buffer.from(audioBase64, "base64");
-    const blob = new Blob([bytes], { type: mime || "audio/webm" });
-    const form = new FormData();
-    form.append("file", blob, filename || "audio.webm");
-    form.append("model", "whisper-1");
-
-    const tr = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form,
-    });
-    if (!tr.ok) return NextResponse.json({ error: `Transcription failed: ${(await tr.text()).slice(0, 200)}` }, { status: 502 });
-    const { text: transcript } = await tr.json();
-    if (!transcript?.trim()) return NextResponse.json({ transcript: "", summary: "", tasks: [] });
+    const transcript = (await intakeTranscribeAudio(audioBase64, mime || "audio/webm", { openaiKey: key })).trim();
+    if (!transcript) return NextResponse.json({ transcript: "", summary: "", tasks: [] });
+    // filename is kept for backwards compatibility with the notes UI client but
+    // intake derives its own filename from the mime; no behaviour change.
+    void filename;
 
     const extracted = await claudeJSON<{ summary: string; tasks: string[] }>(
       `You turn a spoken note or meeting transcript into a tight summary and a list of concrete action items for Jensen, an F&B consultant. ${NO_DASHES}`,
