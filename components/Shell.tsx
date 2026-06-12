@@ -14,31 +14,36 @@ const ICONS: Record<string, any> = {
   today: LayoutGrid, mentor: MessageCircle, portfolio: Building2, tasks: CheckSquare,
   finance: Wallet, brain: Library, generate: FileText, calendar: Calendar, legal: ScrollText, mail: Mail, store: ShoppingBag,
   notes: StickyNote, contacts: User, journal: BookOpen, meetings: Mic, inbox: Inbox, invoice: Receipt,
+  docs: FileText,
 };
 
+// Top pills: the 4 surfaces Jensen reaches for every day. Inbox folded into
+// Mail (one mailbox, two views via the page itself). Concierge is the chat.
 const PILLS = [
   { href: "/", label: "Today", icon: "today" },
   { href: "/mentor", label: "Concierge", icon: "mentor" },
-  { href: "/inbox", label: "Inbox", icon: "inbox" },
   { href: "/mail", label: "Mail", icon: "mail" },
   { href: "/portfolio", label: "Portfolio", icon: "portfolio" },
 ];
+// Folded menus: everything else, grouped by intent. "Documents" now points
+// at the real /docs page (was /brain, which is the bot's memory of facts).
+// Journal folded into Notes (same store, kind filter). Meetings stays — own UX.
 const GROUPS = [
   { group: "Operate", items: [
     { href: "/tasks", label: "Tasks", icon: "tasks" },
     { href: "/calendar", label: "Calendar", icon: "calendar" },
     { href: "/finance", label: "Finance", icon: "finance" },
-    { href: "/shopify", label: "Store", icon: "store" },
+    { href: "/invoice", label: "Invoice", icon: "invoice" },
     { href: "/contacts", label: "Contacts", icon: "contacts" },
+    { href: "/shopify", label: "Store", icon: "store" },
   ]},
   { group: "Studio", items: [
-    { href: "/meetings", label: "Meetings", icon: "meetings" },
-    { href: "/brain", label: "Documents", icon: "brain" },
+    { href: "/docs", label: "Documents", icon: "docs" },
+    { href: "/brain", label: "Memory", icon: "brain" },
     { href: "/notes", label: "Notes", icon: "notes" },
-    { href: "/journal", label: "Journal", icon: "journal" },
-    { href: "/generate", label: "Generate", icon: "generate" },
-    { href: "/invoice", label: "Invoice", icon: "invoice" },
+    { href: "/meetings", label: "Meetings", icon: "meetings" },
     { href: "/legal", label: "Legal", icon: "legal" },
+    { href: "/generate", label: "Generate", icon: "generate" },
   ]},
 ];
 

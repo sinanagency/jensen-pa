@@ -11,10 +11,12 @@ export type ServerDoc = {
   mime?: string;
   kind?: string;
   entityId?: string;
+  folder?: string;
   text: string;
   size?: number;
   dataUrl?: string;
   createdAt: number;
+  docDate?: string | null;
   chunks: { text: string; embedding: number[] }[];
 };
 
@@ -45,8 +47,11 @@ export async function listServerDocs(): Promise<ServerDoc[]> {
   if (res.error) throw new Error(`docs select: ${res.error.message}`);
   return (res.data ?? []).map((r: any) => ({
     id: r.id, title: r.title, fileName: r.file_name ?? "", mime: r.mime ?? "", kind: r.kind ?? "document",
-    entityId: r.entity_id ?? undefined, text: r.content ?? "", size: Number(r.size ?? 0),
-    dataUrl: r.data_url ?? undefined, createdAt: Number(r.created_at), chunks: [],
+    entityId: r.entity_id ?? undefined, folder: r.folder ?? "general",
+    text: r.content ?? "", size: Number(r.size ?? 0),
+    dataUrl: r.data_url ?? undefined, createdAt: Number(r.created_at),
+    docDate: r.doc_date ?? null,
+    chunks: [],
   }));
 }
 
