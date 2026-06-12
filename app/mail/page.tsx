@@ -35,6 +35,7 @@ type TriagedSummary = {
   snippet: string;
   seen: boolean;
   attachments: number;
+  forwardedFrom?: "outlook" | "gmail" | "zoho";
   important: boolean;
   urgent: boolean;
   needsReply: boolean;
@@ -42,6 +43,8 @@ type TriagedSummary = {
   summary: string;
   draft: string;
 };
+
+const FORWARDER_LABEL: Record<string, string> = { outlook: "via Outlook", gmail: "via Gmail", zoho: "via Zoho" };
 
 type Full = TriagedSummary & { text: string; to: string; messageId?: string; attachmentNames?: string[] };
 type Out = { filename: string; content: string; contentType?: string };
@@ -276,6 +279,11 @@ export default function MailPage() {
                       <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5 }}>
                         {!m.seen && <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, flex: "none" }} />}
                         <span style={{ flex: 1, minWidth: 0, fontWeight: m.seen ? 400 : 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from}</span>
+                        {m.forwardedFrom && (
+                          <span className="pill" style={{ height: 18, fontSize: 10, padding: "0 8px", color: "var(--muted)" }} title="Arrived via auto-forwarding, rescued from spam">
+                            {FORWARDER_LABEL[m.forwardedFrom] || `via ${m.forwardedFrom}`}
+                          </span>
+                        )}
                         {m.attachments > 0 && <Paperclip size={12} style={{ color: "var(--muted)" }} />}
                         {m.needsReply && <span className="pill" style={{ height: 18, fontSize: 10, padding: "0 8px" }}>reply</span>}
                         <span className="faint" style={{ fontSize: 11.5, flex: "none" }}>{niceDate(m.date)}</span>

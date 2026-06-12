@@ -3,9 +3,15 @@ import { ImapFlow } from "imapflow";
 import nodemailer from "nodemailer";
 import type { MailCreds } from "./mailbox";
 
+// Forwarder fingerprint used by the spam-rescue branch. When a message lands
+// in the spam folder because auto-forwarding broke SPF/DKIM, we tag the source
+// provider so the UI can show "via Outlook" / "via Gmail" badges. Direct
+// (non-forwarded) mail leaves this undefined.
+export type ForwarderSource = "outlook" | "gmail" | "zoho";
 export type MailSummary = {
   uid: number; folder: string; from: string; fromEmail: string; subject: string;
   date: string; snippet: string; seen: boolean; attachments: number;
+  forwardedFrom?: ForwarderSource;
 };
 export type MailFull = MailSummary & { text: string; to: string; messageId?: string; attachmentNames: string[] };
 
@@ -55,9 +61,15 @@ async function discoverSpamFolder(client: ImapFlow): Promise<string | null> {
   } catch { return null; }
 }
 
-const FORWARDER_RE = /outlook\.com|office365\.com|protection\.outlook\.com|hotmail\.com|live\.com|microsoft\.com|zoho\.com|zoho\.eu|zoho\.in|gmail\.com|googlemail\.com/i;
-function looksForwarded(headersBlob: string | undefined): boolean {
-  return !!headersBlob && FORWARDER_RE.test(headersBlob);
+const OUTLOOK_RE = /outlook\.com|office365\.com|protection\.outlook\.com|hotmail\.com|live\.com|microsoft\.com/i;
+const GMAIL_RE = /gmail\.com|googlemail\.com/i;
+const ZOHO_RE = /zoho\.com|zoho\.eu|zoho\.in/i;
+function classifyForwarder(headersBlob: string | undefined): ForwarderSource | null {
+  if (!headersBlob) return null;
+  if (OUTLOOK_RE.test(headersBlob)) return "outlook";
+  if (GMAIL_RE.test(headersBlob)) return "gmail";
+  if (ZOHO_RE.test(headersBlob)) return "zoho";
+  return null;
 }
 function stripSpamPrefix(s: string): string {
   return (s || "").replace(/^\*{1,3}\s*SPAM\s*\*{1,3}\s*/i, "");
@@ -101,7 +113,8 @@ export async function listInbox(c: MailCreds, limit = 25): Promise<MailSummary[]
           const start = Math.max(1, box.exists - limit + 1);
           for await (const msg of client.fetch(`${start}:*`, { uid: true, envelope: true, flags: true, bodyStructure: true, headers: ["received", "x-forwarded-to", "x-forwarded-for", "x-ms-exchange-organization-originalclientipaddress", "authentication-results"] })) {
             const hdr: string = (msg as any).headers ? (msg as any).headers.toString("utf-8") : "";
-            if (!looksForwarded(hdr)) continue;
+            const forwardedFrom = classifyForwarder(hdr);
+            if (!forwardedFrom) continue; // real spam, not a broken forward — skip
             const env = msg.envelope;
             const fromAddr = env?.from?.[0];
             out.push({
@@ -113,6 +126,7 @@ export async function listInbox(c: MailCreds, limit = 25): Promise<MailSummary[]
               snippet: "",
               seen: msg.flags?.has("\\Seen") ?? false,
               attachments: countAttachments(msg.bodyStructure),
+              forwardedFrom,
             });
           }
         }

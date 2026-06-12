@@ -199,10 +199,15 @@ label.inline { display: inline-flex; text-transform: none; letter-spacing: norma
 
 /* ---------- layout: floating top nav (Nisria pattern, dark skin) ---------- */
 .appframe { min-height: 100vh; display: flex; flex-direction: column; }
-.topnav { position: sticky; top: 0; z-index: var(--z-nav); padding: 13px 26px;
+/* The outer .topnav stretches edge-to-edge for the blurred glass background to
+   reach the viewport edges. The horizontal padding lives on .topnav-inner so it
+   matches the .main content edge exactly: same max-width (1200px), same
+   horizontal padding (26px). Without this, logo + avatar sit 26px outboard of
+   where cards start, and the page looks off-axis (fixed 2026-06-12). */
+.topnav { position: sticky; top: 0; z-index: var(--z-nav); padding: 13px 0;
   background: rgba(6,6,8,0.7); backdrop-filter: blur(22px) saturate(150%); -webkit-backdrop-filter: blur(22px) saturate(150%);
   border-bottom: 1px solid rgba(255,255,255,0.07); }
-.topnav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; gap: 6px; }
+.topnav-inner { max-width: 1200px; margin: 0 auto; padding: 0 26px; display: flex; align-items: center; gap: 6px; }
 /* Brand pinned left, pills centered, search + avatar pinned right.
    The .nav-spacer flex:1 elements on either side of .navpills do the centering. */
 .topnav-inner .nav-spacer { flex: 1; }
@@ -257,6 +262,7 @@ label.inline { display: inline-flex; text-transform: none; letter-spacing: norma
   .nav-right { margin-left: auto; }
   .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
   .main { padding: 22px 16px 120px; }
+  .topnav-inner { padding: 0 16px; }
 }
 
 /* ---------- persona orb ---------- */

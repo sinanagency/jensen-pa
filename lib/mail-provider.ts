@@ -11,6 +11,9 @@ export type UMailSummary = {
   id: string; accountId: string; accountEmail: string; provider: Provider | "imap";
   from: string; fromEmail: string; subject: string; date: string; snippet: string;
   seen: boolean; attachments: number;
+  // Present when the message arrived via auto-forwarding (e.g. Outlook -> larencontre.ae)
+  // and was rescued from cPanel's spam folder. UI shows a small "via Outlook" badge.
+  forwardedFrom?: "outlook" | "gmail" | "zoho";
 };
 
 export const IMAP_ACCOUNT = "imap";
@@ -123,6 +126,7 @@ function imapToSummary(accountId: string, accountEmail: string, m: any): UMailSu
   return {
     id: packId(accountId, imapPackLocal(m.folder || "INBOX", m.uid)), accountId, accountEmail, provider: "imap",
     from: m.from, fromEmail: m.fromEmail, subject: m.subject, date: m.date, snippet: m.snippet, seen: m.seen, attachments: m.attachments,
+    forwardedFrom: m.forwardedFrom,
   };
 }
 
