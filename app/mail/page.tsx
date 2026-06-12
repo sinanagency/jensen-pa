@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Shell from "@/components/Shell";
-import { Loader2, Paperclip, Send, RefreshCw, X, ChevronLeft, Plug, Settings2 } from "lucide-react";
+import { useDB } from "@/components/useDB";
+import { uid } from "@/lib/store";
+import { Loader2, Paperclip, Send, RefreshCw, X, ChevronLeft, Plug, Settings2, CalendarPlus } from "lucide-react";
 
 // Mail surface, post-rewrite (2026-06-12). Two changes:
 //
@@ -42,6 +44,7 @@ type TriagedSummary = {
   quadrant: 1 | 2 | 3 | 4;
   summary: string;
   draft: string;
+  event?: { title: string; date: string; time?: string; note?: string; meetingUrl?: string } | null;
 };
 
 const FORWARDER_LABEL: Record<string, string> = { outlook: "via Outlook", gmail: "via Gmail", zoho: "via Zoho" };
@@ -59,8 +62,10 @@ const QUADS: { q: 1 | 2 | 3 | 4; title: string; note: string; color: string }[] 
 ];
 
 export default function MailPage() {
+  const { db, mutate } = useDB();
   const [status, setStatus] = useState<"loading" | "out" | "in">("loading");
   const [accounts, setAccounts] = useState<OAuthAccount[]>([]);
+  const [autoAdded, setAutoAdded] = useState(0);
 
   // inbox + triage
   const [msgs, setMsgs] = useState<TriagedSummary[]>([]);
@@ -100,7 +105,39 @@ export default function MailPage() {
     setLoadingList(true); setListErr("");
     const r = await fetch("/api/mail/triage").then((x) => x.json()).catch(() => ({ error: "Network error." }));
     setLoadingList(false);
-    if (r.messages) setMsgs(r.messages); else setListErr(r.error || "Could not load inbox.");
+    if (r.messages) { setMsgs(r.messages); harvestEvents(r.messages); }
+    else setListErr(r.error || "Could not load inbox.");
+  }
+
+  // Auto-extract meetings from triaged mail. The triage step already pulls
+  // {title, date, time, note, meetingUrl} from each row that contains a
+  // concrete scheduled event. Here we dedupe-add those into db.events so
+  // Jensen's calendar reflects his inbox without him touching anything.
+  // Dedupe key is the source message id (one event per source). digitalUStatus
+  // starts 'queued' so the DigitalU pipeline can pick it up once wired.
+  function harvestEvents(items: TriagedSummary[]) {
+    if (!db) return;
+    const existing = new Set(db.events.map((e) => e.sourceMessageId).filter(Boolean) as string[]);
+    let added = 0;
+    mutate((d) => {
+      for (const m of items) {
+        if (!m.event || !m.event.date || !m.event.title) continue;
+        if (existing.has(m.id)) continue;
+        d.events.push({
+          id: uid(),
+          title: m.event.title,
+          date: m.event.date,
+          time: m.event.time,
+          note: m.event.note || (m.from ? `From ${m.from}` : undefined),
+          sourceMessageId: m.id,
+          meetingUrl: m.event.meetingUrl,
+          digitalUStatus: m.event.meetingUrl ? "queued" : "skipped",
+          createdAt: Date.now(),
+        });
+        added++;
+      }
+    });
+    if (added > 0) setAutoAdded(added);
   }
 
   async function openMsg(s: TriagedSummary) {
@@ -255,6 +292,12 @@ export default function MailPage() {
         </div>
       )}
 
+      {autoAdded > 0 && (
+        <div className="pill accent" style={{ marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <CalendarPlus size={13} /> Added {autoAdded} meeting{autoAdded === 1 ? "" : "s"} to your calendar
+        </div>
+      )}
+
       {!open && (
         <div className="mail-quads fade-up">
           {loadingList && msgs.length === 0 && <div className="muted" style={{ padding: 20 }}>Reading both inboxes…</div>}
@@ -285,6 +328,7 @@ export default function MailPage() {
                           </span>
                         )}
                         {m.attachments > 0 && <Paperclip size={12} style={{ color: "var(--muted)" }} />}
+                        {m.event && <span className="pill" style={{ height: 18, fontSize: 10, padding: "0 8px", color: "var(--purple-2)" }} title={`Added to calendar: ${m.event.date}${m.event.time ? ` ${m.event.time}` : ""}`}><CalendarPlus size={10} /> meeting</span>}
                         {m.needsReply && <span className="pill" style={{ height: 18, fontSize: 10, padding: "0 8px" }}>reply</span>}
                         <span className="faint" style={{ fontSize: 11.5, flex: "none" }}>{niceDate(m.date)}</span>
                       </div>
@@ -344,15 +388,20 @@ export default function MailPage() {
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
         .mailrow:hover{background:var(--glass-2)!important}
-        .mail-quads{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-        .quad-mail{padding:16px}
-        .quad-mail .quad-top{display:flex;align-items:flex-start;gap:11px;margin-bottom:8px}
+        /* 4 equal blocks, same shape as Today: 2x2 grid, rows equal-height, each
+           card scrolls internally when its quadrant overflows. Mirrors the Today
+           page quadrant feel — same density, same rhythm. */
+        .mail-quads{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:14px;min-height:calc(100vh - 320px)}
+        .quad-mail{padding:18px;display:flex;flex-direction:column;min-height:380px;overflow:hidden}
+        .quad-mail .quad-top{display:flex;align-items:flex-start;gap:11px;margin-bottom:8px;flex:none}
         .quad-mail .quad-dot{width:10px;height:10px;border-radius:50%;margin-top:5px;flex:none;box-shadow:0 0 12px currentColor}
         .quad-mail .quad-title{font-size:15px;font-weight:600}
         .quad-mail .quad-note{font-size:11.5px;color:var(--faint);margin-top:1px}
         .quad-mail .quad-count{font-family:var(--font-display);font-size:22px;line-height:1}
-        .quad-mail .quad-list{display:flex;flex-direction:column}
-        @media(max-width:900px){.mail-quads{grid-template-columns:1fr}}
+        .quad-mail .quad-list{display:flex;flex-direction:column;flex:1;overflow-y:auto;margin:0 -8px;padding:0 8px}
+        .quad-mail .quad-list::-webkit-scrollbar{width:6px}
+        .quad-mail .quad-list::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
+        @media(max-width:900px){.mail-quads{grid-template-columns:1fr;min-height:0}.quad-mail{min-height:280px}}
       `}</style>
     </Shell>
   );

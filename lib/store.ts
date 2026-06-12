@@ -54,6 +54,8 @@ export type FinanceRecord = {
   createdAt: number;
 };
 
+export type DigitalUStatus = "queued" | "dispatched" | "attended" | "failed" | "skipped";
+
 export type CalEvent = {
   id: string;
   title: string;
@@ -61,6 +63,9 @@ export type CalEvent = {
   date: string; // ISO date
   time?: string;
   note?: string;
+  sourceMessageId?: string;   // when the event was auto-extracted from a mail row
+  meetingUrl?: string;        // Zoom/Meet/Teams link if present, used by DigitalU dispatch
+  digitalUStatus?: DigitalUStatus; // attendance plan for the meeting bot
   createdAt: number;
 };
 

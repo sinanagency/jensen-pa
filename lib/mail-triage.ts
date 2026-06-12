@@ -9,7 +9,7 @@ import { kvGet, kvSet } from "./db";
 import type { UMailSummary } from "./mail-provider";
 
 export type Quadrant = 1 | 2 | 3 | 4;
-export type EmailEvent = { title: string; date: string; time?: string; note?: string };
+export type EmailEvent = { title: string; date: string; time?: string; note?: string; meetingUrl?: string };
 export type Triage = {
   important: boolean;
   urgent: boolean;
@@ -134,7 +134,7 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
     `- needsReply: TRUE if a real human is expecting a written reply from him. FALSE for automated mail.`,
     `- summary: max 14 words, plain, what it is and what is wanted (or "Newsletter from <vendor>" / "Auto-receipt <vendor>" for noise).`,
     `- draft: ONLY if needsReply=true. 1-2 sentences, warm, professional, FIRST PERSON as Jensen. Never use dash characters (no -, no —, no –); use commas or periods. If !needsReply, return "".`,
-    `- event: ONLY for a SPECIFIC scheduled meeting/booking/event with a CONCRETE YYYY-MM-DD date. Otherwise null. Never invent dates. Never resolve "next week" or "Q3" into a date.`,
+    `- event: ONLY for a SPECIFIC scheduled meeting/booking/event with a CONCRETE YYYY-MM-DD date. Otherwise null. Never invent dates. Never resolve "next week" or "Q3" into a date. Include meetingUrl if the preview shows a Zoom/Meet/Teams/Whereby link (full URL, http or https), else omit. Shape: {"title":"...", "date":"YYYY-MM-DD", "time":"HH:MM"|null, "note":"...", "meetingUrl":"https://..."|null}.`,
     ``,
     `Quadrant = (important ? 1 : 3) when urgent, else (important ? 2 : 4). Computed automatically from important + urgent — do NOT return quadrant directly.`,
     ``,
@@ -171,11 +171,13 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
       let event: EmailEvent | null = null;
       const ev = o.event;
       if (ev && typeof ev === "object" && typeof ev.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ev.date) && ev.title) {
+        const url = typeof ev.meetingUrl === "string" && /^https?:\/\//i.test(ev.meetingUrl) ? ev.meetingUrl.slice(0, 500) : undefined;
         event = {
           title: String(ev.title).slice(0, 120),
           date: ev.date,
           time: typeof ev.time === "string" && /^\d{1,2}:\d{2}$/.test(ev.time) ? ev.time : undefined,
           note: ev.note ? String(ev.note).slice(0, 160) : undefined,
+          meetingUrl: url,
         };
       }
       out[String(o.id)] = {

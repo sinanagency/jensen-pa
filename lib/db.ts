@@ -32,8 +32,8 @@ const fromTask = (t: Task) => ({ id: t.id, title: t.title, entity_id: t.entityId
 const toFinance = (r: any): FinanceRecord => ({ id: r.id, entityId: r.entity_id ?? undefined, kind: r.kind, amount: Number(r.amount), vatApplies: r.vat_applies, label: r.label, date: r.date, source: r.source ?? undefined, receiptUrl: r.receipt_url ?? undefined, createdAt: Number(r.created_at) });
 const fromFinance = (f: FinanceRecord) => ({ id: f.id, entity_id: f.entityId ?? null, kind: f.kind, amount: f.amount, vat_applies: !!f.vatApplies, label: f.label, date: f.date, source: f.source ?? "manual", receipt_url: f.receiptUrl ?? null, created_at: f.createdAt });
 
-const toEvent = (r: any): CalEvent => ({ id: r.id, title: r.title, entityId: r.entity_id ?? undefined, date: r.date, time: r.time ?? undefined, note: r.note ?? undefined, createdAt: Number(r.created_at) });
-const fromEvent = (e: CalEvent) => ({ id: e.id, title: e.title, entity_id: e.entityId ?? null, date: e.date, time: e.time ?? null, note: e.note ?? null, created_at: e.createdAt });
+const toEvent = (r: any): CalEvent => ({ id: r.id, title: r.title, entityId: r.entity_id ?? undefined, date: r.date, time: r.time ?? undefined, note: r.note ?? undefined, sourceMessageId: r.source_message_id ?? undefined, meetingUrl: r.meeting_url ?? undefined, digitalUStatus: r.digital_u_status ?? undefined, createdAt: Number(r.created_at) });
+const fromEvent = (e: CalEvent) => ({ id: e.id, title: e.title, entity_id: e.entityId ?? null, date: e.date, time: e.time ?? null, note: e.note ?? null, source_message_id: e.sourceMessageId ?? null, meeting_url: e.meetingUrl ?? null, digital_u_status: e.digitalUStatus ?? null, created_at: e.createdAt });
 
 const toNote = (r: any): Note => ({ id: r.id, kind: r.kind, title: r.title ?? undefined, body: r.body, url: r.url ?? undefined, entityId: r.entity_id ?? undefined, pinned: r.pinned ?? undefined, createdAt: Number(r.created_at) });
 const fromNote = (n: Note) => ({ id: n.id, kind: n.kind, title: n.title ?? null, body: n.body, url: n.url ?? null, entity_id: n.entityId ?? null, pinned: !!n.pinned, created_at: n.createdAt });
@@ -47,11 +47,11 @@ const fromContact = (c: Contact) => ({ id: c.id, name: c.name, company: c.compan
 // bundles (the realtime client init misbehaves when bundled alongside imapflow/
 // nodemailer), while a raw REST read of the identical row returns correctly. kv
 // backs auth accounts, mailboxes and prefs, so it must be deterministic.
-function sbHeaders(): Record<string, string> {
+export function sbHeaders(): Record<string, string> {
   const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SECRET_KEY || "";
   return { apikey: key, Authorization: `Bearer ${key}`, "content-type": "application/json" };
 }
-function sbRest(path: string): string {
+export function sbRest(path: string): string {
   return `${process.env.SUPABASE_URL}/rest/v1/${path}`;
 }
 
