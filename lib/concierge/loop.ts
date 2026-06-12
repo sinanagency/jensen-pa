@@ -14,7 +14,7 @@ import { dubaiNow, dayPart } from "../time";
 const API = "https://api.anthropic.com/v1/messages";
 
 export type Turn = { role: "user" | "assistant"; content: any };
-export type Sender = { name: string; role: "owner" | "admin" };
+export type Sender = { name: string; role: "owner" | "admin" | "developer" };
 
 // Single-turn transition prompt: fires on Jensen's first inbound after Taona
 // graduated him out of training mode. Says "I can do tasks now, still learning

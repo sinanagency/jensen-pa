@@ -30,6 +30,8 @@ This project obeys JENSEN-DOCTRINE (the nine laws below). Before any change, rea
 
 9. Single-tenant law. Jensen is La Rencontre only. No cross-tenant data. No "if brand X" branches. When this productizes into Sasa, the multi-tenant boundary is built fresh; this codebase stays single-tenant until then.
 
+10. Test-mode law. Every bot in the fleet recognises Taona as the `developer` role (whoIs defaults + OWNER_PROFILES override). Test traffic NEVER lands on the owner's phone and NEVER persists. The mechanism is `opts.dev === true` on sendTextAndLog: reroutes the send to `devPhone()` and skips chat_messages + audit inserts. Guards/dash-strip still run so dev sees what the prod path would have sent. The smoke harness is `scripts/dev-ping.mjs`. No `TEST_MODE` env flag, no "from Taona's number = test" inference, no separate side-door function. One chokepoint, documented dev branch. This pattern propagates to every new bot we build.
+
 ## The canonical files
 
 JENSEN-DOCTRINE in this CLAUDE.md (the constitution).
