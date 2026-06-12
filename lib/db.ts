@@ -23,8 +23,8 @@ export function isConfigured(): boolean {
 }
 
 // ---- row <-> app mappers (snake_case db <-> camelCase app) ----
-const toEntity = (r: any): Entity => ({ id: r.id, kind: r.kind, name: r.name, subtitle: r.subtitle ?? undefined, status: r.status ?? undefined, notes: r.notes ?? undefined, createdAt: Number(r.created_at) });
-const fromEntity = (e: Entity) => ({ id: e.id, kind: e.kind, name: e.name, subtitle: e.subtitle ?? null, status: e.status ?? null, notes: e.notes ?? null, created_at: e.createdAt });
+const toEntity = (r: any): Entity => ({ id: r.id, kind: r.kind, name: r.name, subtitle: r.subtitle ?? undefined, status: r.status ?? undefined, notes: r.notes ?? undefined, parentId: r.parent_id ?? undefined, role: r.role ?? undefined, createdAt: Number(r.created_at) });
+const fromEntity = (e: Entity) => ({ id: e.id, kind: e.kind, name: e.name, subtitle: e.subtitle ?? null, status: e.status ?? null, notes: e.notes ?? null, parent_id: e.parentId ?? null, role: e.role ?? null, created_at: e.createdAt });
 
 const toTask = (r: any): Task => ({ id: r.id, title: r.title, entityId: r.entity_id ?? undefined, quadrant: r.quadrant, done: r.done, due: r.due ?? undefined, createdAt: Number(r.created_at) });
 const fromTask = (t: Task) => ({ id: t.id, title: t.title, entity_id: t.entityId ?? null, quadrant: t.quadrant, done: !!t.done, due: t.due ?? null, created_at: t.createdAt });

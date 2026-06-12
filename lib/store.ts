@@ -7,7 +7,9 @@
 
 import { cosine } from "./openai";
 
-export type EntityKind = "venue" | "client" | "event";
+export type EntityKind = "brand" | "venue" | "client" | "event";
+export type EntityRole = "inhouse" | "retainer";
+
 export type Entity = {
   id: string;
   kind: EntityKind;
@@ -15,6 +17,8 @@ export type Entity = {
   subtitle?: string;
   status?: string;
   notes?: string;
+  parentId?: string; // when set, this entity is a child (venue/event under a brand)
+  role?: EntityRole; // 'inhouse' = his own brand, 'retainer' = client work — only on top-level brands
   createdAt: number;
 };
 
