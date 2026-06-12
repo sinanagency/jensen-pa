@@ -200,9 +200,10 @@ export function isOwner(from: string): boolean {
 }
 
 // Identity: who is this number? Jensen is the principal the concierge serves;
-// Taona is the admin/architect who built and oversees it. Override via
-// OWNER_PROFILES env (JSON keyed by digits) if numbers change.
-export type Sender = { name: string; role: "owner" | "admin" };
+// Taona is the developer who built and oversees the fleet. Developer role is a
+// standing identity across every bot we build (Law 10 / test-mode). Override
+// via OWNER_PROFILES env (JSON keyed by digits) if numbers change.
+export type Sender = { name: string; role: "owner" | "admin" | "developer" };
 export function whoIs(from: string): Sender {
   const d = (from || "").replace(/[^0-9]/g, "");
   try {
@@ -211,7 +212,23 @@ export function whoIs(from: string): Sender {
   } catch { /* fall through to defaults */ }
   const defaults: Record<string, Sender> = {
     "971528902032": { name: "Jensen", role: "owner" },
-    "971501168462": { name: "Taona", role: "admin" },
+    "971501168462": { name: "Taona", role: "developer" },
   };
   return defaults[d] || { name: "Jensen", role: "owner" };
+}
+
+// Developer phone (E.164 digits, no plus). Resolved from whoIs defaults +
+// OWNER_PROFILES override. Used by the test-mode branch of the chokepoint to
+// reroute test sends away from the owner. Returns null if no developer is
+// configured, so callers can fail loudly instead of silently spamming Jensen.
+export function devPhone(): string | null {
+  try {
+    const profiles = process.env.OWNER_PROFILES ? JSON.parse(process.env.OWNER_PROFILES) : null;
+    if (profiles) {
+      for (const [digits, sender] of Object.entries(profiles as Record<string, Sender>)) {
+        if (sender?.role === "developer") return digits;
+      }
+    }
+  } catch { /* fall through */ }
+  return "971501168462";
 }

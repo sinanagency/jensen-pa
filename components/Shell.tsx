@@ -29,12 +29,14 @@ const PILLS = [
 // at the real /docs page (was /brain, which is the bot's memory of facts).
 // Journal folded into Notes (same store, kind filter). Meetings stays — own UX.
 const GROUPS = [
+  // Operate = the daily-work surfaces. Money, time, sales. Contacts dropped
+  // at operator request 2026-06-12 (manual contact entry is not a workflow
+  // Jensen will ever use; people will surface implicitly via mail + chat).
   { group: "Operate", items: [
     { href: "/tasks", label: "Tasks", icon: "tasks" },
     { href: "/calendar", label: "Calendar", icon: "calendar" },
     { href: "/finance", label: "Finance", icon: "finance" },
     { href: "/invoice", label: "Invoice", icon: "invoice" },
-    { href: "/contacts", label: "Contacts", icon: "contacts" },
     { href: "/shopify", label: "Store", icon: "store" },
   ]},
   { group: "Studio", items: [

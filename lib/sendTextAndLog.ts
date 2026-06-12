@@ -11,18 +11,28 @@
 // reaskPhrase and the catch is logged for engineering review. The wall is
 // in code; the rules are in lib/bot/guards-config.ts.
 
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { sendWhatsApp, devPhone } from "@/lib/whatsapp";
 import { admin } from "@/lib/db";
 import { sanitizeReply } from "@/lib/bot-guards/index.js";
 import { JENSEN_BOT_GUARDS_CONFIG } from "@/lib/bot/guards-config";
 
+// Law 10 (test-mode) branch: opts.dev === true reroutes the message to the
+// developer phone and SKIPS chat_messages + audit inserts. Test traffic never
+// pollutes Jensen's transcript or lands on Jensen's WhatsApp. Guards still run
+// so dev sees the same sanitised output the prod path would have produced.
 export async function sendTextAndLog(
   to: string,
   body: string,
-  opts?: { force?: boolean; party?: string }
+  opts?: { force?: boolean; party?: string; dev?: boolean }
 ): Promise<{ ok: boolean }> {
   const sanitized = sanitizeReply(body, JENSEN_BOT_GUARDS_CONFIG);
   const sendBody = sanitized.body;
+  if (opts?.dev) {
+    const target = devPhone();
+    if (!target) return { ok: false };
+    const ok = await sendWhatsApp(target, `[DEV] ${sendBody}`, { force: true });
+    return { ok };
+  }
   await admin().from("chat_messages").insert({
     role: "assistant",
     content: sendBody,
