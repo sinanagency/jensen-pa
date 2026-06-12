@@ -1,43 +1,43 @@
-// Pull readable text out of an uploaded file's raw bytes. PDF via unpdf, Word via
-// mammoth, spreadsheets via SheetJS, plain text directly. Adapted from the Nisria
-// platform's extractTextFromBuffer. Returns clean text or null (images/scans have
-// no text layer and are handled by vision OCR upstream). Never throws.
+// Pull readable text out of an uploaded file's raw bytes. Thin Jensen adapter
+// over @sinanagency/intake's extractTextFromBuffer primitive (PDF via unpdf,
+// Word via mammoth, spreadsheets via SheetJS, plain text directly).
+//
+// Signature preserved: the third arg is still `name` (used as a filename
+// extension fallback when the MIME header is missing or generic — common for
+// WhatsApp Cloud document uploads where mime arrives as
+// application/octet-stream). Intake only sniffs the MIME, so we normalise it
+// here from the extension before handing off. Images/scans have no text layer
+// and remain handled by vision OCR upstream. Never throws.
 
+import { extractTextFromBuffer as intakeExtract } from "./intake/index.js";
+
+const PDF = "application/pdf";
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const DOC = "application/msword";
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-const MAX = 200_000;
+const XLS = "application/vnd.ms-excel";
+const CSV = "text/csv";
+const TXT = "text/plain";
 
-export async function extractTextFromBuffer(buf: Buffer | Uint8Array, mime: string, name = ""): Promise<string | null> {
-  try {
-    const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
-    const lower = name.toLowerCase();
-    if (mime === "application/pdf" || lower.endsWith(".pdf")) {
-      const { extractText, getDocumentProxy } = await import("unpdf");
-      const pdf = await getDocumentProxy(new Uint8Array(b));
-      const { text } = await extractText(pdf, { mergePages: true });
-      return clean(Array.isArray(text) ? text.join("\n") : text);
-    }
-    if (mime === DOCX || mime === "application/msword" || lower.endsWith(".docx")) {
-      const mammoth: any = (await import("mammoth")).default || (await import("mammoth"));
-      const { value } = await mammoth.extractRawText({ buffer: b });
-      return clean(value);
-    }
-    if (mime === XLSX_MIME || mime === "application/vnd.ms-excel" || mime === "text/csv" || lower.endsWith(".xlsx") || lower.endsWith(".csv")) {
-      const XLSX: any = await import("xlsx");
-      const wb = XLSX.read(b, { type: "buffer" });
-      const txt = wb.SheetNames.map((n: string) => `# ${n}\n` + XLSX.utils.sheet_to_csv(wb.Sheets[n])).join("\n\n");
-      return clean(txt);
-    }
-    if (mime.startsWith("text/") || mime === "application/json") {
-      return clean(b.toString("utf8"));
-    }
-    return null;
-  } catch {
-    return null;
-  }
+function normaliseMime(mime: string, name: string): string {
+  const m = (mime || "").toLowerCase();
+  const lower = (name || "").toLowerCase();
+  // Trust explicit MIME first.
+  if (m === PDF || m === DOCX || m === DOC || m === XLSX_MIME || m === XLS || m === CSV) return m;
+  if (m.startsWith("text/") || m === "application/json") return m;
+  // Fall back to the filename extension (WhatsApp documents often arrive as
+  // application/octet-stream).
+  if (lower.endsWith(".pdf")) return PDF;
+  if (lower.endsWith(".docx")) return DOCX;
+  if (lower.endsWith(".doc")) return DOC;
+  if (lower.endsWith(".xlsx")) return XLSX_MIME;
+  if (lower.endsWith(".xls")) return XLS;
+  if (lower.endsWith(".csv")) return CSV;
+  if (lower.endsWith(".txt") || lower.endsWith(".md")) return TXT;
+  return m || "application/octet-stream";
 }
 
-function clean(s: string): string {
-  const t = (s || "").replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  return t.length > MAX ? t.slice(0, MAX) + "\n\n[…truncated]" : t;
+export async function extractTextFromBuffer(buf: Buffer | Uint8Array, mime: string, name = ""): Promise<string | null> {
+  const normalised = normaliseMime(mime, name);
+  return intakeExtract(buf, normalised);
 }
