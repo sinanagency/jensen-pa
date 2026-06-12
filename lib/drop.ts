@@ -22,7 +22,7 @@ function fileToBase64(file: File): Promise<string> {
 const today = () => new Date().toISOString().slice(0, 10);
 
 // Apply a triage result to the store. Returns the concierge summary line.
-function apply(tri: any, mutate: Mutate, fallbackTitle: string): string {
+function apply(tri: any, mutate: Mutate, fallbackTitle: string, receiptPath?: string): string {
   switch (tri.destination) {
     case "finance":
       if (tri.finance) {
@@ -30,7 +30,10 @@ function apply(tri: any, mutate: Mutate, fallbackTitle: string): string {
         mutate((d) => d.finance.push({
           id: uid(), kind: f.kind === "income" ? "income" : "expense",
           amount: Number(f.amount) || 0, vatApplies: !!f.vatApplies,
-          label: f.label || f.vendor || fallbackTitle, date: f.date || today(), createdAt: Date.now(),
+          label: f.label || f.vendor || fallbackTitle, date: f.date || today(),
+          source: receiptPath ? "receipt" : "manual",
+          receiptUrl: receiptPath || undefined,
+          createdAt: Date.now(),
         }));
       }
       break;
@@ -63,14 +66,29 @@ function apply(tri: any, mutate: Mutate, fallbackTitle: string): string {
   return tri.summary || "I filed that for you.";
 }
 
-// Ingest a single file end to end.
+// Ingest a single file end to end. Receipt-class files (PDF + images) are also
+// uploaded to the receipts bucket in PARALLEL with the text extraction, so the
+// finance row can carry a clickable link back to the source.
+const RECEIPT_MIMES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"]);
+
 export async function dropFile(file: File, mutate: Mutate): Promise<DropResult> {
   try {
     const dataBase64 = await fileToBase64(file);
-    const ing = await fetch("/api/ingest-file", {
+
+    // Fire ingest (slow: extract + embed) and storage upload in parallel.
+    const ingestP = fetch("/api/ingest-file", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ filename: file.name, mime: file.type, dataBase64 }),
     }).then((r) => r.json());
+
+    const uploadP: Promise<{ path?: string }> = RECEIPT_MIMES.has(file.type)
+      ? fetch("/api/finance/upload-receipt", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ filename: file.name, mime: file.type, dataBase64 }),
+        }).then((r) => r.json()).catch(() => ({}))
+      : Promise.resolve({});
+
+    const [ing, up] = await Promise.all([ingestP, uploadP]);
     if (ing.error) return { ok: false, summary: "", error: ing.error };
 
     const tri = await fetch("/api/triage", {
@@ -80,7 +98,11 @@ export async function dropFile(file: File, mutate: Mutate): Promise<DropResult> 
     // Never report fake success: if triage failed, surface it (mirror dropText).
     if (tri?.error) return { ok: false, summary: "", error: tri.error };
 
-    const summary = apply(tri, mutate, ing.title);
+    // Only carry the receipt path into the finance row if triage actually routed
+    // this to finance — otherwise the storage upload is orphaned (harmless), and
+    // the file still lives in the docs brain via addDoc below.
+    const receiptPath = tri.destination === "finance" ? up.path : undefined;
+    const summary = apply(tri, mutate, ing.title, receiptPath);
 
     // Always keep the source in the document brain so it is searchable later.
     try {

@@ -6,7 +6,7 @@ import { useDB } from "@/components/useDB";
 import { FinanceRecord, uid } from "@/lib/store";
 import { UAE_TAX, vatFromNet, corporateTax, aed } from "@/lib/tax";
 import { dropFile } from "@/lib/drop";
-import { Plus, Trash2, TrendingUp, TrendingDown, Receipt, Upload, Loader2, CheckCircle2, RefreshCw, BarChart3 } from "lucide-react";
+import { Plus, Trash2, TrendingUp, TrendingDown, Receipt, Upload, Loader2, CheckCircle2, RefreshCw, BarChart3, Paperclip } from "lucide-react";
 
 export default function FinancePage() {
   const { db, mutate } = useDB();
@@ -347,6 +347,18 @@ export default function FinancePage() {
                       <span className="pill accent" style={{ fontSize: 11, height: 22 }}>
                         VAT {aed(vatAmt)}
                       </span>
+                    )}
+                    {record.receiptUrl && (
+                      <a
+                        href={`/api/finance/receipt?path=${encodeURIComponent(record.receiptUrl)}`}
+                        target="_blank"
+                        rel="noopener"
+                        className="pill"
+                        style={{ fontSize: 11, height: 22, display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}
+                        title="Open the original file"
+                      >
+                        <Paperclip size={11} /> Receipt
+                      </a>
                     )}
                   </div>
                 </div>

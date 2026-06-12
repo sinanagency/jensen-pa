@@ -39,6 +39,8 @@ export type BrainDoc = {
   createdAt: number;
 };
 
+export type FinanceSource = "manual" | "receipt" | "recurring";
+
 export type FinanceRecord = {
   id: string;
   entityId?: string;
@@ -47,6 +49,8 @@ export type FinanceRecord = {
   vatApplies: boolean;
   label: string;
   date: string;
+  source?: FinanceSource; // 'receipt' when the row came from a dropped file
+  receiptUrl?: string;    // Supabase Storage path (not a URL) for receipt source
   createdAt: number;
 };
 

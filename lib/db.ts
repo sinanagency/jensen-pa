@@ -29,8 +29,8 @@ const fromEntity = (e: Entity) => ({ id: e.id, kind: e.kind, name: e.name, subti
 const toTask = (r: any): Task => ({ id: r.id, title: r.title, entityId: r.entity_id ?? undefined, quadrant: r.quadrant, done: r.done, due: r.due ?? undefined, createdAt: Number(r.created_at) });
 const fromTask = (t: Task) => ({ id: t.id, title: t.title, entity_id: t.entityId ?? null, quadrant: t.quadrant, done: !!t.done, due: t.due ?? null, created_at: t.createdAt });
 
-const toFinance = (r: any): FinanceRecord => ({ id: r.id, entityId: r.entity_id ?? undefined, kind: r.kind, amount: Number(r.amount), vatApplies: r.vat_applies, label: r.label, date: r.date, createdAt: Number(r.created_at) });
-const fromFinance = (f: FinanceRecord) => ({ id: f.id, entity_id: f.entityId ?? null, kind: f.kind, amount: f.amount, vat_applies: !!f.vatApplies, label: f.label, date: f.date, created_at: f.createdAt });
+const toFinance = (r: any): FinanceRecord => ({ id: r.id, entityId: r.entity_id ?? undefined, kind: r.kind, amount: Number(r.amount), vatApplies: r.vat_applies, label: r.label, date: r.date, source: r.source ?? undefined, receiptUrl: r.receipt_url ?? undefined, createdAt: Number(r.created_at) });
+const fromFinance = (f: FinanceRecord) => ({ id: f.id, entity_id: f.entityId ?? null, kind: f.kind, amount: f.amount, vat_applies: !!f.vatApplies, label: f.label, date: f.date, source: f.source ?? "manual", receipt_url: f.receiptUrl ?? null, created_at: f.createdAt });
 
 const toEvent = (r: any): CalEvent => ({ id: r.id, title: r.title, entityId: r.entity_id ?? undefined, date: r.date, time: r.time ?? undefined, note: r.note ?? undefined, createdAt: Number(r.created_at) });
 const fromEvent = (e: CalEvent) => ({ id: e.id, title: e.title, entity_id: e.entityId ?? null, date: e.date, time: e.time ?? null, note: e.note ?? null, created_at: e.createdAt });
