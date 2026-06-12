@@ -34,7 +34,6 @@ const GROUPS = [
     { href: "/tasks", label: "Tasks", icon: "tasks" },
     { href: "/calendar", label: "Calendar", icon: "calendar" },
     { href: "/finance", label: "Finance", icon: "finance" },
-    { href: "/contacts", label: "People", icon: "contacts" },
     { href: "/invoice", label: "Invoice", icon: "invoice" },
     { href: "/shopify", label: "Store", icon: "store" },
   ]},
