@@ -2,7 +2,35 @@
 // so it works on Node 20 and Vercel alike. One row per call. Server-only.
 
 import { sbSelect, sbInsert, sbUpsert, sbUpdate, sbDelete, enc } from "./rest";
-import { dubaiToday } from "../time";
+import { dubaiToday, dubaiHHMM } from "../time";
+
+// Tag each calendar row with a derived status so the LLM never has to compare
+// time strings against "now" when rendering Jensen's board. Past items must
+// never be rendered as upcoming (bug repro 2026-06-12 11:47: "10:35 Call to
+// set driving test" rendered as if it were still coming up). Field is the
+// source of truth — model is told (in loop.ts) to trust `status` and not
+// recompute. NOW_WINDOW_MIN keeps items within the next hour highlighted as
+// live so Jensen sees what is happening this minute.
+const NOW_WINDOW_MIN = 60;
+type EventStatus = "past" | "now" | "upcoming";
+function tagEventStatus(row: any, today: string, nowHHMM: string): any {
+  const d: string = row.date || "";
+  const t: string = row.time || "";
+  let status: EventStatus = "upcoming";
+  if (d && d < today) status = "past";
+  else if (d && d > today) status = "upcoming";
+  else if (d === today) {
+    if (!t) status = "upcoming";
+    else if (t < nowHHMM) status = "past";
+    else {
+      const [nh, nm] = nowHHMM.split(":").map(Number);
+      const [eh, em] = t.split(":").map(Number);
+      const diff = (eh * 60 + em) - (nh * 60 + nm);
+      status = diff >= 0 && diff <= NOW_WINDOW_MIN ? "now" : "upcoming";
+    }
+  }
+  return { ...row, status };
+}
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -85,7 +113,10 @@ export async function queryCalendar(f: { from?: string; to?: string; entityId?: 
   if (f.from) qs += `&date=gte.${enc(f.from)}`;
   if (f.to) qs += `&date=lte.${enc(f.to)}`;
   if (f.entityId) qs += `&entity_id=eq.${enc(f.entityId)}`;
-  return sbSelect("events", qs);
+  const rows = await sbSelect<any>("events", qs);
+  const today = dubaiToday();
+  const nowHHMM = dubaiHHMM();
+  return rows.map((r: any) => tagEventStatus(r, today, nowHHMM));
 }
 export async function createEvent(i: { title: string; date: string; time?: string; entityId?: string; note?: string }) {
   // Soft-dedup: same title on the same date is the same event, not a copy.

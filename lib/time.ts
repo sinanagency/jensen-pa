@@ -24,6 +24,12 @@ export function dubaiHour(): number {
   return Number(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", hour12: false }).format(new Date()));
 }
 
+// "HH:MM" in Dubai, 24-hour. Used by queryCalendar to tag each row past/now/upcoming
+// so the LLM never has to do clock math against raw event times.
+export function dubaiHHMM(): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+}
+
 export function dayPart(): "morning" | "afternoon" | "evening" | "night" {
   const h = dubaiHour();
   if (h < 5) return "night";

@@ -70,4 +70,17 @@ If there's another mailbox you want me handling, your personal one, an Upaya one
 So the work continues. I just won't fully be myself for you until I finish reading.`,
 ] as const;
 
-export const COMPLETION_BUBBLE_PENDING = true; // drafted later, after we see what specifically the bot can do that it couldn't before.
+export const COMPLETION_BUBBLE_PENDING = false; // shipped 2026-06-12 as COMPLETION_BUBBLES below.
+
+// Training-complete bubble. Fired once Jensen has been operating the bot in
+// active mode (already onboarded, already using it daily) so the message
+// closes the training arc without re-introducing capability. Doctrine: Law 1
+// first person, Law 5 no em-dashes, Law 2 sendTextAndLog chokepoint.
+export const COMPLETION_PAUSE_MS_BETWEEN_BUBBLES = 2500;
+export const COMPLETION_BUBBLES = [
+  `Jensen, quick one.
+
+I'm done with my training. You'll feel it from here in how I understand you and how I come back to you.
+
+Carry on, I'll keep up.`,
+] as const;
