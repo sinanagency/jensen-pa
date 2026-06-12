@@ -1,5 +1,18 @@
-// Claude brain for La Rencontre. Raw fetch (no SDK), with prompt caching on the
-// system prompt so the grounded persona + context are cheap across a conversation.
+// Claude brain for La Rencontre. Thin Jensen adapters over the brain-core
+// runClaude primitive. Jensen supplies its own API key (ANTHROPIC_API_KEY) and
+// its own model ids (OPUS 4.8, SONNET 4.6). brain-core owns the wire format,
+// prompt caching, and 429/529 backoff. We keep every existing exported function
+// signature so callers don't break.
+//
+// Temperature note. brain-core's runClaude does not pass `temperature` in its
+// request body today. Several Jensen callers depend on a non-default temperature
+// (mail-triage at 0 for deterministic JSON, invoice/generate/brief in the 0.3-0.6
+// band for warmth). When `opts.temperature` is set, we fall back to inline fetch
+// so behavior is preserved. When it's omitted, we go through runClaude and pick
+// up caching + 429/529 backoff for free. Streaming stays inline (brain-core
+// ships non-streaming today).
+
+import { runClaude } from "./brain-core/index.js";
 
 const API = "https://api.anthropic.com/v1/messages";
 export const OPUS = "claude-opus-4-8";
@@ -26,8 +39,9 @@ type CallOpts = {
   temperature?: number;
 };
 
-// Non-streaming. Returns the text. Caches the system block.
-export async function askClaude(opts: CallOpts): Promise<string> {
+// Inline non-streaming fallback for callers that need an explicit temperature.
+// Same wire shape as brain-core's runClaude minus the cached tools array.
+async function inlineAsk(opts: CallOpts): Promise<string> {
   const res = await fetch(API, {
     method: "POST",
     headers: {
@@ -38,7 +52,7 @@ export async function askClaude(opts: CallOpts): Promise<string> {
     body: JSON.stringify({
       model: opts.model || SONNET,
       max_tokens: opts.maxTokens ?? 1500,
-      temperature: opts.temperature ?? 0.4,
+      temperature: opts.temperature,
       system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
       messages: opts.messages,
     }),
@@ -51,27 +65,40 @@ export async function askClaude(opts: CallOpts): Promise<string> {
   return (data?.content?.[0]?.text || "").trim();
 }
 
+// Non-streaming. Returns the text. Routes through brain-core's runClaude
+// (prompt cache + 429/529 backoff) when temperature is unset; falls back to
+// inline fetch when a caller pins temperature.
+export async function askClaude(opts: CallOpts): Promise<string> {
+  if (typeof opts.temperature === "number") return inlineAsk(opts);
+  const data = await runClaude({
+    model: opts.model || SONNET,
+    anthropicKey: key(),
+    system: opts.system,
+    messages: opts.messages,
+    tools: [],
+    maxTokens: opts.maxTokens ?? 1500,
+  });
+  return (data?.content?.[0]?.text || "").trim();
+}
+
 // Vision OCR: read an image (a photographed or scanned invoice, a menu, a card)
 // into clean text so it can live in the document brain. Returns "" on failure.
 export async function readImage(base64: string, mediaType: string): Promise<string> {
   try {
-    const res = await fetch(API, {
-      method: "POST",
-      headers: { "x-api-key": key(), "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({
-        model: SONNET,
-        max_tokens: 1500,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-            { type: "text", text: "Transcribe everything readable in this document or image into clean text. If it is an invoice or receipt, capture vendor, date, line items, amounts, totals, and any VAT or tax. Output only the transcribed content, no commentary." },
-          ],
-        }],
-      }),
+    const data = await runClaude({
+      model: SONNET,
+      anthropicKey: key(),
+      system: "",
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: "Transcribe everything readable in this document or image into clean text. If it is an invoice or receipt, capture vendor, date, line items, amounts, totals, and any VAT or tax. Output only the transcribed content, no commentary." },
+        ],
+      }],
+      tools: [],
+      maxTokens: 1500,
     });
-    if (!res.ok) return "";
-    const data = await res.json();
     return (data?.content?.[0]?.text || "").trim();
   } catch {
     return "";
@@ -95,7 +122,9 @@ export async function claudeJSON<T = any>(system: string, user: string, maxToken
   }
 }
 
-// Streaming for the chat hero. Yields text deltas.
+// Streaming for the chat hero. Yields text deltas. brain-core doesn't ship a
+// streaming primitive today, so this stays an inline fetch. When brain-core
+// adds streamClaude, swap this over too.
 export async function* streamClaude(opts: CallOpts): AsyncGenerator<string> {
   const res = await fetch(API, {
     method: "POST",
