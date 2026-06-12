@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { sendWhatsApp, isOwner, whoIs, mirrorInbound } from "@/lib/whatsapp";
+import { sendTextAndLog } from "@/lib/sendTextAndLog";
 import { runConcierge } from "@/lib/concierge/loop";
 import { kvGet, kvSet, admin } from "@/lib/db";
 import * as ops from "@/lib/concierge/ops";
@@ -9,6 +10,7 @@ import { readImage } from "@/lib/anthropic";
 import { extractTextFromBuffer } from "@/lib/extract-text";
 import { embed, chunk } from "@/lib/openai";
 import { transcribeAudio } from "@/lib/transcribe";
+import { extractMeetingLink, dispatchMeetingBot } from "@/lib/digital-u";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -223,6 +225,31 @@ export async function POST(req: NextRequest) {
     // ---- plain text: full concierge ----
     const text = (msg.text?.body || "").trim();
     if (!text) return NextResponse.json({ ok: true });
+
+    // DETERMINISTIC MEETING-LINK CHOKEPOINT. If the inbound contains a Meet,
+    // Zoom or Teams link, fire the meeting-bot dispatch immediately. We do not
+    // wait for the brain to "decide" because (a) deterministic verbs deserve
+    // deterministic code (same as the done-resolution path above, KT #127),
+    // and (b) Jensen's expectation is "send link, bot joins". We still WhatsApp
+    // an ack in his voice and persist the inbound to chat_messages first, so
+    // the conversation transcript stays whole.
+    const meetingLink = extractMeetingLink(text);
+    if (meetingLink) {
+      const inboundParty = sender.role === "admin" ? "taona" : "jensen";
+      await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
+      const dispatch = await dispatchMeetingBot({
+        link: meetingLink,
+        title: text.replace(meetingLink, "").trim().slice(0, 120) || "Meeting",
+        displayName: sender.role === "admin" ? "Digital Taona" : "Digital Jensen",
+      });
+      const ack = dispatch.ok
+        ? (sender.role === "admin"
+            ? `On it. I am dispatching the notetaker to ${meetingLink}. I will send the summary here when it finishes.`
+            : `On it. I am sending the notetaker to that meeting now. I will message you with the summary and your action items when the room closes.`)
+        : `I tried to dispatch the notetaker but the service returned: ${dispatch.error}. I will save the link and try again, or you can ask me to retry.`;
+      await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
+      return NextResponse.json({ ok: true });
+    }
 
     // NO-CHAT-LOST. Persist every inbound to chat_messages BEFORE the brain
     // runs, so an Anthropic / Vercel failure mid-runConcierge does not lose

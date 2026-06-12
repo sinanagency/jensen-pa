@@ -18,6 +18,7 @@ import { kvGet, kvSet } from "@/lib/db";
 import { whoIs } from "@/lib/whatsapp";
 import { isInWindow } from "@/lib/whatsapp-window";
 import { enqueue, drain, peekCount, type PendingProposal } from "@/lib/mail-pending";
+import { dispatchMeetingBot } from "@/lib/digital-u";
 
 const SEEN_KEY = "lr_mail_seen";
 const SEEN_CAP = 500;
@@ -177,6 +178,62 @@ export async function sweepAndPropose(): Promise<SweepResult> {
       errors.push(`triage: ${e?.message || String(e)}`);
       // Soft-fail: we still want the off-window-drain logic below to run if the
       // window just opened, even if this tick's triage hiccupped.
+    }
+  }
+
+  // AUTO-LATCH for meetings. Any triaged email whose event extractor surfaced
+  // a meetingUrl + concrete date+time gets scheduled with the meeting-bot
+  // (30s before joinAt). Idempotent: the kv "latched" set keeps the same
+  // message id from double-firing across sweeps. Date-only events (no time)
+  // are skipped because we have no way to know when to join.
+  if (triaged.length > 0) {
+    try {
+      const latched = await kvGet<Record<string, number>>("lr_dispatch_latched", {});
+      for (const m of triaged) {
+        const ev = m.event;
+        if (!ev?.meetingUrl || !ev.date || !ev.time) continue;
+        if (latched[m.id]) continue;
+        // Dubai local time, GMT+4, no DST. Schedule 30s pre-meeting.
+        const localIso = `${ev.date}T${ev.time.padStart(5, "0")}:00+04:00`;
+        const joinAt = new Date(localIso).getTime();
+        if (Number.isNaN(joinAt) || joinAt < Date.now() + 60_000) continue; // too soon / past
+        const scheduledAt = new Date(joinAt - 30_000).toISOString();
+        const r = await dispatchMeetingBot({
+          link: ev.meetingUrl,
+          title: ev.title || m.subject || "Meeting",
+          scheduledAt,
+          displayName: "Digital Jensen",
+        });
+        if (r.ok) {
+          latched[m.id] = Date.now();
+          // Heads-up to Jensen so he is not surprised when the bot shows up.
+          // Send via the chokepoint so the message lands in chat_messages and
+          // can be inspected later. Best-effort; never blocks the auto-latch.
+          try {
+            const dubaiTime = ev.time;
+            const recipient = recipientNumber();
+            if (recipient) {
+              const heads = `Heads up. I noticed a meeting invite for ${ev.title || m.subject || "a meeting"} at ${dubaiTime} today. I will join it as Digital Jensen and send you the notes and tasks when it ends. Reply "skip" if you would rather I do not.`;
+              await sendTextAndLog(recipient, heads, { party: "jensen" });
+            }
+          } catch (e: any) {
+            errors.push(`auto-latch heads-up ${m.id}: ${e?.message || String(e)}`);
+          }
+        } else {
+          errors.push(`auto-latch ${m.id}: ${r.error}`);
+        }
+      }
+      // FIFO cap to keep the kv row bounded.
+      const entries: [string, number][] = Object.entries(latched);
+      if (entries.length > 500) {
+        entries.sort((a, b) => b[1] - a[1]);
+        const trimmed: Record<string, number> = Object.fromEntries(entries.slice(0, 500));
+        await kvSet("lr_dispatch_latched", trimmed).catch(() => {});
+      } else {
+        await kvSet("lr_dispatch_latched", latched).catch(() => {});
+      }
+    } catch (e: any) {
+      errors.push(`auto-latch: ${e?.message || String(e)}`);
     }
   }
 
