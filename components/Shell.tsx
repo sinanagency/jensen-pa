@@ -94,6 +94,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <Logo variant="lockup" size={32} />
           </Link>
 
+          <div className="nav-spacer" />
+
           <nav className="navpills" ref={ref}>
             {PILLS.map((p) => (
               <Link key={p.href} href={p.href} className={`navpill ${isActive(p.href) ? "active" : ""}`}>
@@ -121,6 +123,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
+
+          <div className="nav-spacer" />
 
           <div className="nav-right">
             <button className="omnibox" title="Search or ask (Cmd K)" onClick={() => window.dispatchEvent(new Event("open-cmdk"))}>

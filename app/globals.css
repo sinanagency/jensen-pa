@@ -203,7 +203,10 @@ label.inline { display: inline-flex; text-transform: none; letter-spacing: norma
   background: rgba(6,6,8,0.7); backdrop-filter: blur(22px) saturate(150%); -webkit-backdrop-filter: blur(22px) saturate(150%);
   border-bottom: 1px solid rgba(255,255,255,0.07); }
 .topnav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; gap: 6px; }
-.topnav-inner .navpills { margin-left: 14px; }
+/* Brand pinned left, pills centered, search + avatar pinned right.
+   The .nav-spacer flex:1 elements on either side of .navpills do the centering. */
+.topnav-inner .nav-spacer { flex: 1; }
+.topnav-inner .navpills { margin: 0; }
 .iconbtn { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--glass);
   border: 1px solid var(--line); color: var(--muted); transition: all 0.16s var(--ease); flex: none; }
 .iconbtn:hover { color: var(--ink); border-color: var(--line-2); }
