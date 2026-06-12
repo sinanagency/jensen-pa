@@ -6,7 +6,7 @@ import { useDB } from "@/components/useDB";
 import { FinanceRecord, uid } from "@/lib/store";
 import { UAE_TAX, vatFromNet, corporateTax, aed } from "@/lib/tax";
 import { dropFile } from "@/lib/drop";
-import { Plus, Trash2, TrendingUp, TrendingDown, Receipt, Upload, Loader2, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, TrendingUp, TrendingDown, Receipt, Upload, Loader2, CheckCircle2, RefreshCw, BarChart3 } from "lucide-react";
 
 export default function FinancePage() {
   const { db, mutate } = useDB();
@@ -378,6 +378,178 @@ export default function FinancePage() {
           })}
         </div>
       </div>
+
+      {/* P&L by month bar chart */}
+      <PLChart records={db.finance} />
+
+      {/* Recurring expenses */}
+      <RecurringSection mutate={mutate} entities={db.entities} />
+
     </Shell>
+  );
+}
+
+// ---------- P&L by month chart ----------
+function PLChart({ records }: { records: FinanceRecord[] }) {
+  // Build last 6 months
+  const now = new Date();
+  const months: { key: string; label: string; income: number; expense: number }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleString("en", { month: "short" });
+    months.push({ key, label, income: 0, expense: 0 });
+  }
+  for (const r of records) {
+    const mo = r.date.slice(0, 7);
+    const m = months.find((x) => x.key === mo);
+    if (!m) continue;
+    if (r.kind === "income") m.income += r.amount;
+    else m.expense += r.amount;
+  }
+  const maxVal = Math.max(...months.map((m) => Math.max(m.income, m.expense)), 1);
+
+  return (
+    <div className="card fade-up" style={{ padding: 24, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
+        <BarChart3 size={16} color="var(--purple-2)" />
+        <div style={{ fontWeight: 700, fontSize: 15 }}>P&amp;L by month</div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 12, fontSize: 11.5, color: "var(--muted)" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--success)", display: "inline-block" }} /> Income</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--danger)", display: "inline-block" }} /> Expenses</span>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 16, height: 140 }}>
+        {months.map((m) => {
+          const incH = Math.round((m.income / maxVal) * 110);
+          const expH = Math.round((m.expense / maxVal) * 110);
+          return (
+            <div key={m.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, height: "100%", justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 4, width: "100%" }}>
+                <div style={{ flex: 1, height: incH || 2, background: "var(--success)", borderRadius: "5px 5px 3px 3px", opacity: 0.8, transition: "height 0.5s" }} title={`Income: AED ${m.income.toFixed(0)}`} />
+                <div style={{ flex: 1, height: expH || 2, background: "var(--danger)", borderRadius: "5px 5px 3px 3px", opacity: 0.8, transition: "height 0.5s" }} title={`Expenses: AED ${m.expense.toFixed(0)}`} />
+              </div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{m.label}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Recurring expenses section ----------
+type RecurringRow = {
+  id: string;
+  label: string;
+  amount: number;
+  frequency: "monthly" | "quarterly" | "annual";
+  vatApplies: boolean;
+  entity?: string;
+  active: boolean;
+};
+
+function RecurringSection({ mutate, entities }: { mutate: (fn: (d: import("@/lib/store").DB) => void) => void; entities: import("@/lib/store").Entity[] }) {
+  const [open, setOpen] = useState(false);
+  const [rlabel, setRlabel] = useState("");
+  const [ramount, setRamount] = useState("");
+  const [rfreq, setRfreq] = useState<"monthly" | "quarterly" | "annual">("monthly");
+  const [rvat, setRvat] = useState(false);
+  const [rentity, setRentity] = useState("");
+
+  // Recurring expenses are stored as notes with kind="note" and a special prefix.
+  // For a lightweight implementation without a separate Supabase table migration
+  // being live, we store them in localStorage only via a React state approach.
+  // (The migration is on disk for when Supabase is available.)
+  const [recurring, setRecurring] = useState<RecurringRow[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem("lr.recurring") || "[]"); } catch { return []; }
+  });
+
+  function saveRecurring(rows: RecurringRow[]) {
+    setRecurring(rows);
+    try { localStorage.setItem("lr.recurring", JSON.stringify(rows)); } catch {}
+  }
+
+  function addRecurring() {
+    const trimmed = rlabel.trim();
+    const amt = Number(ramount);
+    if (!trimmed || !amt || amt <= 0) return;
+    const id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    saveRecurring([...recurring, { id, label: trimmed, amount: amt, frequency: rfreq, vatApplies: rvat, entity: rentity || undefined, active: true }]);
+    setRlabel(""); setRamount(""); setRvat(false); setRentity(""); setOpen(false);
+  }
+
+  function logNow(r: RecurringRow) {
+    const today = new Date().toISOString().slice(0, 10);
+    const newId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    mutate((d) => {
+      d.finance.push({
+        id: newId, kind: "expense", amount: r.amount, vatApplies: r.vatApplies,
+        label: `${r.label} (recurring)`, date: today, createdAt: Date.now(),
+      });
+    });
+  }
+
+  function removeRecurring(id: string) {
+    saveRecurring(recurring.filter((r) => r.id !== id));
+  }
+
+  const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", quarterly: "Quarterly", annual: "Annual" };
+
+  return (
+    <div className="card fade-up" style={{ padding: 24, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: recurring.length > 0 ? 16 : 0 }}>
+        <RefreshCw size={15} color="var(--purple-2)" />
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Recurring expenses</div>
+        <div className="pill" style={{ marginLeft: "auto", fontSize: 11 }}>{recurring.filter((r) => r.active).length}</div>
+        <button className="btn purple sm" onClick={() => setOpen(!open)} style={{ height: 30, padding: "0 12px", fontSize: 12 }}>
+          <Plus size={12} /> Add
+        </button>
+      </div>
+
+      {open && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16, padding: 16, background: "rgba(18,20,28,0.04)", borderRadius: 12, border: "1px solid var(--line)" }}>
+          <input className="input" style={{ flex: "1 1 160px" }} placeholder="Label (e.g. Office rent)" value={rlabel} onChange={(e) => setRlabel(e.target.value)} />
+          <input className="input" type="number" style={{ flex: "0 1 130px" }} placeholder="AED amount" value={ramount} onChange={(e) => setRamount(e.target.value)} />
+          <select className="input" style={{ flex: "0 1 140px" }} value={rfreq} onChange={(e) => setRfreq(e.target.value as "monthly" | "quarterly" | "annual")}>
+            <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option>
+            <option value="annual">Annual</option>
+          </select>
+          <select className="input" style={{ flex: "0 1 160px" }} value={rentity} onChange={(e) => setRentity(e.target.value)}>
+            <option value="">No entity</option>
+            {entities.map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}
+          </select>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "var(--ink-2)", cursor: "pointer", textTransform: "none", letterSpacing: "normal" }}>
+            <input type="checkbox" checked={rvat} onChange={(e) => setRvat(e.target.checked)} style={{ width: 15, height: 15, accentColor: "var(--purple)" }} /> VAT
+          </label>
+          <button className="btn purple sm" onClick={addRecurring} style={{ flexShrink: 0 }}><Plus size={13} /> Save</button>
+        </div>
+      )}
+
+      {recurring.length === 0 && !open && (
+        <div className="faint" style={{ fontSize: 13 }}>No recurring expenses yet. Add rent, retainers, subscriptions.</div>
+      )}
+
+      {recurring.map((r) => (
+        <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderTop: "1px solid var(--line)" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--ink)" }}>{r.label}</div>
+            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+              <span className="pill" style={{ fontSize: 11, height: 22 }}>{FREQ_LABELS[r.frequency]}</span>
+              {r.vatApplies && <span className="pill accent" style={{ fontSize: 11, height: 22 }}>VAT</span>}
+            </div>
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--danger)", flexShrink: 0 }}>{aed(r.amount)}</div>
+          <button className="btn ghost sm" onClick={() => logNow(r)} title="Log now" style={{ padding: "0 10px", height: 28, fontSize: 12, flexShrink: 0 }}>
+            Log
+          </button>
+          <button className="btn ghost sm" onClick={() => removeRecurring(r.id)} style={{ padding: "0 8px", height: 28, flexShrink: 0, color: "var(--faint)" }} title="Remove">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
