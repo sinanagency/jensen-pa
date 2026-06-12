@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# Pre-commit secret guard for jensen-pa.
+#
+# Installed via: git config core.hooksPath hooks
+# Runs automatically before every `git commit`. Blocks the commit if any
+# staged file looks like a secrets file or any staged content looks like a
+# real secret value.
+#
+# Operator note 2026-06-12: this exists because commit e3c3fe8 accidentally
+# pushed .env.vercel.prod with the entire Vercel env to GitHub. The doctrine
+# was: never `git add -A` without verifying. Now the machine enforces it.
+#
+# To bypass in an emergency: `git commit --no-verify`. Don't.
+
+set -e
+
+red()   { printf "\033[31m%s\033[0m" "$*"; }
+green() { printf "\033[32m%s\033[0m" "$*"; }
+ylw()   { printf "\033[33m%s\033[0m" "$*"; }
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [[ -z "$staged_files" ]]; then
+  exit 0
+fi
+
+violations=()
+
+# ---------- 1. Block known-secret filenames ----------
+# Match the exact category that leaked: anything matching common secret-store
+# patterns. .env.local is allowed (Next.js convention, in .gitignore anyway,
+# but if someone force-adds it through anyway we still want to know).
+while IFS= read -r f; do
+  case "$f" in
+    .env|.env.*|*.env)
+      # Explicit allowlist: .env.example (committed convention)
+      if [[ "$f" == ".env.example" ]]; then continue; fi
+      violations+=("FILENAME: $f looks like a secrets file. Never commit it.")
+      ;;
+    *.pem|*.key|*.p12|*.pfx|*.crt|*.cer)
+      violations+=("FILENAME: $f looks like a credential/key file.")
+      ;;
+    *credentials*|*credential*.json|*service-account*.json|*.kubeconfig|kubeconfig)
+      violations+=("FILENAME: $f looks like a credentials file.")
+      ;;
+    id_rsa|id_ed25519|id_dsa|id_ecdsa|*_rsa|*_ed25519)
+      violations+=("FILENAME: $f looks like an SSH private key.")
+      ;;
+  esac
+done <<< "$staged_files"
+
+# ---------- 2. Scan staged CONTENT for real secret signatures ----------
+# Patterns chosen to match the specific keys this project handles, plus
+# common high-confidence patterns. False positives are OK here, false
+# negatives are not.
+#
+# Each pattern below is a self-contained grep regex that must match an
+# actual secret VALUE, not just a key name. Lines must be in `diff` context
+# (added lines, prefixed with +).
+patterns=(
+  # Supabase
+  "sb_secret_[A-Za-z0-9_-]{32,}"            # service role key prefix
+  "sbp_[A-Za-z0-9]{32,}"                    # Supabase access token (Management API PAT)
+  "eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\."   # JWT (anon/service keys are JWTs)
+  # Anthropic
+  "sk-ant-api[0-9]{2}-[A-Za-z0-9_-]{40,}"
+  # OpenAI
+  "sk-(proj-)?[A-Za-z0-9]{32,}"
+  # Generic high-confidence
+  "AKIA[0-9A-Z]{16}"                        # AWS Access Key
+  "ghp_[A-Za-z0-9]{30,}"                    # GitHub PAT
+  "ghs_[A-Za-z0-9]{30,}"                    # GitHub server token
+  "github_pat_[A-Za-z0-9_]{50,}"            # GitHub fine-grained PAT
+  "shpat_[a-fA-F0-9]{32}"                   # Shopify Admin API access token
+  "shpss_[a-fA-F0-9]{32}"                   # Shopify storefront
+  "shpca_[a-fA-F0-9]{32}"                   # Shopify custom app
+  # Meta / WhatsApp
+  "EAA[A-Za-z0-9]{100,}"                    # Meta access token
+  # Vercel
+  "vercel_[a-z]+_[A-Za-z0-9]{40,}"
+  # Stripe
+  "sk_live_[A-Za-z0-9]{24,}"
+  "rk_live_[A-Za-z0-9]{24,}"
+  "pk_live_[A-Za-z0-9]{24,}"
+  # Twilio
+  "SK[a-f0-9]{32}"
+  # Slack
+  "xox[baprs]-[A-Za-z0-9-]{10,}"
+)
+
+# Build a single alternation for one fast grep pass.
+combined=$(IFS='|'; echo "${patterns[*]}")
+
+# Get the staged diff (added lines only) and grep against the combined regex.
+hits=$(git diff --cached -U0 --no-color | grep -E "^\+" | grep -Ev "^\+\+\+" | grep -nE "$combined" || true)
+
+if [[ -n "$hits" ]]; then
+  while IFS= read -r line; do
+    # Truncate matched value so the violation log itself doesn't leak it.
+    redacted=$(echo "$line" | sed -E 's/(sk-ant-api[0-9]{2}-[A-Za-z0-9_-]{8})[A-Za-z0-9_-]{32,}/\1***REDACTED***/g; s/(sk-(proj-)?[A-Za-z0-9]{8})[A-Za-z0-9]{24,}/\1***REDACTED***/g; s/(sbp_[A-Za-z0-9]{8})[A-Za-z0-9]{24,}/\1***REDACTED***/g; s/(eyJ[A-Za-z0-9_-]{12})[A-Za-z0-9_.-]{50,}/\1***REDACTED***/g')
+    violations+=("CONTENT: $redacted")
+  done <<< "$hits"
+fi
+
+# ---------- 3. Verdict ----------
+if [[ ${#violations[@]} -gt 0 ]]; then
+  echo ""
+  red ">>> COMMIT BLOCKED — possible secret leak <<<"; echo ""
+  echo ""
+  printf '%s\n' "${violations[@]}"
+  echo ""
+  ylw "If you are 100% certain this is a false positive, bypass with:"; echo ""
+  echo "  git commit --no-verify"
+  echo ""
+  ylw "But verify first — recovery from a real leak takes hours."; echo ""
+  echo ""
+  exit 1
+fi
+
+green "✓ secret guard clean ($(echo "$staged_files" | wc -l | tr -d ' ') file(s) staged)"; echo ""
+exit 0

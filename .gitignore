@@ -21,3 +21,11 @@ supabase/.temp/
 .env.production
 *.env
 
+
+# secret guard: any file matching these patterns is suspicious by default
+.env.test.tmp
+*credentials*
+*.pem
+*.key
+*.p12
+*.pfx
