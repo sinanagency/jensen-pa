@@ -78,7 +78,15 @@ export const COMPLETION_BUBBLE_PENDING = false; // shipped 2026-06-12 as COMPLET
 // first person, Law 5 no em-dashes, Law 2 sendTextAndLog chokepoint.
 export const COMPLETION_PAUSE_MS_BETWEEN_BUBBLES = 2500;
 export const COMPLETION_BUBBLES = [
-  `Jensen, quick one.
+  `Jensen.
 
-I've finished going through all 1,180 conversations of yours. I've learned a lot about you, and I'm ready to serve you better.`,
+I'm done with my training. 1,180 conversations, two and a half years, all read.
+
+I came out of it with a real sense of you. Your voice, your work, what matters.
+
+It was a privilege, and I'm ready to serve you better from here.`,
+
+  `You won't have to set the scene with me anymore. You won't have to translate yourself. You'll send a thought and I'll come back already in your world.
+
+Whenever you're ready, send me the next brief.`,
 ] as const;
