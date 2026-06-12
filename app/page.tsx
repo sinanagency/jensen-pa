@@ -6,7 +6,7 @@ import Shell from "@/components/Shell";
 import { useDB } from "@/components/useDB";
 import { DB, Quadrant } from "@/lib/store";
 import { aed } from "@/lib/tax";
-import { RefreshCw, ArrowRight, MessageCircle, Mail, Library, FileText, Mic, Building2 } from "lucide-react";
+import { RefreshCw, MessageCircle, Mail, Library, FileText, Mic, Building2 } from "lucide-react";
 import { Gauge, BarChart } from "@/components/charts";
 
 const QUADS: { q: Quadrant; title: string; note: string; color: string }[] = [
@@ -52,9 +52,6 @@ export default function Today() {
 
   if (!db) return <Shell><div className="muted">Loading…</div></Shell>;
 
-  const income = db.finance.filter((f) => f.kind === "income").reduce((s, f) => s + f.amount, 0);
-  const expense = db.finance.filter((f) => f.kind === "expense").reduce((s, f) => s + f.amount, 0);
-
   // last 6 months of income, for the revenue trend + this-month gauge
   const _now = new Date();
   const months = Array.from({ length: 6 }, (_, idx) => {
@@ -91,18 +88,7 @@ export default function Today() {
         <div className="hud"><div className="hud-ring" /><span>READY</span></div>
       </div>
 
-      <div className="card insight fade-up">
-        <div className="orb sm" style={{ flex: "none" }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 4 }}>Rencontre, your concierge</div>
-          <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--ink-2)", whiteSpace: "pre-wrap" }}>
-            {brief || (loading ? "Reading your day…" : "Open your briefing.")}
-          </div>
-        </div>
-        <button className="btn ghost sm" onClick={loadBrief} disabled={loading} style={{ flex: "none" }}><RefreshCw size={13} /> {loading ? "…" : "Refresh"}</button>
-      </div>
-
-      {/* THE FOUR QUADRANTS — Jensen's operating philosophy, the heart of home */}
+      {/* THE FOUR QUADRANTS — what matters comes first. Briefing prose is at the bottom. */}
       <div className="quad-head"><span>The four quadrants</span><Link href="/tasks" className="muted" style={{ fontSize: 12.5 }}>Manage →</Link></div>
       <div className="quads">
         {QUADS.map(({ q, title, note, color }) => {
@@ -132,24 +118,14 @@ export default function Today() {
         })}
       </div>
 
-      <div className="bento2">
-        <div className="card fin">
-          <div className="tile-label">Net this period</div>
-          <div className="fin-val accent">{aed(income - expense)}</div>
-          <div style={{ display: "flex", gap: 20, marginTop: 10, fontSize: 12.5 }}>
-            <div><div className="muted">Income</div><div style={{ color: "var(--success)" }}>{aed(income)}</div></div>
-            <div><div className="muted">Expense</div><div style={{ color: "var(--danger)" }}>{aed(expense)}</div></div>
-          </div>
-          <Link href="/finance" className="btn ghost sm" style={{ marginTop: 14 }}>Open finance <ArrowRight size={13} /></Link>
-        </div>
-        <div className="mods">
-          {modules.map((m) => (
-            <Link key={m.label} href={m.href} className="card mod">
-              <span className="chip"><m.icon size={16} /></span>
-              <span>{m.label}</span>
-            </Link>
-          ))}
-        </div>
+      {/* Finance is now a top-nav pill, no hero tile here. Modules go full width. */}
+      <div className="mods mods-wide">
+        {modules.map((m) => (
+          <Link key={m.label} href={m.href} className="card mod">
+            <span className="chip"><m.icon size={16} /></span>
+            <span>{m.label}</span>
+          </Link>
+        ))}
       </div>
 
       {/* Revenue trend + this-month gauge (ported from Nisria, restyled) */}
@@ -162,6 +138,19 @@ export default function Today() {
           <div className="tile-label">Revenue, last 6 months</div>
           <BarChart data={months} valueLabels tall />
         </div>
+      </div>
+
+      {/* THE BRIEFING — at the bottom now. Jensen sees the priorities + numbers first;
+          the prose is here for when he wants the longer read. No "Rencontre, your concierge"
+          label — the voice is implicit, the orb tells you who's talking. */}
+      <div className="card insight fade-up" style={{ marginTop: 22 }}>
+        <div className="orb sm" style={{ flex: "none" }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, lineHeight: 1.65, color: "var(--ink-2)", whiteSpace: "pre-wrap" }}>
+            {brief || (loading ? "Reading your day…" : "Open your briefing.")}
+          </div>
+        </div>
+        <button className="btn ghost sm" onClick={loadBrief} disabled={loading} style={{ flex: "none" }}><RefreshCw size={13} /> {loading ? "…" : "Refresh"}</button>
       </div>
 
       <style>{`
@@ -183,15 +172,14 @@ export default function Today() {
         .quad-row{display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:13.8px;cursor:pointer;color:var(--ink-2)}
         .quad-row input{width:16px;height:16px;margin-top:1px}
         .tile-label{font-size:12.5px;color:var(--muted)}
-        .bento2{display:grid;grid-template-columns:1fr 2fr;gap:14px}
-        .fin{padding:18px}
-        .fin-val{font-family:var(--font-display);font-size:30px;margin-top:8px}
         .chip{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--purple-soft);color:var(--purple-2);border:1px solid var(--purple-line)}
         .mods{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+        .mods-wide{grid-template-columns:repeat(6,1fr)}
         .mod{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:20px 8px;font-size:13px;color:var(--ink-2)}
         .dash-charts{display:grid;grid-template-columns:1fr 2fr;gap:14px;margin-top:16px}
         .chart-card{padding:18px;display:flex;flex-direction:column;gap:10px}
-        @media(max-width:900px){.quads,.bento2,.dash-charts{grid-template-columns:1fr}.mods{grid-template-columns:repeat(2,1fr)}.dash-head .hud{display:none}}
+        @media(max-width:1100px){.mods-wide{grid-template-columns:repeat(3,1fr)}}
+        @media(max-width:900px){.quads,.dash-charts{grid-template-columns:1fr}.mods,.mods-wide{grid-template-columns:repeat(2,1fr)}.dash-head .hud{display:none}}
       `}</style>
     </Shell>
   );

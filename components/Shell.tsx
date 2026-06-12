@@ -23,6 +23,7 @@ const PILLS = [
   { href: "/", label: "Today", icon: "today" },
   { href: "/mentor", label: "Concierge", icon: "mentor" },
   { href: "/mail", label: "Mail", icon: "mail" },
+  { href: "/finance", label: "Finance", icon: "finance" },
   { href: "/portfolio", label: "Portfolio", icon: "portfolio" },
 ];
 // Folded menus: everything else, grouped by intent. "Documents" now points
@@ -33,7 +34,6 @@ const GROUPS = [
   { group: "Operate", items: [
     { href: "/tasks", label: "Tasks", icon: "tasks" },
     { href: "/calendar", label: "Calendar", icon: "calendar" },
-    { href: "/finance", label: "Finance", icon: "finance" },
     { href: "/invoice", label: "Invoice", icon: "invoice" },
     { href: "/shopify", label: "Store", icon: "store" },
   ]},
