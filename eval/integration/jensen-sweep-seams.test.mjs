@@ -107,10 +107,13 @@ check("seam.07 ops.createTask soft-dedupes on title + done=false", () => {
   return null;
 });
 
-check("seam.08 ops.createEvent soft-dedupes on title + date", () => {
+check("seam.08 ops.createEvent soft-dedupes on normalized-title + date", () => {
   const src = read("lib/concierge/ops.ts");
   const block = src.slice(src.indexOf("export async function createEvent"));
-  if (!/title=eq\./.test(block.slice(0, 1500))) return "no title eq in createEvent dedup";
+  // Updated 2026-06-13: dedup now uses normalizeEventTitleKey to collapse the
+  // 'X at <location>' vs 'X' (with note) variants seen in the Karafotias
+  // regression. Old shape (title=eq exact) is no longer accepted.
+  if (!/normalizeEventTitleKey/.test(block.slice(0, 1500))) return "createEvent dedup does not use normalizeEventTitleKey";
   if (!/date=eq\./.test(block.slice(0, 1500))) return "no date eq in createEvent dedup";
   if (!/deduped:\s*true/.test(block.slice(0, 1500))) return "createEvent does not return deduped:true";
   return null;

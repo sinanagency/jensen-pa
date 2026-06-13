@@ -19,9 +19,26 @@ async function tryEmbed(text: string): Promise<number[] | null> {
   }
 }
 
+// Structural-class assertions are claims like "X is a contact" / "X is a single
+// task" / "the two events are one". They look durable but they are actually
+// structured-table assertions in disguise, and the LLM has no way to verify the
+// table state. We refuse them at the chokepoint and let the caller (LLM) retry
+// using the proper structured tool (add_contact, create_event, etc.).
+// Wall-at-primitive (KT #229): the audit fires at the only door, not at every
+// caller.
+const CLASS_ASSERT_RE = /\b(is|are|refers to|noted as)\s+(?:(?:a|an|one|the|two|three|single|same|separate|duplicate)\s+){1,3}(contact|contacts|task|tasks|event|events|note|notes|person|people|entity|entities)\b/i;
+export function isStructuralClassAssertion(fact: string): boolean {
+  return CLASS_ASSERT_RE.test(fact || "");
+}
+
 export async function rememberFact(fact: string, opts?: { source?: string; kind?: string; subject?: string }): Promise<void> {
   const f = (fact || "").trim();
   if (!f) return;
+  // Wall: structural-class assertions get blocked, except directives (the
+  // operator can opt in with kind=directive when the assertion is intentional).
+  if (opts?.kind !== "directive" && isStructuralClassAssertion(f)) {
+    throw new Error(`structural class assertion blocked: ${f.slice(0, 120)}`);
+  }
   const dup = await sbSelect("brain_facts", `fact=eq.${enc(f)}&select=id&limit=1`).catch(() => []);
   if (dup.length) return;
   const e = await tryEmbed(f);
@@ -105,6 +122,7 @@ const SALIENCE_SYS =
   "You extract DURABLE facts about Jensen's business world from a chat turn, for an assistant's long-term memory. " +
   "Return only stable facts worth remembering for weeks (people, venues, clients, preferences, decisions, standing context). " +
   "DO NOT capture: tasks, to-dos, one-off questions, money amounts, dates of single events, greetings, or anything transient. " +
+  "DO NOT classify entities. Never write a fact of the form 'X is a contact', 'X is a single task', 'the two events are one'. Those are structured-table assertions, not durable facts. State who/what/why, not the database class. " +
   "Return JSON {facts: string[]}. Each fact one short self-contained sentence. Empty array if nothing durable.";
 
 // Onboarding mode capture is MUCH more inclusive — we are building the deepest
@@ -126,8 +144,15 @@ export async function captureSalience(userMsg: string, assistantReply: string, o
   try {
     const out = await claudeJSON<{ facts: string[] }>(sys, `User: ${userMsg}\n\nAssistant: ${assistantReply}`, tokens);
     const facts = (out?.facts ?? []).filter((f) => typeof f === "string" && f.trim().length > 8).slice(0, maxFacts);
-    for (const f of facts) await rememberFact(f, { source: "chat", kind: opts?.onboarding ? "onboarding_fact" : "auto_fact" });
-    return facts.length;
+    let written = 0;
+    // Per-fact try so a class-assertion rejection on one fact does not drop the rest.
+    for (const f of facts) {
+      try {
+        await rememberFact(f, { source: "chat", kind: opts?.onboarding ? "onboarding_fact" : "auto_fact" });
+        written += 1;
+      } catch { /* class-assertion or transient db error, skip this fact */ }
+    }
+    return written;
   } catch {
     return 0;
   }

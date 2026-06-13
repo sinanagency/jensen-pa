@@ -118,10 +118,35 @@ export async function queryCalendar(f: { from?: string; to?: string; entityId?: 
   const nowHHMM = dubaiHHMM();
   return rows.map((r: any) => tagEventStatus(r, today, nowHHMM));
 }
+// Normalized title key for soft-dedup. Strips lead "meeting with the",
+// trailing " at <location>", lowercases, collapses whitespace. Two model-produced
+// titles describing the same meeting (one with location in title, one with
+// location in note) collapse to the same key.
+export function normalizeEventTitleKey(title: string): string {
+  return (title || "")
+    .toLowerCase()
+    .replace(/^meeting (with|w\/)\s+(the\s+)?/i, "")
+    .replace(/\s+at\s+[^,]+$/i, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function createEvent(i: { title: string; date: string; time?: string; entityId?: string; note?: string }) {
-  // Soft-dedup: same title on the same date is the same event, not a copy.
-  const dup = await sbSelect<any>("events", `title=eq.${enc(i.title)}&date=eq.${enc(i.date)}&select=id&limit=1`).catch(() => []);
-  if (dup.length) return { id: dup[0].id, title: i.title, date: i.date, deduped: true };
+  // Soft-dedup: normalized title + same date (+ same time if both provided) is
+  // the same event, not a copy. Prevents the 06-13 Karafotias case where the
+  // model produced "Meeting with the Karafotias at Dubai Hills Mall" and
+  // "Meeting with the Karafotias" 75s apart for the same 14:30 slot.
+  const key = normalizeEventTitleKey(i.title);
+  if (key) {
+    const sameDay = await sbSelect<any>("events", `date=eq.${enc(i.date)}&select=id,title,time&limit=20`).catch(() => []);
+    const dup = sameDay.find((r: any) => {
+      if (normalizeEventTitleKey(r.title) !== key) return false;
+      if (i.time && r.time && i.time !== r.time) return false;
+      return true;
+    });
+    if (dup) return { id: dup.id, title: dup.title, date: i.date, deduped: true };
+  }
   const row = { id: uid(), title: i.title, date: i.date, time: i.time ?? null, entity_id: i.entityId ?? null, note: i.note ?? null, created_at: now() };
   await sbInsert("events", row);
   return { id: row.id, title: i.title, date: i.date, time: i.time };
