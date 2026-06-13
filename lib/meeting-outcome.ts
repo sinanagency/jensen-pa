@@ -51,3 +51,26 @@ export function buildEmptyOutcomeMessage(title: string, durationSec?: number): s
   const raw = `I joined ${title || "the meeting"} and sat the full window, but I caught ${heard}. Did the conversation happen elsewhere, or did it not actually take place? If you have a recording or transcript, paste it here and I will still write the notes.`;
   return raw.replace(/—/g, ", ").replace(/–/g, ", ");
 }
+
+// Max-1-retry guard for /api/ingest. The T4 meeting-bot worker can call back
+// for the same events.id more than once (re-tries, two captures, partial
+// failures). Without a guard, each callback ships a fresh WhatsApp to Jensen.
+// On 2026-06-12 the Zomato call produced FIVE pings within 55 minutes for the
+// same event — one hallucinated summary plus three empty-outcome probes.
+//
+// Strict rule: if events.outcome is already 'happened', 'empty', or
+// 'resolved_by_email', we have already shipped Jensen exactly one ack for
+// that meeting. Any subsequent ingest callback is a no-op. The 'happened'
+// path stays gated so a re-run never re-extracts tasks against a transcript
+// we already processed. 'awaiting_human_verdict' is NOT terminal: it means
+// the bot asked Jensen and is waiting on his answer, so a fresh capture
+// (e.g., he forwarded the recording) should still be allowed through.
+//
+// Failure path is intentionally NOT gated here. A "could not capture
+// (waiting room, password)" failure can legitimately be retried after the
+// human fixes the issue; the small risk of a duplicate "couldn't capture"
+// notice is preferable to silently dropping a real retry.
+export function isTerminalOutcome(outcome: string | null | undefined): boolean {
+  if (!outcome) return false;
+  return outcome === "happened" || outcome === "empty" || outcome === "resolved_by_email";
+}

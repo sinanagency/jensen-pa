@@ -30,7 +30,7 @@ import { claudeJSON, NO_DASHES } from "@/lib/anthropic";
 import { createTask } from "@/lib/concierge/ops";
 import { sendTextAndLog } from "@/lib/sendTextAndLog";
 import { sbHeaders, sbRest } from "@/lib/db";
-import { classifyOutcome, buildEmptyOutcomeMessage, type MeetingOutcome } from "@/lib/meeting-outcome";
+import { classifyOutcome, buildEmptyOutcomeMessage, isTerminalOutcome, type MeetingOutcome } from "@/lib/meeting-outcome";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -93,6 +93,27 @@ async function setEventOutcome(id: string, outcome: MeetingOutcome | "awaiting_h
   }
 }
 
+// Read the current outcome for an event id so the max-1-retry guard can
+// short-circuit a duplicate callback. Returns null on miss/error so the
+// caller's default path runs (fail-open on read: better one extra WhatsApp
+// than a silent drop of a legitimate first capture).
+async function getEventOutcome(id: string): Promise<string | null> {
+  if (!id) return null;
+  try {
+    const res = await fetch(sbRest(`events?id=eq.${encodeURIComponent(id)}&select=outcome&limit=1`), {
+      headers: sbHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const rows = await res.json().catch(() => []);
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    const v = rows[0]?.outcome;
+    return typeof v === "string" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildWhatsAppBody(opts: {
   title: string;
   summary: string;
@@ -141,6 +162,18 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const id = String(body?.id || "").slice(0, 80);
     const title = String(body?.title || "Untitled meeting").slice(0, 200);
+
+    // Max-1-retry guard. If the meeting-bot calls back for an event whose
+    // outcome is already terminal (we have already shipped Jensen one ack),
+    // short-circuit. See lib/meeting-outcome.ts isTerminalOutcome for the
+    // policy. This catches the 2026-06-12 Zomato pattern where three empty-
+    // outcome probes landed within 55 minutes for the same events.id.
+    if (id) {
+      const existing = await getEventOutcome(id);
+      if (isTerminalOutcome(existing)) {
+        return NextResponse.json({ ok: true, mode: "already-acked", meetingId: id, outcome: existing });
+      }
+    }
 
     // Failure path: meeting-bot couldn't capture (waiting room, password, etc).
     // WhatsApp Jensen the reason, write nothing to tasks.
