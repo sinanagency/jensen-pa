@@ -9,7 +9,7 @@ import { verifyReply } from "./verify";
 import { stripDashes } from "../whatsapp";
 import { recall, captureSalience, listDirectives } from "./brain";
 import * as ops from "./ops";
-import { dubaiNow, dayPart } from "../time";
+import { dubaiNow, dubaiToday, dayPart } from "../time";
 
 const API = "https://api.anthropic.com/v1/messages";
 
@@ -74,13 +74,15 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
     s.role === "admin"
       ? `You are CURRENTLY speaking with ${s.name}, the admin and architect who built and oversees you (not Jensen). Address him as ${s.name}. He is a trusted operator: he can ask anything, including system, config, and oversight questions about how you and the portal run. When he asks you to do something in Jensen's world, do it on Jensen's behalf.`
       : `You are CURRENTLY speaking with ${s.name}, the founder and principal you serve. Address him as ${s.name}.`;
-  const [ents, prefs, goals, rec, directives, openTasks] = await Promise.all([
+  const today = dubaiToday();
+  const [ents, prefs, goals, rec, directives, openTasks, todayEvents] = await Promise.all([
     ops.listEntities({}).catch(() => []),
     ops.getPrefs().catch(() => ({})),
     ops.getGoals().catch(() => [] as string[]),
     recall(lastUser).catch(() => ({ facts: [], docs: [] })),
     listDirectives().catch(() => [] as string[]),
     ops.listTasks({ done: false }).catch(() => [] as any[]),
+    ops.queryCalendar({ from: today, to: today }).catch(() => [] as any[]),
   ]);
   const directivesText = directives.length ? directives.map((d) => `- ${d}`).join("\n") : "";
   const entitiesText = (ents as any[]).map((e) => `- ${e.kind}: ${e.name}${e.status ? ` (${e.status})` : ""} [id:${e.id}]`).join("\n") || "(none yet)";
@@ -93,6 +95,15 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
   // this, FM-11 from the Memorae sweep recurs: bot doesn't know what "Done" refers to.
   const openTasksText = (openTasks as any[]).slice(0, 10)
     .map((t) => `- [id:${t.id}] (q${t.quadrant}) ${t.title}`).join("\n") || "(none right now)";
+  // Wall-at-primitive (same shape as KT #229/#243): bake today's authoritative
+  // calendar into every turn so the model can't hallucinate "today's board" from
+  // yesterday's chat scrollback. Status tags (past/now/upcoming) are computed
+  // server-side in tagEventStatus and trusted verbatim by the EVENT STATUS rule.
+  const todayBoardText = (todayEvents as any[]).length
+    ? (todayEvents as any[])
+        .map((e) => `- [id:${e.id}] ${e.time || "(no time)"} ${e.title} (status:${e.status})`)
+        .join("\n")
+    : "(no events scheduled for today)";
 
   // CROSS-TURN PROMPT CACHE SPLIT (2026-06-12). The persona and standing
   // rules below are byte stable across every turn; the live world state
@@ -127,6 +138,7 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
     directivesText && `STANDING INSTRUCTIONS from Jensen, always honor these exactly, every turn (these are his saved preferences and shorthand):\n${directivesText}`,
     `Current time in Dubai: ${dubaiNow()} (it is ${dayPart()}).`,
     `JENSEN'S WORLD (venues / clients / events):\n${entitiesText}`,
+    `TODAY'S CALENDAR (${today} Dubai, authoritative — use this for any "today" claim, do NOT invent from chat history; if empty, today is genuinely clear):\n${todayBoardText}`,
     `RECENT OPEN TASKS (most recent first, available ids for complete_task / update_task):\n${openTasksText}`,
     `HIS PREFERENCES: ${prefsText}`,
     `HIS GOALS:\n${goalsText}`,
