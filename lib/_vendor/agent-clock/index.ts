@@ -3,7 +3,7 @@
 // Why vendored: each bot is its own Vercel project, file:../sibling deps break Vercel build.
 
 /**
- * @zanii/agent-clock — inject trusted temporal context into every LLM call.
+ * @zanii/agent-clock. Inject trusted temporal context into every LLM call.
  *
  * LLMs answer with the wrong date because the current date/time is never
  * injected into prompts. `ClockInjector` renders a trusted "now" and prepends

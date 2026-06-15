@@ -1,5 +1,5 @@
 /**
- * The `ClockInjector` — the heart of `@zanii/agent-clock`.
+ * The `ClockInjector`, the heart of `@zanii/agent-clock`.
  *
  * Renders a trusted moment in time and prepends it to prompts so an LLM always
  * knows the real "now" instead of hallucinating a stale training-cutoff date.
@@ -83,7 +83,7 @@ function getZonedParts(instant: Date, timeZone: string): ZonedParts {
   const year = Number(get("year"));
   const month = Number(get("month"));
   const day = Number(get("day"));
-  // h23 returns 00-23, but at midnight some runtimes emit "24" — clamp.
+  // h23 returns 00-23, but at midnight some runtimes emit "24", clamp.
   let hour = Number(get("hour"));
   if (hour === 24) hour = 0;
   const minute = Number(get("minute"));
