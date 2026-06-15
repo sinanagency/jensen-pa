@@ -154,6 +154,10 @@ export async function createEvent(i: { title: string; date: string; time?: strin
 export async function updateEvent(i: any) {
   const patch: any = {};
   for (const k of ["title", "date", "time", "note"]) if (i[k] !== undefined) patch[k] = i[k];
+  // Wall-at-primitive: any change to fire-time invalidates the reminder latch.
+  // Without this, a moved event keeps its old reminded_at and the cron's
+  // `reminded_at IS NULL` filter silently skips the row on the new date.
+  if (patch.date !== undefined || patch.time !== undefined) patch.reminded_at = null;
   await sbUpdate("events", `id=eq.${enc(i.id)}`, patch);
   return { id: i.id, updated: Object.keys(patch) };
 }
