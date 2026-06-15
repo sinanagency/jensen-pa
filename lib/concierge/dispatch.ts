@@ -105,6 +105,7 @@ export async function runAction(name: string, input: any): Promise<{ ok: boolean
       case "create_event": result = await ops.createEvent(input); break;
       case "update_event": result = await ops.updateEvent(input); break;
       case "delete_event": result = await ops.deleteEvent(input.id); break;
+      case "complete_event": result = await ops.completeEvent({ id: input.id, note: input.note }); break;
       // finance
       case "finance_summary": result = await financeSummary(input); break;
       case "list_finance": result = await ops.listFinance(input); break;

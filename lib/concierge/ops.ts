@@ -163,6 +163,22 @@ export async function updateEvent(i: any) {
 }
 export async function deleteEvent(id: string) { await sbDelete("events", `id=eq.${enc(id)}`); return { deleted: id }; }
 
+// complete_event (KT #288). When Jensen says "Sara done / Toana done", Dorje
+// used to punt with "they were calendar events, so marked past automatically",
+// a behavioral fiction (Law 1 persona-purity asks for honesty, Law 6 numbers-
+// reconcile asks for status to match state). Stamps outcome="completed" and
+// prepends a one-line marker on note. The reminders cron's reminded_at latch
+// already gates re-firing, so completion is purely a status record.
+export async function completeEvent(i: { id: string; note?: string }) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  const noteLine = i.note ? `[completed ${stamp}: ${i.note}]` : `[completed ${stamp}]`;
+  const rows = await sbSelect<any>("events", `id=eq.${enc(i.id)}&select=note&limit=1`).catch(() => []);
+  const prev = rows?.[0]?.note || "";
+  const merged = prev ? `${noteLine}\n${prev}` : noteLine;
+  await sbUpdate("events", `id=eq.${enc(i.id)}`, { outcome: "completed", note: merged });
+  return { id: i.id, completed: true };
+}
+
 // ---------- NOTES ----------
 export async function listNotes(f: { kind?: string } = {}) {
   let qs = "order=created_at.desc";

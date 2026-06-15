@@ -28,6 +28,7 @@ export const TOOLS: Tool[] = [
   { name: "create_event", description: "Add a calendar event.", input_schema: obj({ title: str(""), date: str("YYYY-MM-DD"), time: str("HH:MM"), entityId: str(""), note: str("") }, ["title", "date"]) },
   { name: "update_event", description: "Update an event.", input_schema: obj({ id: str(""), title: str(""), date: str(""), time: str(""), note: str("") }, ["id"]) },
   { name: "delete_event", description: "Delete an event. DESTRUCTIVE: ask the user to confirm in conversation first, then call again with confirm:true.", input_schema: obj({ id: str(""), confirm: bool("must be true; only set after user explicitly confirms") }, ["id"]) },
+  { name: "complete_event", description: "Mark a calendar event (meeting, visit, call, payment-event) as completed. SAFE: stamps outcome='completed' on the events row and appends a one-line marker to note. Use when Jensen reports a meeting actually happened: 'meeting with Taona is done', 'Sara done', 'Toana done', 'I met Bashir'. THIS IS FOR CALENDAR EVENTS, not to-do TASKS — for tasks use complete_task. Look up the event id first via query_calendar.", input_schema: obj({ id: str("the events.id of the calendar event"), note: str("optional one-line note on how it went") }, ["id"]) },
 
   // ---- Finance (UAE) ----
   { name: "finance_summary", description: "Income, expense, net. Optionally per entity or period.", input_schema: obj({ entityId: str(""), from: str("YYYY-MM-DD"), to: str("YYYY-MM-DD") }) },
