@@ -24,39 +24,35 @@ type Result = any;
 // not swipe. Wall-at-primitive: every task or event target write primitive
 // calls this guard with the resolved row title BEFORE the update.
 //
-// Jensen-side source of team names is the contacts table (Sasa uses team_members;
-// Jensen's equivalent registry of people Dorje schedules meetings with is contacts).
-// Length >= 3 filter avoids over-matching on short names (Al matches "almost").
+// Lifted to @sinanagency/brain-core v0.7 on 2026-06-16 as the first primitive
+// in the cross-bot tool registry. Jensen-side adapters wire the pure logic to
+// Jensen's contacts + chat_messages tables (Sasa uses team_members + messages;
+// CTH has no surface for this yet). Same regex, two adapter callbacks,
+// brain-core owns the truth.
+import { discriminatorMismatch as _bcDiscriminatorMismatch } from "@/lib/brain-core/index.js";
+function jensenDiscriminatorAdapters(ctx: { party?: string }) {
+  return {
+    getActiveTeamFirstNames: async (): Promise<string[]> => {
+      const contacts: any[] = await sbSelect("contacts", "select=name").catch(() => []);
+      return contacts
+        .map((r) => String(r?.name || "").trim().split(/\s+/)[0])
+        .filter((s: string) => !!s);
+    },
+    getLastUserInbound: async (): Promise<string | null> => {
+      const party = ctx.party || "jensen";
+      const rows: any[] = await sbSelect(
+        "chat_messages",
+        `party=eq.${enc(party)}&role=eq.user&select=content&order=ts.desc&limit=1`,
+      ).catch(() => []);
+      return String(rows?.[0]?.content || "");
+    },
+  };
+}
 async function discriminatorMismatch(
   ctx: { party?: string },
   candidateTitle: string
-): Promise<{ ok: true } | { ok: false; expected: string; got: string }> {
-  try {
-    const titleLower = String(candidateTitle || "").toLowerCase();
-    if (!titleLower) return { ok: true };
-    const contacts: any[] = await sbSelect("contacts", "select=name").catch(() => []);
-    const firstNames = contacts
-      .map((r) => String(r?.name || "").trim().toLowerCase().split(/\s+/)[0])
-      .filter((s) => s && s.length >= 3);
-    if (!firstNames.length) return { ok: true };
-    const nameRe = (n: string) => new RegExp(`(^|[^a-z])${n}([^a-z]|$)`, "i");
-    const namesInTitle = Array.from(new Set(firstNames.filter((n) => nameRe(n).test(titleLower))));
-    if (namesInTitle.length !== 1) return { ok: true };
-    const party = ctx.party || "jensen";
-    const rows: any[] = await sbSelect(
-      "chat_messages",
-      `party=eq.${enc(party)}&role=eq.user&select=content&order=ts.desc&limit=1`,
-    ).catch(() => []);
-    const userBody = String(rows?.[0]?.content || "").toLowerCase();
-    if (!userBody) return { ok: true };
-    const expected = namesInTitle[0];
-    if (nameRe(expected).test(userBody)) return { ok: true };
-    const userNamed = firstNames.filter((n) => n !== expected && nameRe(n).test(userBody));
-    if (userNamed.length === 0) return { ok: true };
-    return { ok: false, expected, got: userNamed[0] };
-  } catch {
-    return { ok: true };
-  }
+) {
+  return _bcDiscriminatorMismatch(candidateTitle, jensenDiscriminatorAdapters(ctx));
 }
 
 // Best-effort observability emit. Sasa has an events table for this; Jensen
