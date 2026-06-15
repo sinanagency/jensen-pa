@@ -3,7 +3,19 @@
 // 24-hour format only: en-AE returns "11:53 AM" and the LLM subtracts that as
 // 11:53 instead of crossing the AM/PM boundary (cost: a "38 min" reply when the
 // answer was 97 min, 2026-06-11). en-GB returns "11:53" and the tz is stated.
+import { ClockInjector } from "./_vendor/agent-clock/index.js";
+
 export const TZ = "Asia/Dubai";
+
+// Productised ClockInjector from zanii-truststack. Renders the canonical
+// "Current trusted datetime:" block (weekday, date, 24h time, IANA zone,
+// UTC offset). Same shape now used by Sasa and CTH. Closes the 06-09 Sasa
+// Tuesday/Wednesday drift class before it fires on Jensen.
+const _dubaiClock = new ClockInjector({ timezone: TZ });
+
+export function dubaiClockBlock(): string {
+  return _dubaiClock.block();
+}
 
 export function dubaiNow(): string {
   const s = new Date().toLocaleString("en-GB", { timeZone: TZ, dateStyle: "full", timeStyle: "short" });

@@ -9,7 +9,7 @@ import { verifyReply } from "./verify";
 import { stripDashes } from "../whatsapp";
 import { recall, captureSalience, listDirectives } from "./brain";
 import * as ops from "./ops";
-import { dubaiNow, dubaiToday, dayPart } from "../time";
+import { dubaiToday, dayPart, dubaiClockBlock } from "../time";
 
 const API = "https://api.anthropic.com/v1/messages";
 
@@ -136,7 +136,8 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
   const tail = [
     speaking,
     directivesText && `STANDING INSTRUCTIONS from Jensen, always honor these exactly, every turn (these are his saved preferences and shorthand):\n${directivesText}`,
-    `Current time in Dubai: ${dubaiNow()} (it is ${dayPart()}).`,
+    dubaiClockBlock(),
+    `Daypart: ${dayPart()}.`,
     `JENSEN'S WORLD (venues / clients / events):\n${entitiesText}`,
     `TODAY'S CALENDAR (${today} Dubai, authoritative — use this for any "today" claim, do NOT invent from chat history; if empty, today is genuinely clear):\n${todayBoardText}\n\nCALENDAR DISCIPLINE (HARD WALL): every event you mention by name in this turn MUST appear in TODAY'S CALENDAR above. If today's calendar reads "(no events scheduled for today)" the answer is "clean board today" and you do NOT list anything from chat history, yesterday's mentions, or memory as today's items. Naming an event that is not in TODAY'S CALENDAR is a hallucination, not a fact. If the user asks what is on today and the board is empty, say "today is clear" verbatim.`,
     `RECENT OPEN TASKS (most recent first, available ids for complete_task / update_task):\n${openTasksText}`,
