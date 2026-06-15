@@ -8,9 +8,9 @@ export {
   type ComponentMetrics,
   MetricRegistry,
   BaseTrustComponent,
-} from "./core.js";
+} from "./core";
 
-export { type TrustEvent, EventBus, type EventHandler } from "./events.js";
+export { type TrustEvent, EventBus, type EventHandler } from "./events";
 
 export {
   type TelemetrySink,
@@ -22,4 +22,4 @@ export {
   setGlobalTelemetry,
   getGlobalTelemetry,
   traced,
-} from "./telemetry.js";
+} from "./telemetry";

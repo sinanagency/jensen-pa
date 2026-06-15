@@ -20,7 +20,7 @@ export {
   Weekday,
   type TimeFormatOptions,
   type TrustedTime,
-} from "./models.js";
+} from "./models";
 
 export {
   SystemTimeSource,
@@ -28,8 +28,8 @@ export {
   CallableTimeSource,
   resolveTimezone,
   type TimeSource,
-} from "./sources.js";
+} from "./sources";
 
-export { ClockInjector, type ClockInjectorOptions } from "./injector.js";
+export { ClockInjector, type ClockInjectorOptions } from "./injector";
 
 export const VERSION = "0.1.0";

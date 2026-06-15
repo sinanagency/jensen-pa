@@ -9,19 +9,19 @@ import {
   BaseTrustComponent,
   HealthState,
   type HealthStatus,
-} from "../truststack-core/index.js";
+} from "../truststack-core/index";
 
 import {
   TimeFormat,
   Weekday,
   weekdayFromMondayIndex,
   type TrustedTime,
-} from "./models.js";
+} from "./models";
 import {
   SystemTimeSource,
   resolveTimezone,
   type TimeSource,
-} from "./sources.js";
+} from "./sources";
 
 const TRUSTED_BLOCK_HEADER = "Current trusted datetime:";
 const USER_REQUEST_HEADER = "User requests:";

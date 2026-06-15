@@ -3,7 +3,7 @@
 // 24-hour format only: en-AE returns "11:53 AM" and the LLM subtracts that as
 // 11:53 instead of crossing the AM/PM boundary (cost: a "38 min" reply when the
 // answer was 97 min, 2026-06-11). en-GB returns "11:53" and the tz is stated.
-import { ClockInjector } from "./_vendor/agent-clock/index.js";
+import { ClockInjector } from "./_vendor/agent-clock/index";
 
 export const TZ = "Asia/Dubai";
 
