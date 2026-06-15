@@ -270,15 +270,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Wall 1 of "fragment match without anchor" (2026-06-16, KT #293). When the
+    // inbound was a WhatsApp swipe-to-reply on a prior Dorje message, Meta's
+    // payload carries msg.context.id (the wamid of the quoted outbound). We
+    // persist it on the inbound row and resolve it to the quoted excerpt before
+    // runConcierge so the model is anchored to the right subject and cannot
+    // fuzzy-match a different task or event.
+    const replyToExternalId: string | null = msg?.context?.id ? String(msg.context.id) : null;
+
     // NO-CHAT-LOST. Persist every inbound to chat_messages BEFORE the brain
     // runs, so an Anthropic / Vercel failure mid-runConcierge does not lose
     // what Jensen sent. The runConcierge end-path also appends, but Jensen's
     // message must be safe before any failure can swallow it.
     const inboundParty = sender.role === "admin" ? "taona" : "jensen";
-    await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
+    await ops.chatAppend("user", text, "whatsapp", inboundParty, {
+      externalId: msg.id ? String(msg.id) : null,
+      replyToExternalId,
+    }).catch(() => {});
     // Mirror inbound into Chatwoot (read-only, Path B). Best-effort.
     const { mirrorToChatwoot } = await import("@/lib/chatwoot-mirror");
     mirrorToChatwoot("incoming", from, text).catch(() => {});
+
+    // Resolve the swipe-reply anchor (Wall 1). If the inbound reply-quoted a
+    // prior Dorje outbound row, look it up by external_id (uniquely indexed)
+    // and grab its content as the anchor excerpt. The model receives this as
+    // a hard-wall block in the system tail telling it which prior message Jensen
+    // is pointing at, so "done" no longer fuzzes against a different task.
+    let swipeAnchor: { quotedExcerpt: string } | null = null;
+    if (replyToExternalId) {
+      try {
+        const rows = await admin()
+          .from("chat_messages")
+          .select("content,ts,role")
+          .eq("external_id", replyToExternalId)
+          .limit(1);
+        const quoted = (rows.data || [])[0] as any;
+        if (quoted?.content) {
+          const excerpt = String(quoted.content).replace(/\s+/g, " ").slice(0, 200);
+          if (excerpt) swipeAnchor = { quotedExcerpt: excerpt };
+        }
+      } catch {
+        // best-effort; absence of anchor degrades to today's fuzzy behavior, not a failure
+      }
+    }
 
     // FM-11 DETERMINISTIC DONE-RESOLUTION. Bare confirmations from JENSEN
     // (owner tier only) route the most recently created open task to done
@@ -286,11 +320,12 @@ export async function POST(req: NextRequest) {
     // deterministic verb, code the verb. Owner-only because Taona (admin)
     // chatting "Done" must NOT mark Jensen's tasks complete. Strip the
     // harness tag before matching so the prod harness exercises this path.
+    // Wall 1 carve-out (2026-06-16): a swipe-anchor on the same turn means
+    // Jensen pointed at a specific message, so the LLM brain steers better
+    // than open[0]; fall through to runConcierge in that case.
     const cleaned = text.replace(/^\s*\[H[a-z0-9]{6,}\]\s*/, "").trim();
-    // Owner-only post-unlock; during the sweep window (JENSEN_MODE=TRAINING) the
-    // harness drives from Taona's admin number and still needs to exercise this path.
     const doneEligible = sender.role === "owner" || process.env.JENSEN_MODE === "TRAINING";
-    if (doneEligible && /^(done|done\.|did it|yes done|handled|marked done)$/i.test(cleaned)) {
+    if (doneEligible && !swipeAnchor && /^(done|done\.|did it|yes done|handled|marked done)$/i.test(cleaned)) {
       const open = await ops.listTasks({ done: false }).catch(() => [] as any[]);
       if (open.length > 0) {
         await ops.updateTask({ id: open[0].id, done: true }).catch(() => {});
@@ -303,7 +338,7 @@ export async function POST(req: NextRequest) {
       // No open tasks: fall through to the brain so Jensen gets a graceful reply.
     }
 
-    const { reply } = await runConcierge({ messages: [...history, { role: "user", content: text }], channel: "whatsapp", sender });
+    const { reply } = await runConcierge({ messages: [...history, { role: "user", content: text }], channel: "whatsapp", sender, swipeAnchor });
     await sendWhatsApp(from, reply || "I'm here.");
     return NextResponse.json({ ok: true });
   } catch (e: any) {

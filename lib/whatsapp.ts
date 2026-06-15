@@ -43,13 +43,27 @@ function passesTrainingGate(to: string, contextBody: string, opts?: { force?: bo
   return true;
 }
 
+// Send a plain free-text WhatsApp message. Returns boolean for back-compat with
+// the ~25 existing callers that only need a success flag. Newer call sites that
+// need the Meta wamid (for swipe-reply anchor resolution: chat_messages.external_id
+// has to carry the outbound wamid so a later inbound m.context.id can join to it)
+// should call sendWhatsAppRaw instead; this wrapper delegates and discards the
+// wamid. Wall 1 of "fragment match without anchor" (2026-06-16, KT #293).
 export async function sendWhatsApp(to: string, body: string, opts?: { force?: boolean }): Promise<boolean> {
-  if (!waConfigured()) return false;
-  if (!passesTrainingGate(to, body, opts)) return false;
+  const r = await sendWhatsAppRaw(to, body, opts);
+  return r.ok;
+}
+
+// Returns Meta's wamid on success alongside ok. Same wall + chokepoint behavior
+// as sendWhatsApp (signature gate, training gate, dash strip, brand wall). The
+// chokepoint logic is here once; sendWhatsApp is a thin boolean wrapper.
+export async function sendWhatsAppRaw(to: string, body: string, opts?: { force?: boolean }): Promise<{ ok: boolean; wamid: string | null }> {
+  if (!waConfigured()) return { ok: false, wamid: null };
+  if (!passesTrainingGate(to, body, opts)) return { ok: false, wamid: null };
   // ── THE WALL (Architecture 2, 2026-06-12). sanitizeReply runs HERE, in the
   // primitive. Before this date it lived only in sendTextAndLog while the
   // concierge webhook replies (all nine of them), the morning brief in
-  // cron/daily, and Shopify called sendWhatsApp directly — every one of those
+  // cron/daily, and Shopify called sendWhatsApp directly, every one of those
   // was unwalled LLM or composed text. Now every free-form outbound passes
   // Jensen's BotGuardsConfig (brand wall) after Law 5's dash repair. A catch
   // is audited to chat_messages best effort and never blocks delivery.
@@ -81,9 +95,22 @@ export async function sendWhatsApp(to: string, body: string, opts?: { force?: bo
       body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: cleaned.slice(0, 4000) } }),
     });
     mirrorToOperator(cleaned, "out", "", to).catch(() => {});
-    return res.ok;
+    if (!res.ok) return { ok: false, wamid: null };
+    // Capture Meta's wamid so callers (sendTextAndLog) can persist it as
+    // chat_messages.external_id. Required for Wall 1 swipe-reply resolution:
+    // when Jensen later swipes a Dorje message, m.context.id is THIS wamid, and
+    // the worker joins chat_messages.reply_to_external_id -> external_id.
+    let wamid: string | null = null;
+    try {
+      const j: any = await res.json();
+      const id = j?.messages?.[0]?.id;
+      if (id) wamid = String(id);
+    } catch {
+      // Body parse failure must not flip ok to false: Meta accepted the send.
+    }
+    return { ok: true, wamid };
   } catch {
-    return false;
+    return { ok: false, wamid: null };
   }
 }
 

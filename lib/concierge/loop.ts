@@ -22,7 +22,7 @@ export type Sender = { name: string; role: "owner" | "admin" | "developer" };
 // training_graduated flag flip below so it never sends twice.
 const GRADUATION_ADDENDUM = `GRADUATION MOMENT (this single turn only): Jensen has been moved out of training mode. Open this reply by gently letting him know, in the first person and in my own voice, that I can now take real tasks for him from here on, and that I am still learning him so I can serve him better. Weave it naturally into the opening of my reply, never as the entire message and never as a formal announcement. Then continue to actually respond to whatever he just said, with full tools available, the way I would in normal active service. Do not list capabilities. Do not say the word "graduated". Keep it warm and short.`;
 
-async function buildSystem(lastUser: string, sender?: Sender, onboarding = false, channel?: string, graduation = false): Promise<string | { head: string; tail: string }> {
+async function buildSystem(lastUser: string, sender?: Sender, onboarding = false, channel?: string, graduation = false, swipeAnchor?: { quotedExcerpt: string } | null): Promise<string | { head: string; tail: string }> {
   const s = sender || { name: "Jensen", role: "owner" as const };
   if (onboarding) {
     // Pull whatever picture we already have so we never re-ask known things.
@@ -133,13 +133,25 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
     waFormat,
   ].filter(Boolean).join("\n\n");
 
+  // Wall 1 of "fragment match without anchor" (2026-06-16, KT #293): when the
+  // inbound was a WhatsApp swipe-reply, the webhook resolved it to the quoted
+  // Dorje excerpt and passed it here. Render as a hard-wall block in the
+  // dynamic tail (per turn, so it never sits in the cached prefix) telling
+  // the model EXACTLY which prior message Jensen is pointing at. Mirrors the
+  // CALENDAR DISCIPLINE (HARD WALL) pattern below.
+  const anchorBlock =
+    swipeAnchor && swipeAnchor.quotedExcerpt
+      ? `SWIPE-REPLY ANCHOR (HARD WALL): Jensen reply-quoted my prior message in this turn. The quoted message body was: "${String(swipeAnchor.quotedExcerpt).slice(0, 200)}". This turn is a continuation of THAT thread. If Jensen says "done", "got it", "closed", "yes", "no", or any short verb-target phrase, I MUST resolve it against the task or event named in the quoted message and NOT a different one. Targeting a different subject when an anchor is present is a hallucination, not a fuzzy-match.`
+      : "";
+
   const tail = [
     speaking,
     directivesText && `STANDING INSTRUCTIONS from Jensen, always honor these exactly, every turn (these are his saved preferences and shorthand):\n${directivesText}`,
+    anchorBlock,
     dubaiClockBlock(),
     `Daypart: ${dayPart()}.`,
     `JENSEN'S WORLD (venues / clients / events):\n${entitiesText}`,
-    `TODAY'S CALENDAR (${today} Dubai, authoritative — use this for any "today" claim, do NOT invent from chat history; if empty, today is genuinely clear):\n${todayBoardText}\n\nCALENDAR DISCIPLINE (HARD WALL): every event you mention by name in this turn MUST appear in TODAY'S CALENDAR above. If today's calendar reads "(no events scheduled for today)" the answer is "clean board today" and you do NOT list anything from chat history, yesterday's mentions, or memory as today's items. Naming an event that is not in TODAY'S CALENDAR is a hallucination, not a fact. If the user asks what is on today and the board is empty, say "today is clear" verbatim.`,
+    `TODAY'S CALENDAR (${today} Dubai, authoritative, use this for any "today" claim, do NOT invent from chat history; if empty, today is genuinely clear):\n${todayBoardText}\n\nCALENDAR DISCIPLINE (HARD WALL): every event you mention by name in this turn MUST appear in TODAY'S CALENDAR above. If today's calendar reads "(no events scheduled for today)" the answer is "clean board today" and you do NOT list anything from chat history, yesterday's mentions, or memory as today's items. Naming an event that is not in TODAY'S CALENDAR is a hallucination, not a fact. If the user asks what is on today and the board is empty, say "today is clear" verbatim.`,
     `RECENT OPEN TASKS (most recent first, available ids for complete_task / update_task):\n${openTasksText}`,
     `HIS PREFERENCES: ${prefsText}`,
     `HIS GOALS:\n${goalsText}`,
@@ -201,7 +213,7 @@ async function callRaw(system: string | { head: string; tail: string }, messages
 
 export type ConciergeResult = { reply: string; toolsUsed: string[] };
 
-export async function runConcierge(input: { messages: { role: "user" | "assistant"; content: string }[]; channel?: string; sender?: Sender }): Promise<ConciergeResult> {
+export async function runConcierge(input: { messages: { role: "user" | "assistant"; content: string }[]; channel?: string; sender?: Sender; swipeAnchor?: { quotedExcerpt: string } | null }): Promise<ConciergeResult> {
   const history = input.messages.filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-16);
   const lastUser = [...history].reverse().find((m) => m.role === "user")?.content || "";
   // Onboarding gate: until prefs.onboarding is explicitly turned off, the OWNER
@@ -216,7 +228,7 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
   const isOwnerTurn = (input.sender?.role ?? "owner") === "owner";
   const graduating = isOwnerTurn && prefs?.training_graduated !== true && prefs?.training_graduation_pending === true;
   const onboarding = isOwnerTurn && !graduating && prefs?.onboarding !== false;
-  const system = await buildSystem(lastUser, input.sender, onboarding, input.channel, graduating);
+  const system = await buildSystem(lastUser, input.sender, onboarding, input.channel, graduating, input.swipeAnchor);
 
   // Privacy wall: which conversation this is. Taona (admin/dev) is walled off from
   // Jensen; his messages and memory never mix into Jensen's, and only the admin
@@ -246,7 +258,7 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
       convo.push({ role: "assistant", content: blocks });
       const toolResults: any[] = [];
       for (const tu of toolUses) {
-        const r = await runAction(tu.name, tu.input || {});
+        const r = await runAction(tu.name, tu.input || {}, { party });
         runs.push({ name: tu.name, ok: r.ok });
         toolResults.push({
           type: "tool_result",

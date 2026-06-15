@@ -11,7 +11,7 @@
 // reaskPhrase and the catch is logged for engineering review. The wall is
 // in code; the rules are in lib/bot/guards-config.ts.
 
-import { sendWhatsApp, devPhone } from "@/lib/whatsapp";
+import { sendWhatsApp, sendWhatsAppRaw, devPhone } from "@/lib/whatsapp";
 import { admin } from "@/lib/db";
 import { sanitizeReply } from "@/lib/bot-guards/index.js";
 import { JENSEN_BOT_GUARDS_CONFIG } from "@/lib/bot/guards-config";
@@ -39,13 +39,20 @@ export async function sendTextAndLog(
     const ok = await sendWhatsApp(target, `[DEV] ${sendBody}`, { force: true });
     return { ok };
   }
-  await admin().from("chat_messages").insert({
+  // Wall 1 of "fragment match without anchor" (2026-06-16, KT #293): send via
+  // the raw helper so we capture Meta's wamid, then back-patch chat_messages
+  // .external_id on the assistant row. Persistence order is unchanged (still
+  // write BEFORE the send, Law 2 send-chokepoint) so a Meta failure cannot
+  // race-orphan the transcript. The patch is best-effort: if it fails the
+  // outbound transcript still exists, only the swipe-anchor lookup degrades.
+  const ins = await admin().from("chat_messages").insert({
     role: "assistant",
     content: sendBody,
     channel: "whatsapp",
     party: opts?.party ?? "jensen",
     ts: Date.now(),
-  });
+  }).select("id").single();
+  const insertedRowId: number | null = (ins?.data as any)?.id ?? null;
   if (sanitized.caught.length) {
     try {
       await admin().from("chat_messages").insert({
@@ -61,8 +68,15 @@ export async function sendTextAndLog(
   }
   // Read-only Chatwoot mirror (Path B). Best-effort, never blocks delivery.
   // Fires AFTER chat_messages insert so the source of truth still holds even
-  // if Chatwoot is down. Direction is "outgoing" because this is bot → Jensen.
+  // if Chatwoot is down. Direction is "outgoing" because this is bot, Jensen.
   mirrorToChatwoot("outgoing", to, sendBody).catch(() => {});
-  const ok = await sendWhatsApp(to, sendBody, opts);
-  return { ok };
+  const sendResult = await sendWhatsAppRaw(to, sendBody, opts);
+  if (sendResult.ok && sendResult.wamid && insertedRowId != null) {
+    try {
+      await admin().from("chat_messages").update({ external_id: sendResult.wamid }).eq("id", insertedRowId);
+    } catch {
+      // best-effort patch; the transcript still exists without the wamid join key.
+    }
+  }
+  return { ok: sendResult.ok };
 }

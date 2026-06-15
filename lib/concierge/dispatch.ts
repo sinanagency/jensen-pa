@@ -9,8 +9,73 @@ import { dubaiToday, dubaiNow } from "../time";
 import { ordersContext } from "../shopify";
 import { callOwner } from "../voice-call";
 import { aggregateInbox, readUnified, sendUnified, unpackId } from "../mail-provider";
+import { sbSelect, enc } from "./rest";
 
 type Result = any;
+
+// Wall 2 of "fragment match without anchor" (2026-06-16, KT #293 port from
+// Sasa's KT #274). When complete/update/delete_task or complete_event resolves
+// a candidate row whose TITLE carries a first name from Jensen's contacts that
+// the operator did NOT name in their last inbound message (and DID name a
+// different one), refuse the write and surface the disagreement. The 06-15
+// "meeting taona done -> closed meeting with haneen" misroute on Sasa lives
+// here: the LLM dispatched an id whose title carries the wrong name, the
+// primitive accepted it, the wall above (anchor) does not fire if Jensen did
+// not swipe. Wall-at-primitive: every task or event target write primitive
+// calls this guard with the resolved row title BEFORE the update.
+//
+// Jensen-side source of team names is the contacts table (Sasa uses team_members;
+// Jensen's equivalent registry of people Dorje schedules meetings with is contacts).
+// Length >= 3 filter avoids over-matching on short names (Al matches "almost").
+async function discriminatorMismatch(
+  ctx: { party?: string },
+  candidateTitle: string
+): Promise<{ ok: true } | { ok: false; expected: string; got: string }> {
+  try {
+    const titleLower = String(candidateTitle || "").toLowerCase();
+    if (!titleLower) return { ok: true };
+    const contacts: any[] = await sbSelect("contacts", "select=name").catch(() => []);
+    const firstNames = contacts
+      .map((r) => String(r?.name || "").trim().toLowerCase().split(/\s+/)[0])
+      .filter((s) => s && s.length >= 3);
+    if (!firstNames.length) return { ok: true };
+    const nameRe = (n: string) => new RegExp(`(^|[^a-z])${n}([^a-z]|$)`, "i");
+    const namesInTitle = Array.from(new Set(firstNames.filter((n) => nameRe(n).test(titleLower))));
+    if (namesInTitle.length !== 1) return { ok: true };
+    const party = ctx.party || "jensen";
+    const rows: any[] = await sbSelect(
+      "chat_messages",
+      `party=eq.${enc(party)}&role=eq.user&select=content&order=ts.desc&limit=1`,
+    ).catch(() => []);
+    const userBody = String(rows?.[0]?.content || "").toLowerCase();
+    if (!userBody) return { ok: true };
+    const expected = namesInTitle[0];
+    if (nameRe(expected).test(userBody)) return { ok: true };
+    const userNamed = firstNames.filter((n) => n !== expected && nameRe(n).test(userBody));
+    if (userNamed.length === 0) return { ok: true };
+    return { ok: false, expected, got: userNamed[0] };
+  } catch {
+    return { ok: true };
+  }
+}
+
+// Best-effort observability emit. Sasa has an events table for this; Jensen
+// writes a system row into chat_messages so the wall firings show up in the
+// same transcript review surface Taona already uses.
+async function emitDiscriminatorRefusal(tool: string, taskId: string, title: string, expected: string, got: string, party?: string): Promise<void> {
+  try {
+    const { admin } = await import("@/lib/db");
+    await admin().from("chat_messages").insert({
+      role: "system",
+      content: `dorje.discriminator_mismatch_refused tool=${tool} id=${taskId} expected=${expected} got=${got} title=${String(title).slice(0, 120)}`,
+      channel: "audit",
+      party: party || "jensen",
+      ts: Date.now(),
+    });
+  } catch {
+    // never block; the refusal already returned.
+  }
+}
 
 // JENSEN-DOCTRINE Law 8 (tool-call safety) enforcement.
 // Destructive or money-moving tools must NOT run inline. The model must ask
@@ -82,7 +147,7 @@ const GEN_SYS = (kind: string) =>
 const LEGAL_SYS = (kind: string, blueprint: string) =>
   `You are Rencontre, drafting a UAE ${kind} for Jensen / La Rencontre. Ground it in this legal blueprint where relevant:\n${blueprint || "(no blueprint saved yet; use sensible UAE defaults and flag where Jensen must fill specifics)"}\nDraft a clear, professional document under Dubai/UAE law. Add a short note that a UAE lawyer should review before signing. ${NO_DASHES} Output the document body only.`;
 
-export async function runAction(name: string, input: any): Promise<{ ok: boolean; result?: Result; error?: string }> {
+export async function runAction(name: string, input: any, ctx?: { party?: string }): Promise<{ ok: boolean; result?: Result; error?: string }> {
   try {
     const gated = destructiveGate(name, input);
     if (gated) return gated;
@@ -97,15 +162,63 @@ export async function runAction(name: string, input: any): Promise<{ ok: boolean
       // tasks
       case "list_tasks": result = await ops.listTasks(input); break;
       case "create_task": result = await ops.createTask(input); break;
-      case "update_task": result = await ops.updateTask(input); break;
-      case "complete_task": result = await ops.updateTask({ id: input.id, done: true }); break;
-      case "delete_task": result = await ops.deleteTask(input.id); break;
+      case "update_task": {
+        // Wall 2: look up the resolved title BEFORE writing so we can refuse
+        // when the operator's last inbound names a different team contact.
+        const trow: any[] = await sbSelect("tasks", `id=eq.${enc(String(input.id))}&select=title&limit=1`).catch(() => []);
+        const title = String((trow?.[0]?.title) || "");
+        const disc = await discriminatorMismatch({ party: ctx?.party }, title);
+        if (!disc.ok) {
+          await emitDiscriminatorRefusal("update_task", String(input.id), title, disc.expected, disc.got, ctx?.party);
+          return { ok: false, error: `I cannot update "${title}" from your message about ${disc.got}. Those name different people. Tell me which task you meant.` };
+        }
+        result = await ops.updateTask(input);
+        break;
+      }
+      case "complete_task": {
+        // Wall 2 mirror of update_task.
+        const trow: any[] = await sbSelect("tasks", `id=eq.${enc(String(input.id))}&select=title&limit=1`).catch(() => []);
+        const title = String((trow?.[0]?.title) || "");
+        const disc = await discriminatorMismatch({ party: ctx?.party }, title);
+        if (!disc.ok) {
+          await emitDiscriminatorRefusal("complete_task", String(input.id), title, disc.expected, disc.got, ctx?.party);
+          return { ok: false, error: `I cannot close "${title}" from your message about ${disc.got}. Those name different people. Tell me which task you meant.` };
+        }
+        result = await ops.updateTask({ id: input.id, done: true });
+        break;
+      }
+      case "delete_task": {
+        // Wall 2 mirror, doubly important because delete is irreversible.
+        const trow: any[] = await sbSelect("tasks", `id=eq.${enc(String(input.id))}&select=title&limit=1`).catch(() => []);
+        const title = String((trow?.[0]?.title) || "");
+        const disc = await discriminatorMismatch({ party: ctx?.party }, title);
+        if (!disc.ok) {
+          await emitDiscriminatorRefusal("delete_task", String(input.id), title, disc.expected, disc.got, ctx?.party);
+          return { ok: false, error: `I will not delete "${title}" from your message about ${disc.got}. Those name different people. Tell me which task you meant.` };
+        }
+        result = await ops.deleteTask(input.id);
+        break;
+      }
       // calendar
       case "query_calendar": result = await ops.queryCalendar(input); break;
       case "create_event": result = await ops.createEvent(input); break;
       case "update_event": result = await ops.updateEvent(input); break;
       case "delete_event": result = await ops.deleteEvent(input.id); break;
-      case "complete_event": result = await ops.completeEvent({ id: input.id, note: input.note }); break;
+      case "complete_event": {
+        // Wall 2: complete_event was added 2026-06-15 (KT #288) precisely for
+        // the "Sara done / Toana done" case. That tool's bug is the same shape
+        // as complete_task on Sasa: model picks a calendar event whose title
+        // carries a different first name from the one Jensen just named.
+        const erow: any[] = await sbSelect("events", `id=eq.${enc(String(input.id))}&select=title&limit=1`).catch(() => []);
+        const title = String((erow?.[0]?.title) || "");
+        const disc = await discriminatorMismatch({ party: ctx?.party }, title);
+        if (!disc.ok) {
+          await emitDiscriminatorRefusal("complete_event", String(input.id), title, disc.expected, disc.got, ctx?.party);
+          return { ok: false, error: `I cannot mark "${title}" as completed from your message about ${disc.got}. Those name different people. Tell me which meeting you meant.` };
+        }
+        result = await ops.completeEvent({ id: input.id, note: input.note });
+        break;
+      }
       // finance
       case "finance_summary": result = await financeSummary(input); break;
       case "list_finance": result = await ops.listFinance(input); break;

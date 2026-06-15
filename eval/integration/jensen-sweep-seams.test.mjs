@@ -354,9 +354,12 @@ check("seam.26 mirrorToOperator exists with loop-guard + delegates through sendW
 
 check("seam.27 sendWhatsApp fires mirror after successful outbound", () => {
   const src = read("lib/whatsapp.ts");
-  const fn = src.slice(src.indexOf("export async function sendWhatsApp"));
+  // 2026-06-16 KT #293: chokepoint body moved into sendWhatsAppRaw so it can
+  // return Meta's wamid (for Wall 1 swipe-reply anchor). sendWhatsApp now
+  // delegates and discards wamid for back-compat. Look in the Raw function.
+  const fn = src.slice(src.indexOf("export async function sendWhatsAppRaw"));
   const body = fn.slice(0, fn.indexOf("\n}\n") + 2);
-  if (!/mirrorToOperator\(/.test(body)) return "sendWhatsApp does not call mirrorToOperator";
+  if (!/mirrorToOperator\(/.test(body)) return "sendWhatsAppRaw does not call mirrorToOperator";
   // mirror call must come AFTER the graph fetch (otherwise we mirror unsent text)
   const fetchIdx = body.indexOf("graph.facebook.com");
   const mirrorIdx = body.indexOf("mirrorToOperator");

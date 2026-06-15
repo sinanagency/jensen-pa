@@ -241,8 +241,42 @@ export async function deleteDoc(id: string) { await sbDelete("docs", `id=eq.${en
 // Jensen's history and Taona's dev history never mix; Jensen can only ever load
 // his own. (Asymmetric wall: an admin tool can read Jensen's; nothing lets Jensen
 // read the admin's.)
-export async function chatAppend(role: "user" | "assistant", content: string, channel = "portal", party = "jensen") {
-  await sbInsert("chat_messages", { role, content, channel, party, ts: now() });
+//
+// Wall 1 of "fragment match without anchor" (2026-06-16, KT #293):
+//   externalId           outbound Meta wamid, set so a later inbound m.context.id
+//                        can join chat_messages.reply_to_external_id -> external_id.
+//   replyToExternalId    set on the inbound row when the user reply-quoted a
+//                        prior Dorje message; the worker resolves it at turn time.
+// Both are optional; existing call sites pass nothing and behavior is identical.
+// Returns the inserted row id so the caller can back-patch external_id once Meta
+// returns the wamid (sendTextAndLog and the whatsapp route both rely on this).
+export async function chatAppend(
+  role: "user" | "assistant",
+  content: string,
+  channel = "portal",
+  party = "jensen",
+  opts?: { externalId?: string | null; replyToExternalId?: string | null }
+): Promise<number | null> {
+  const row: any = { role, content, channel, party, ts: now() };
+  if (opts?.externalId) row.external_id = opts.externalId;
+  if (opts?.replyToExternalId) row.reply_to_external_id = opts.replyToExternalId;
+  try {
+    const rows: any[] = await sbInsert("chat_messages", row);
+    const id = rows?.[0]?.id;
+    return typeof id === "number" ? id : null;
+  } catch {
+    return null;
+  }
+}
+// Back-patch a chat_messages row with the wamid Meta returned post-send. Best
+// effort: the row itself already holds the transcript, only the anchor join
+// degrades on failure.
+export async function chatPatchExternalId(rowId: number, externalId: string): Promise<void> {
+  try {
+    await sbUpdate("chat_messages", `id=eq.${rowId}`, { external_id: externalId });
+  } catch {
+    // never block delivery, never throw upstream
+  }
 }
 export async function chatRecent(party = "jensen", limit = 12): Promise<{ role: "user" | "assistant"; content: string }[]> {
   const rows = await sbSelect<any>("chat_messages", `party=eq.${enc(party)}&select=role,content,ts&order=ts.desc&limit=${limit}`);
