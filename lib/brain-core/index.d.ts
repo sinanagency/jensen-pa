@@ -11,5 +11,6 @@ export type { SchemaManifest, SchemaMissing, SchemaDriftCode, SchemaCheckResult,
 export { discriminatorMismatch } from "./discriminator.js";
 export type { DiscriminatorAdapters, DiscriminatorResult, } from "./discriminator.js";
 export { register, list, get, _resetForTest } from "./tool-registry.js";
+export { shouldProcess, mediaArrived } from "./webhook-guard.js";
 export type { ToolPrimitive, ToolPrimitiveCategory, } from "./tool-registry.js";
 //# sourceMappingURL=index.d.ts.map
