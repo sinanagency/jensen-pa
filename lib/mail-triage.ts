@@ -6,6 +6,7 @@
 
 import { askClaude, HAIKU } from "./anthropic";
 import { kvGet, kvSet } from "./db";
+import { enrichDraftContext } from "./mail-draft-context";
 import type { UMailSummary } from "./mail-provider";
 
 export type Quadrant = 1 | 2 | 3 | 4;
@@ -116,8 +117,20 @@ async function classifyBatch(items: UMailSummary[]): Promise<Record<string, Tria
 }
 
 async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Triage>> {
-  const lines = items
-    .map((m) => `id=${m.id} | from: ${m.from} <${m.fromEmail}> | subject: ${m.subject} | preview: ${(m.snippet || "").replace(/\s+/g, " ").slice(0, 500)}`)
+  // Enrich each email with per-contact draft context. Parallel; unknown senders
+  // return "" and produce no change in behavior. (KT #302)
+  const enriched = await Promise.all(
+    items.map(async (m) => {
+      const ctx = await enrichDraftContext(m.fromEmail, m.from);
+      return { m, ctx };
+    })
+  );
+
+  const lines = enriched
+    .map(({ m, ctx }) => {
+      const prefix = ctx ? `${ctx}\n` : "";
+      return `${prefix}id=${m.id} | from: ${m.from} <${m.fromEmail}> | subject: ${m.subject} | preview: ${(m.snippet || "").replace(/\s+/g, " ").slice(0, 500)}`;
+    })
     .join("\n");
 
   // The prompt is intentionally explicit about uncertainty handling. The old
@@ -133,7 +146,7 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
     `- urgent: TRUE only if time sensitive within ~48h (a real deadline TODAY or TOMORROW, someone visibly blocked waiting, a payment due date imminent, a meeting time today). Otherwise FALSE.`,
     `- needsReply: TRUE if a real human is expecting a written reply from him. FALSE for automated mail.`,
     `- summary: max 14 words, plain, what it is and what is wanted (or "Newsletter from <vendor>" / "Auto-receipt <vendor>" for noise).`,
-    `- draft: ONLY if needsReply=true. 1-2 sentences, warm, professional, FIRST PERSON as Jensen. Never use dash characters (no -, no —, no –); use commas or periods. If !needsReply, return "".`,
+    `- draft: ONLY if needsReply=true. 1-2 sentences, warm, professional, FIRST PERSON as Jensen. Never use dash characters (no -, no —, no –); use commas or periods. If !needsReply, return "". When a "[Draft context: ...]" line is present for an email, USE that context to make the draft specific (reference the relationship, past discussion, last event, or known facts). Do not invent specifics beyond what the context provides.`,
     `- event: ONLY for a SPECIFIC scheduled meeting/booking/event with a CONCRETE YYYY-MM-DD date. Otherwise null. Never invent dates. Never resolve "next week" or "Q3" into a date. Include meetingUrl if the preview shows a Zoom/Meet/Teams/Whereby link (full URL, http or https), else omit. Shape: {"title":"...", "date":"YYYY-MM-DD", "time":"HH:MM"|null, "note":"...", "meetingUrl":"https://..."|null}.`,
     ``,
     `Quadrant = (important ? 1 : 3) when urgent, else (important ? 2 : 4). Computed automatically from important + urgent — do NOT return quadrant directly.`,

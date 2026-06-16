@@ -9,6 +9,7 @@ import { dubaiToday, dubaiNow } from "../time";
 import { ordersContext } from "../shopify";
 import { callOwner } from "../voice-call";
 import { aggregateInbox, readUnified, sendUnified, unpackId } from "../mail-provider";
+import { enrichDraftContext } from "../mail-draft-context";
 import { sbSelect, enc } from "./rest";
 
 type Result = any;
@@ -260,7 +261,11 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
         result = { sent: true, to: f.fromEmail, subject, from_mailbox: f.accountEmail };
         break;
       }
-      case "draft_reply": result = { drafted: true, sent: false, to: input.to, subject: input.subject, body: await askClaude({ system: `You are Rencontre drafting an email reply for Jensen. ${NO_DASHES} Output only the email body.`, messages: [{ role: "user", content: input.intent }], maxTokens: 800 }), note: "Draft only, not sent." }; break;
+      case "draft_reply": {
+        const ctx = await enrichDraftContext(input.to, "").catch(() => "");
+        const ctxBlock = ctx ? `${ctx}\n\n` : "";
+        result = { drafted: true, sent: false, to: input.to, subject: input.subject, body: await askClaude({ system: `You are Rencontre drafting an email reply for Jensen. ${ctxBlock}${NO_DASHES} Output only the email body.`, messages: [{ role: "user", content: input.intent }], maxTokens: 800 }), note: "Draft only, not sent." }; break;
+      }
       // memory
       case "remember_fact": await rememberFact(input.fact, { subject: input.subject, source: "concierge" }); result = { remembered: input.fact }; break;
       case "remember_preference": await rememberDirective(input.instruction); result = { saved: input.instruction, note: "I will always honor this from now on." }; break;
