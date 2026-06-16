@@ -158,7 +158,19 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
       case "delete_entity": result = await ops.deleteEntity(input.id); break;
       // tasks
       case "list_tasks": result = await ops.listTasks(input); break;
-      case "create_task": result = await ops.createTask(input); break;
+      case "create_task": {
+        result = await ops.createTask(input);
+        if (result?.ok !== false && result?.quadrant === 1) {
+          try {
+            const { sendTextAndLog } = await import("@/lib/sendTextAndLog");
+            const { whoIs } = await import("@/lib/whatsapp");
+            const nums = (process.env.OWNER_WHATSAPP || "").split(",").map((n: string) => n.trim()).filter(Boolean);
+            const owner = nums.find((n: string) => whoIs(n).role === "owner");
+            if (owner) sendTextAndLog(owner, `Heads up. I just added *${result.title}* to your Q1. It is marked urgent.`, { force: true, party: "jensen" }).catch(() => {});
+          } catch {}
+        }
+        break;
+      }
       case "update_task": {
         // Wall 2: look up the resolved title BEFORE writing so we can refuse
         // when the operator's last inbound names a different team contact.

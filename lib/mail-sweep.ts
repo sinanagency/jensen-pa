@@ -238,6 +238,26 @@ export async function sweepAndPropose(): Promise<SweepResult> {
   }
 
   const needsReply = triaged.filter((m) => m.needsReply && (m.draft || "").trim().length > 0);
+  // Thread coalescing: group emails by normalized subject and keep the most
+  // recent per thread. Same thread showing up as 2+ separate proposals (e.g.
+  // Thomas+Sohum + Petra+Sohum on the same purchasing thread) is noise, not
+  // signal. The user can reply "what else in that thread" if they want more.
+  const threadGroups = new Map<string, TriagedMail[]>();
+  for (const m of needsReply) {
+    const key = (m.subject || "").replace(/^(Re|Fwd|Aw|Antwort|RE|FWD|AW):\s*/i, "").trim().toLowerCase().slice(0, 80);
+    if (!key) continue;
+    if (!threadGroups.has(key)) threadGroups.set(key, []);
+    threadGroups.get(key)!.push(m);
+  }
+  const coalesced: TriagedMail[] = [];
+  for (const [, group] of threadGroups) {
+    group.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const primary = { ...group[0] };
+    if (group.length > 1) {
+      primary.summary = `${group.length} emails in this thread. Latest: ${primary.summary}`;
+    }
+    coalesced.push(primary);
+  }
   const notNeedingReply = triaged.length - needsReply.length;
 
   const to = recipientNumber();
@@ -285,7 +305,7 @@ export async function sweepAndPropose(): Promise<SweepResult> {
 
   // 2) Handle THIS tick's new needsReply items. In-window → propose now.
   // Off-window → queue for the next sweep that finds the window open.
-  for (const m of needsReply) {
+  for (const m of coalesced) {
     try {
       if (win.open) {
         const body = buildProposal(m);
