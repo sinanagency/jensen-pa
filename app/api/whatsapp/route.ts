@@ -10,7 +10,13 @@ import { readImage } from "@/lib/anthropic";
 import { extractTextFromBuffer } from "@/lib/extract-text";
 import { embed, chunk } from "@/lib/openai";
 import { transcribeAudio } from "@/lib/transcribe";
+import { sbSelect, enc } from "@/lib/concierge/rest";
 import { extractMeetingLink, dispatchMeetingBot, isCancelIntent, cancelActiveBot } from "@/lib/digital-u";
+
+// In-memory processing lock: prevents the same sender from triggering two
+// concurrent concierge runs when Meta sends duplicate webhooks for the same
+// message (which it does, with different wamids). 2-second window.
+const processingLock = new Map<string, number>();
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -112,6 +118,26 @@ export async function POST(req: NextRequest) {
     const from: string = msg?.from || "";
     if (!from || !msg?.id) return NextResponse.json({ ok: true });
     if (await seen(msg.id)) return NextResponse.json({ ok: true });
+
+    // Concurrency guard: if we processed a message from this sender within the
+    // last 2 seconds, silently log and skip. Meta sometimes sends the same
+    // user message as two separate webhooks with different wamids (observed at
+    // 20:28:52 + 20:28:53, 20:30:05 + 20:30:06 on 2026-06-16). Without this
+    // guard, two concierge loops fire based on the same prior history and both
+    // reply, doubling every message.
+    const now = Date.now();
+    const lastSeen = processingLock.get(from);
+    if (lastSeen && now - lastSeen < 2000) {
+      try {
+        const text = (msg.text?.body || "").trim();
+        if (text) {
+          const inboundParty = (whoIs(from).role === "admin" ? "taona" : "jensen");
+          await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
+        }
+      } catch {}
+      return NextResponse.json({ ok: true });
+    }
+    processingLock.set(from, now);
 
     // MAINTENANCE GATE. While JENSEN_MODE=TRAINING:
     //   - allowlisted senders (Taona + Jensen, per ALLOWLIST env) pass through
@@ -245,29 +271,72 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // DETERMINISTIC MEETING-LINK CHOKEPOINT. If the inbound contains a Meet,
-    // Zoom or Teams link, fire the meeting-bot dispatch immediately. We do not
-    // wait for the brain to "decide" because (a) deterministic verbs deserve
-    // deterministic code (same as the done-resolution path above, KT #127),
-    // and (b) Jensen's expectation is "send link, bot joins". We still WhatsApp
-    // an ack in his voice and persist the inbound to chat_messages first, so
-    // the conversation transcript stays whole.
+    // MEETING-LINK CHOKEPOINT. When the inbound contains a Meet/Zoom/Teams link,
+    // we check the INTENT: if the message explicitly asks the bot to join now
+    // ("join this", "go now", "attend this meeting", "take notes"), dispatch
+    // immediately. Otherwise the link is for a FUTURE meeting: save it to the
+    // matching event row and let the brain respond naturally ("I'll join at
+    // the meeting time"). This prevents 2026-06-16 pattern where sharing a
+    // link for tomorrow's Sotiris meeting triggered an immediate dispatch + 401.
     const meetingLink = extractMeetingLink(text);
     if (meetingLink) {
+      const rest = text.replace(meetingLink, "").trim();
+      const JOIN_INTENT_RE = /\b(join|go|now|attend|enter|dispatch|start)\b/i;
       const inboundParty = sender.role === "admin" ? "taona" : "jensen";
       await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
-      const dispatch = await dispatchMeetingBot({
-        link: meetingLink,
-        title: text.replace(meetingLink, "").trim().slice(0, 120) || "Meeting",
-        displayName: sender.role === "admin" ? "Digital Taona" : "Digital Jensen",
-      });
-      const ack = dispatch.ok
-        ? (sender.role === "admin"
-            ? `On it. I am dispatching the notetaker to ${meetingLink}. I will send the summary here when it finishes.`
-            : `On it. I am sending the notetaker to that meeting now. I will message you with the summary and your action items when the room closes.`)
-        : `I tried to dispatch the notetaker but the service returned: ${dispatch.error}. I will save the link and try again, or you can ask me to retry.`;
-      await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
-      return NextResponse.json({ ok: true });
+
+      if (JOIN_INTENT_RE.test(rest)) {
+        // Explicit join intent: dispatch the meeting bot immediately.
+        const dispatch = await dispatchMeetingBot({
+          link: meetingLink,
+          title: rest.replace(JOIN_INTENT_RE, "").trim().slice(0, 120) || "Meeting",
+          displayName: sender.role === "admin" ? "Digital Taona" : "Digital Jensen",
+        });
+        const ack = dispatch.ok
+          ? (sender.role === "admin"
+              ? `On it. I am dispatching the notetaker to ${meetingLink}. I will send the summary here when it finishes.`
+              : `On it. I am sending the notetaker to that meeting now. I will message you with the summary and your action items when the room closes.`)
+          : `I tried to join that meeting and the service returned: ${dispatch.error}. Let me check on it, or you can ask me to retry.`;
+        await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
+        return NextResponse.json({ ok: true });
+      }
+
+      // Future meeting link: try to attach it to a matching upcoming event.
+      // Best-effort: if no event matches, the brain saves the link context.
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const events = await sbSelect<any>(
+          "events",
+          `date=gte.${enc(today)}&time=is.not.null&order=date.asc&limit=5&select=id,title,date,time`
+        ).catch(() => []);
+        const match = (events as any[]).find((e: any) => {
+          const t = (e.title || "").toLowerCase();
+          return rest.toLowerCase().split(/\s+/).some((w: string) => w.length > 3 && t.includes(w));
+        });
+        if (match) {
+          await fetch(`${process.env.SUPABASE_URL}/rest/v1/events?id=eq.${enc(match.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", apikey: process.env.SUPABASE_SERVICE_KEY || "", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY || ""}` },
+            body: JSON.stringify({ meeting_url: meetingLink }),
+          }).catch(() => {});
+          // Schedule the meeting bot to join 30s before the event.
+          const localIso = `${match.date}T${match.time.padStart(5, "0")}:00+04:00`;
+          const joinAt = new Date(localIso).getTime();
+          if (!Number.isNaN(joinAt) && joinAt > Date.now() + 60000) {
+            dispatchMeetingBot({
+              link: meetingLink,
+              title: match.title,
+              scheduledAt: new Date(joinAt - 30000).toISOString(),
+              displayName: "Digital Jensen",
+            }).catch(() => {});
+          }
+          const ack = `Got it. I saved the link to *${match.title}* on ${match.date} at ${match.time}. I will join 5 minutes before and send you the notes when it ends. Nothing to worry about.`;
+          await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
+          return NextResponse.json({ ok: true });
+        }
+      } catch {}
+      // No event match: let the brain handle it (will respond naturally).
+      // Fall through to runConcierge below.
     }
 
     // Wall 1 of "fragment match without anchor" (2026-06-16, KT #293). When the
