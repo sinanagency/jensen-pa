@@ -34,9 +34,16 @@ export default function Concierge() {
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [filing, setFiling] = useState(false);
+  const [isDev, setIsDev] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/me").then((r) => r.json()).then((d) => {
+      if (d.me && (d.me.role === "admin" || d.me.role === "developer")) setIsDev(true);
+    }).catch(() => {});
+  }, []);
 
   // The Concierge starts with a clean canvas every session — past conversations
   // do NOT visually replay. They DO stay in the DB (chat_messages) and the
@@ -86,14 +93,26 @@ export default function Concierge() {
       if (!res.body) throw new Error("no stream");
       const reader = res.body.getReader();
       const dec = new TextDecoder();
-      let acc = "";
+      let buf = "";
+      let reply = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        acc += dec.decode(value, { stream: true });
-        setMsgs((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: acc }; return c; });
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        for (const part of parts) {
+          const lines = part.split("\n");
+          const event = lines.find((l) => l.startsWith("event:"))?.slice(6).trim();
+          const data = lines.find((l) => l.startsWith("data:"))?.slice(5).trim();
+          if (event === "done" && data) {
+            const parsed = JSON.parse(data);
+            reply = parsed.reply || "";
+            setMsgs((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: reply }; return c; });
+          }
+        }
       }
-      mutate((d) => { d.chat.push({ role: "assistant", content: acc, ts: Date.now() }); });
+      mutate((d) => { d.chat.push({ role: "assistant", content: reply, ts: Date.now() }); });
     } catch (e: any) {
       setMsgs((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: `I could not reach my reasoning just now. ${e?.message || ""}` }; return c; });
     } finally { setBusy(false); }
@@ -136,7 +155,10 @@ export default function Concierge() {
           <div className="orb sm" />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>Rencontre</div>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>Your concierge</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 8 }}>
+              Your concierge
+              {isDev && <span style={{ fontSize: 10, fontWeight: 600, color: "var(--warning)", border: "1px solid var(--warning)", borderRadius: 4, padding: "1px 6px", lineHeight: "18px" }}>DEV MODE</span>}
+            </div>
           </div>
           {filing && <span className="pill accent" style={{ height: 28 }}><Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Filing…</span>}
         </div>

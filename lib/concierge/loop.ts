@@ -163,15 +163,11 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
   return { head, tail };
 }
 
-async function callRaw(system: string | { head: string; tail: string }, messages: Turn[], maxTokens = 1800, withTools = true, tools: any[] = TOOLS) {
+type OnChunk = (text: string) => void;
+
+async function callRaw(system: string | { head: string; tail: string }, messages: Turn[], maxTokens = 1800, withTools = true, tools: any[] = TOOLS, onChunk?: OnChunk) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("ANTHROPIC_API_KEY not set");
-  // CROSS-TURN PROMPT CACHE (2026-06-12): a { head, tail } system puts the
-  // byte stable persona+rules head in its own cached block. Anthropic caching
-  // is prefix based, so the head now serves from cache on every turn (and
-  // every iteration), not just iterations 2..n of one turn. A plain string
-  // keeps the old single-block behavior (the onboarding branch still returns
-  // a string).
   const systemBlocks =
     typeof system === "string"
       ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
@@ -195,7 +191,6 @@ async function callRaw(system: string | { head: string; tail: string }, messages
   });
   if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const data = await res.json();
-  // Fire-and-forget Langfuse trace (lib/langfuse-trace.ts). Best-effort.
   try {
     const { traceLLM } = await import("@/lib/langfuse-trace");
     traceLLM({
@@ -207,7 +202,7 @@ async function callRaw(system: string | { head: string; tail: string }, messages
       endedAt: Date.now(),
       usage: { input: data?.usage?.input_tokens, output: data?.usage?.output_tokens },
     });
-  } catch { /* never block */ }
+  } catch {}
   return data;
 }
 

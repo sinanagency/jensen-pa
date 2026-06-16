@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test": "npx tsx --test eval/**/*.test.mjs eval/integration/*.test.mjs",
+    "predeploy": "bash scripts/pre-deploy.sh",
     "postinstall": "bash scripts/install-hooks.sh"
   },
   "dependencies": {

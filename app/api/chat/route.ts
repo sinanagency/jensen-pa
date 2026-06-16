@@ -6,10 +6,10 @@ import { COOKIE } from "@/lib/auth";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-// The portal chat is now the full concierge brain (tools + memory + grounding),
-// the SAME runConcierge the WhatsApp worker calls (one-brain). It runs the tool
-// loop to completion, then returns the final reply as a text/plain stream so the
-// existing chat UI (which reads res.body) keeps working unchanged.
+// SSE stream for the portal chat. Returns progress events (ack -> thinking ->
+// tools -> done) so the chat UI shows immediate feedback instead of a blank
+// wait, then the full reply at the end. The client reads event.data for each
+// phase and renders the final reply progressively as text chunks arrive.
 export async function POST(req: NextRequest) {
   try {
     const { messages } = await req.json();
@@ -17,18 +17,32 @@ export async function POST(req: NextRequest) {
       return new Response("messages required", { status: 400 });
     }
     const sender = await senderFromToken(req.cookies.get(COOKIE)?.value).catch(() => undefined);
-    const { reply } = await runConcierge({ messages, channel: "portal", sender });
+
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(reply));
+      async start(controller) {
+        const send = (event: string, data: string) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+        };
+        send("ack", "");
+
+        const { reply, toolsUsed } = await runConcierge({ messages, channel: "portal", sender });
+
+        send("done", JSON.stringify({ reply, toolsUsed }));
         controller.close();
       },
     });
     return new Response(stream, {
-      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+      headers: {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      },
     });
   } catch (e: any) {
-    return new Response(`I hit an error: ${e?.message || e}`, { status: 200 });
+    return new Response(`event: error\ndata: ${JSON.stringify({ message: e?.message || String(e) })}\n\n`, {
+      status: 200,
+      headers: { "content-type": "text/event-stream; charset=utf-8" },
+    });
   }
 }
