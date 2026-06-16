@@ -10,6 +10,7 @@ import { ordersContext } from "../shopify";
 import { callOwner } from "../voice-call";
 import { aggregateInbox, readUnified, sendUnified, unpackId } from "../mail-provider";
 import { enrichDraftContext } from "../mail-draft-context";
+import { kvGet } from "../db";
 import { sbSelect, enc } from "./rest";
 
 type Result = any;
@@ -277,6 +278,34 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
       case "list_inbox": {
         const ms = await aggregateInbox(Math.min(input.limit || 10, 20));
         result = ms.slice(0, input.limit || 10).map((m: any) => ({ id: m.id, from: m.from, email: m.fromEmail, subject: m.subject, date: m.date, snippet: m.snippet, mailbox: m.accountEmail, unread: !m.seen }));
+        break;
+      }
+      case "search_email": {
+        const q = ((input.sender || "") + " " + (input.subject || "")).trim().toLowerCase();
+        const limit = Math.min(input.limit || 5, 20);
+        // 1) Search the triage cache for matching sender/subject.
+        const triageCache = await kvGet<Record<string, any>>("mailtriage", {}).catch(() => ({}));
+        const fromCache = Object.values(triageCache as any).filter((t: any) => {
+          const tFrom = ((t.fromEmail || "") + " " + (t.from || "") + " " + (t.subject || "")).toLowerCase();
+          return q.split(/\s+/).some((w: string) => w.length > 2 && tFrom.includes(w));
+        }).slice(0, limit);
+        // 2) Search chat_messages for assistant messages that surfaced emails from this sender.
+        const chatRows = await sbSelect<any>(
+          "chat_messages",
+          `party=eq.jensen&role=eq.assistant&content=ilike.*I noticed a new email*&select=content,ts&order=ts.desc&limit=20`
+        ).catch(() => []);
+        const fromChat = chatRows
+          .filter((r: any) => {
+            const c = ((r.content || "")).toLowerCase();
+            return q.split(/\s+/).some((w: string) => w.length > 2 && c.includes(w));
+          })
+          .slice(0, limit)
+          .map((r: any) => ({
+            snippet: r.content.slice(0, 300),
+            ts: r.ts,
+          }));
+        result = { cache: fromCache, chat: fromChat };
+        if (!fromCache.length && !fromChat.length) result = { note: "No prior emails found matching that sender or subject." };
         break;
       }
       case "read_email": {
