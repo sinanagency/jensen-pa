@@ -12,7 +12,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendTextAndLog } from "@/lib/sendTextAndLog";
 import { whoIs } from "@/lib/whatsapp";
 import { dubaiToday } from "@/lib/time";
-import { sbSelect, sbUpdate, enc } from "@/lib/concierge/rest";
+import { sbSelect, sbUpdate, sbInsert, enc } from "@/lib/concierge/rest";
+import { normalizeEventTitleKey } from "@/lib/concierge/ops";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -71,6 +72,15 @@ async function handle(req: NextRequest) {
   const to = owners().filter((n) => whoIs(n).role === "owner");
   if (!to.length) return NextResponse.json({ ok: false, reason: "no_owner_phone", fired: 0 });
 
+  function nextRecurrence(curDate: string, recurrence: string): string | null {
+    const d = new Date(curDate + "T12:00:00+04:00");
+    if (recurrence === "weekly") d.setDate(d.getDate() + 7);
+    else if (recurrence === "monthly") d.setMonth(d.getMonth() + 1);
+    else if (recurrence === "yearly") d.setFullYear(d.getFullYear() + 1);
+    else return null;
+    return d.toISOString().slice(0, 10);
+  }
+
   const fired: any[] = [];
   for (const ev of due) {
     const body = `Reminder. ${ev.title} at ${ev.time}.`;
@@ -79,6 +89,27 @@ async function handle(req: NextRequest) {
     }
     await sbUpdate("events", `id=eq.${enc(ev.id)}`, { reminded_at: Date.now() }).catch(() => {});
     fired.push({ id: ev.id, title: ev.title, time: ev.time });
+
+    // Recurring: create the next occurrence if recurrence is set and not past until.
+    if (ev.recurrence && ["weekly", "monthly", "yearly"].includes(ev.recurrence)) {
+      const nextDate = nextRecurrence(ev.date, ev.recurrence);
+      if (nextDate && (!ev.recurrence_until || nextDate <= ev.recurrence_until)) {
+        const nextKey = normalizeEventTitleKey(ev.title);
+        const collision = nextKey
+          ? await sbSelect("events", `date=eq.${enc(nextDate)}&select=id&limit=1`).catch(() => [])
+          : [];
+        if (!collision?.length) {
+          const nextRow = {
+            id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4),
+            title: ev.title, date: nextDate, time: ev.time,
+            entity_id: ev.entity_id || null, note: ev.note || null,
+            recurrence: ev.recurrence, recurrence_until: ev.recurrence_until || null,
+            created_at: Date.now(),
+          };
+          await sbInsert("events", nextRow).catch(() => {});
+        }
+      }
+    }
   }
 
   return NextResponse.json({ ok: true, dubaiTime: today, nowMin, scanned: rows.length, fired: fired.length, events: fired });

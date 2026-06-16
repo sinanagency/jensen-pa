@@ -176,9 +176,29 @@ export async function sweepAndPropose(): Promise<SweepResult> {
       triaged = await triageInbox(candidates);
     } catch (e: any) {
       errors.push(`triage: ${e?.message || String(e)}`);
-      // Soft-fail: we still want the off-window-drain logic below to run if the
-      // window just opened, even if this tick's triage hiccupped.
     }
+  }
+
+  // Post-send reply detection: check if any fresh email is a reply to a recently
+  // sent email. If so, flag it for Jensen so he sees the reply conversationally.
+  if (candidates.length > 0) {
+    try {
+      const pending = await kvGet<Record<string, { to: string; subject: string; sentAt: number }>>("lr_sent_pending", {});
+      if (Object.keys(pending).length > 0) {
+        const freshReplies = triaged.filter((m) => {
+          if (!m.needsReply) return false;
+          const norm = (m.subject || "").replace(/^(Re|Fwd):\s*/i, "").trim().toLowerCase().slice(0, 80);
+          const threadKey = `${m.fromEmail}::${norm}`;
+          return !!pending[threadKey];
+        });
+        for (const r of freshReplies) {
+          r.summary = `Reply received: ${r.summary}`;
+          r.important = true;
+          r.urgent = true;
+          r.quadrant = 1;
+        }
+      }
+    } catch {}
   }
 
   // AUTO-LATCH for meetings. Any triaged email whose event extractor surfaced

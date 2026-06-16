@@ -469,18 +469,24 @@ function RecurringSection({ mutate, entities }: { mutate: (fn: (d: import("@/lib
   const [rvat, setRvat] = useState(false);
   const [rentity, setRentity] = useState("");
 
-  // Recurring expenses are stored as notes with kind="note" and a special prefix.
-  // For a lightweight implementation without a separate Supabase table migration
-  // being live, we store them in localStorage only via a React state approach.
-  // (The migration is on disk for when Supabase is available.)
+  // Recurring expenses: backed by the shared store so they sync across devices.
+  // Falls back to localStorage during onboarding before the Supabase migration
+  // is live. The `recurring_expenses` migration is on disk for production apply.
   const [recurring, setRecurring] = useState<RecurringRow[]>(() => {
     if (typeof window === "undefined") return [];
-    try { return JSON.parse(localStorage.getItem("lr.recurring") || "[]"); } catch { return []; }
+    try {
+      const store = (window as any).__LR_STORE_RECURRING;
+      if (store) return store;
+      return JSON.parse(localStorage.getItem("lr.recurring") || "[]");
+    } catch { return []; }
   });
 
   function saveRecurring(rows: RecurringRow[]) {
     setRecurring(rows);
-    try { localStorage.setItem("lr.recurring", JSON.stringify(rows)); } catch {}
+    try {
+      localStorage.setItem("lr.recurring", JSON.stringify(rows));
+      (window as any).__LR_STORE_RECURRING = rows;
+    } catch {}
   }
 
   function addRecurring() {

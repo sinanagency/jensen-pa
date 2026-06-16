@@ -70,6 +70,8 @@ export type CalEvent = {
   sourceMessageId?: string;   // when the event was auto-extracted from a mail row
   meetingUrl?: string;        // Zoom/Meet/Teams link if present, used by DigitalU dispatch
   digitalUStatus?: DigitalUStatus; // attendance plan for the meeting bot
+  recurrence?: string;        // 'weekly', 'monthly', 'yearly', or undefined for one-off
+  recurrenceUntil?: string;   // YYYY-MM-DD last occurrence
   createdAt: number;
 };
 
@@ -190,6 +192,30 @@ export function save(db: DB) {
   mirror();
   dispatch();
   scheduleSync();
+}
+
+// Auto-poll: re-hydrate from server every 30s while the page is visible so
+// changes made on another device show up within one refresh cycle. Cleaned
+// up on page hide (Browser tab switch / sleep). This is the cross-device
+// sync primitive: no WebSocket, no SSE — just a polite background fetch.
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+function startPolling() {
+  stopPolling();
+  if (typeof window === "undefined") return;
+  pollTimer = setInterval(() => { hydrate().catch(() => {}); }, 30000);
+  document.addEventListener("visibilitychange", onVisibility);
+}
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+}
+function onVisibility() {
+  if (document.hidden) stopPolling();
+  else startPolling();
+}
+// Start polling on first module load. Safe to call multiple times.
+if (typeof window !== "undefined") {
+  if (document.visibilityState !== "hidden") startPolling();
 }
 
 export function update(fn: (db: DB) => void): DB {

@@ -25,8 +25,8 @@ export const TOOLS: Tool[] = [
 
   // ---- Calendar ----
   { name: "query_calendar", description: "List events in a date range (YYYY-MM-DD).", input_schema: obj({ from: str(""), to: str(""), entityId: str("") }) },
-  { name: "create_event", description: "Add a calendar event.", input_schema: obj({ title: str(""), date: str("YYYY-MM-DD"), time: str("HH:MM"), entityId: str(""), note: str("") }, ["title", "date"]) },
-  { name: "update_event", description: "Update an event.", input_schema: obj({ id: str(""), title: str(""), date: str(""), time: str(""), note: str("") }, ["id"]) },
+  { name: "create_event", description: "Add a calendar event. Use recurrence for repeating events: 'weekly' (every week same day/time), 'monthly' (same day each month), 'yearly' (same date each year). Set recurrenceUntil to stop after a certain date.", input_schema: obj({ title: str(""), date: str("YYYY-MM-DD"), time: str("HH:MM"), entityId: str(""), note: str(""), recurrence: str("'weekly', 'monthly', 'yearly', or omit for one-off"), recurrenceUntil: str("YYYY-MM-DD last occurrence date") }, ["title", "date"]) },
+  { name: "update_event", description: "Update an event. Set recurrence=null to make a recurring event stop recurring.", input_schema: obj({ id: str(""), title: str(""), date: str(""), time: str(""), note: str(""), recurrence: str("'weekly', 'monthly', 'yearly', or null"), recurrenceUntil: str("YYYY-MM-DD") }, ["id"]) },
   { name: "delete_event", description: "Delete an event. DESTRUCTIVE: ask the user to confirm in conversation first, then call again with confirm:true.", input_schema: obj({ id: str(""), confirm: bool("must be true; only set after user explicitly confirms") }, ["id"]) },
   { name: "complete_event", description: "Mark a calendar event (meeting, visit, call, payment-event) as completed. SAFE: stamps outcome='completed' on the events row and appends a one-line marker to note. Use when Jensen reports a meeting actually happened: 'meeting with Taona is done', 'Sara done', 'Toana done', 'I met Bashir'. THIS IS FOR CALENDAR EVENTS, not to-do TASKS — for tasks use complete_task. Look up the event id first via query_calendar.", input_schema: obj({ id: str("the events.id of the calendar event"), note: str("optional one-line note on how it went") }, ["id"]) },
 
@@ -56,6 +56,9 @@ export const TOOLS: Tool[] = [
   { name: "add_contact", description: "Add a contact.", input_schema: obj({ name: str(""), company: str(""), role: str(""), email: str(""), phone: str(""), entityId: str("") }, ["name"]) },
   { name: "update_contact", description: "Update a contact.", input_schema: obj({ id: str(""), name: str(""), company: str(""), role: str(""), email: str(""), phone: str("") }, ["id"]) },
   { name: "delete_contact", description: "Delete a contact. DESTRUCTIVE: ask the user to confirm in conversation first, then call again with confirm:true.", input_schema: obj({ id: str(""), confirm: bool("must be true; only set after user explicitly confirms") }, ["id"]) },
+
+  // ---- Entity intelligence ----
+  { name: "entity_dashboard", description: "Full view of everything about one venue, client, or event: tasks, events, finance records, notes, contacts. Use when Jensen asks 'what is going on with X' or wants a per-entity overview.", input_schema: obj({ entityId: str("entity id from list_entities"), name: str("entity name if you don't have the id") }, []) },
 
   // ---- Notes ----
   { name: "list_notes", description: "List notes/ideas/links/journal.", input_schema: obj({ kind: { type: "string", enum: ["note", "idea", "link", "journal"] } }) },

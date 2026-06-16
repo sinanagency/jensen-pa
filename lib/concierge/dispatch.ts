@@ -251,6 +251,24 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
       case "add_contact": result = await ops.addContact(input); break;
       case "update_contact": result = await ops.updateContact(input); break;
       case "delete_contact": result = await ops.deleteContact(input.id); break;
+      // entity intelligence
+      case "entity_dashboard": {
+        let entityId = input.entityId;
+        if (!entityId && input.name) {
+          const found = await ops.findEntity(input.name).catch(() => [] as any[]);
+          entityId = (found as any[])?.[0]?.id || null;
+        }
+        if (!entityId) { result = { error: "entity not found" }; break; }
+        const [tasks, events, finance, notes, contacts] = await Promise.all([
+          ops.listTasks({ entityId }).catch(() => []),
+          ops.queryCalendar({ entityId }).catch(() => []),
+          ops.listFinance({ entityId }).catch(() => []),
+          ops.listNotes({}).then((all) => (all as any[]).filter((n) => n.entity_id === entityId)).catch(() => []),
+          ops.listContacts().then((all) => (all as any[]).filter((c) => c.entity_id === entityId)).catch(() => []),
+        ]);
+        result = { entityId, tasks, events, finance, notes, contacts };
+        break;
+      }
       // notes
       case "list_notes": result = await ops.listNotes(input); break;
       case "add_note": result = await ops.addNote(input); break;
@@ -271,6 +289,20 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
         const subject = /^re:/i.test(f.subject || "") ? f.subject : `Re: ${f.subject || ""}`;
         await sendUnified(unpackId(input.id).accountId, f.fromEmail, subject, input.body);
         result = { sent: true, to: f.fromEmail, subject, from_mailbox: f.accountEmail };
+        // Post-send: record this thread so subsequent mail triage can flag replies.
+        try {
+          const { kvGet, kvSet } = await import("@/lib/db");
+          const pending = await kvGet<Record<string, { to: string; subject: string; sentAt: number }>>("lr_sent_pending", {});
+          const threadKey = `${f.fromEmail}::${(f.subject || "").replace(/^(Re|Fwd):\s*/i, "").trim().toLowerCase().slice(0, 80)}`;
+          pending[threadKey] = { to: f.fromEmail, subject: f.subject || "", sentAt: Date.now() };
+          const entries = Object.entries(pending);
+          if (entries.length > 200) {
+            entries.sort((a, b) => b[1].sentAt - a[1].sentAt);
+            await kvSet("lr_sent_pending", Object.fromEntries(entries.slice(0, 200)));
+          } else {
+            await kvSet("lr_sent_pending", pending);
+          }
+        } catch {}
         break;
       }
       case "draft_reply": {
