@@ -18,6 +18,14 @@ import { extractMeetingLink, dispatchMeetingBot, isCancelIntent, cancelActiveBot
 // message (which it does, with different wamids). 2-second window.
 const processingLock = new Map<string, number>();
 
+// Media-pending buffer: when Meta sends image+text as separate webhooks, the
+// text ("This", "Here", "See attached") arrives first. We buffer it for up to
+// 2 seconds so the image webhook can arrive and be processed together. Without
+// this, the bot replies "I don't see any attachment" and then the image lands.
+// Keyed by sender phone number.
+const mediaPending = new Map<string, { text: string; textTs: number; msgId: string }>();
+const MEDIA_WAIT_MS = 2500;
+
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
@@ -208,6 +216,15 @@ export async function POST(req: NextRequest) {
 
     // ---- media: download, read, file into the portal via the brain ----
     if (media) {
+      // Check if there is a buffered text message from the same sender (short
+      // media-referencing message that arrived first as a separate webhook).
+      // Combine the text caption with the media content for a richer result.
+      const pendingText = mediaPending.get(from);
+      let combinedCaption = caption;
+      if (pendingText) {
+        combinedCaption = caption ? `${pendingText.text}: ${caption}` : pendingText.text;
+        mediaPending.delete(from); // release the text buffer
+      }
       const dl = await downloadMedia(media.id);
       if (!dl) { await sendWhatsApp(from, "I couldn't fetch that file from WhatsApp. Try sending it again."); return NextResponse.json({ ok: true }); }
       let text = "";
@@ -216,7 +233,7 @@ export async function POST(req: NextRequest) {
       if (!text.trim()) { await sendWhatsApp(from, "I saved your file but couldn't read text from it. If it's a photo, a clearer shot helps."); return NextResponse.json({ ok: true }); }
 
       const id = uid();
-      const title = (media.filename || caption || "WhatsApp upload").replace(/\.[a-z0-9]+$/i, "").slice(0, 80) || "WhatsApp upload";
+      const title = (media.filename || combinedCaption || "WhatsApp upload").replace(/\.[a-z0-9]+$/i, "").slice(0, 80) || "WhatsApp upload";
       let chunks: { text: string; embedding: number[] }[] = [];
       try { const parts = chunk(text); const vecs = parts.length ? await embed(parts) : []; chunks = parts.map((t, i) => ({ text: t, embedding: vecs[i] })); } catch { /* no embedder: keyword only */ }
       await ops.addDoc({ id, title, fileName: media.filename || "whatsapp-upload", mime: dl.mime, kind: "document", text, chunks, createdAt: Date.now() });
@@ -251,6 +268,37 @@ export async function POST(req: NextRequest) {
     // ---- plain text: full concierge ----
     const text = (msg.text?.body || "").trim();
     if (!text) return NextResponse.json({ ok: true });
+
+    // Media-reference buffer: if text is short ("this", "here", "see attached")
+    // and no media is attached yet, buffer it. Meta often splits image+text into
+    // two webhooks with the text arriving first. Wait up to MEDIA_WAIT_MS for
+    // the media webhook to arrive before processing. Observed 2026-06-16 at
+    // 20:27:52 ("This" with image) — bot replied "I don't see any attachment."
+    const MEDIA_REF_RE = /^(this|here|see|attached|image|photo|pic|screenshot|look|check|this is|here is|see attached|see this)$/i;
+    if (MEDIA_REF_RE.test(text.trim())) {
+      mediaPending.set(from, { text, textTs: Date.now(), msgId: msg.id });
+      // Wait for the media webhook. If it arrives within the window, the media
+      // handler below will combine them. If not, the timeout fires.
+      await new Promise<void>((resolve) => {
+        const check = setInterval(() => {
+          if (!mediaPending.has(from)) { clearInterval(check); resolve(); }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(check);
+          const buffered = mediaPending.get(from);
+          if (buffered && buffered.msgId === msg.id) {
+            mediaPending.delete(from);
+            // No media arrived in time — fall through to the normal text path.
+            resolve();
+          }
+        }, MEDIA_WAIT_MS);
+      });
+      // Check if media already arrived and cleared the buffer.
+      if (!mediaPending.has(from) || mediaPending.get(from)?.msgId !== msg.id) {
+        return NextResponse.json({ ok: true });
+      }
+      mediaPending.delete(from);
+    }
 
     // DETERMINISTIC CANCEL CHOKEPOINT. "stop" / "leave" / "cancel" / "get out"
     // when sent alone (or with the "digital jensen" prefix) kills the active
