@@ -20,6 +20,7 @@ supabase/.temp/
 .env.vercel*
 .env.production
 *.env
+.env.test*
 
 
 # secret guard: any file matching these patterns is suspicious by default
