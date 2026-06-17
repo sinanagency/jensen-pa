@@ -86,7 +86,7 @@ function buildProposal(m: TriagedMail): string {
     `Mailbox: ${m.accountEmail}`,
     `Priority: ${q}`,
     "",
-    `What it says: ${m.summary}`,
+    m.snippet ? `What it says:\n"${m.snippet}"` : `What it says: ${m.summary}`,
     "",
     "My draft reply:",
     `"${m.draft.trim()}"`,
