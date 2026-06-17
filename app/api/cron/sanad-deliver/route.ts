@@ -104,7 +104,7 @@ async function pollAndDeliver(row: PendingDraftRow): Promise<{ id: string; outco
   const sanadCfg = getSanadConfig();
   if (sanadCfg && job.result?.body_markdown) {
     try {
-      const baseUrl = sanadCfg.baseUrl.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "");
+      const baseUrl = sanadCfg.baseUrl.replace(/\/+$/, "");
       const kindNice = row.kind.replace(/_/g, " ");
       const res = await fetch(`${baseUrl}/api/v1/documents/ingest`, {
         method: "POST",

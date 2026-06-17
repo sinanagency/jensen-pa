@@ -39,19 +39,22 @@ export async function POST(req: NextRequest) {
   const docId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const title = body.title || "Untitled contract";
   const text = body.text_en || "";
+  const hasPdf = !!body.pdf_url;
+  const docKind = body.kind || "document";
 
   await addDoc({
     id: docId,
     title,
-    fileName: title.replace(/[^a-zA-Z0-9_-]/g, "_") + ".txt",
-    mime: "text/plain",
-    kind: "document",
+    fileName: title.replace(/[^a-zA-Z0-9_-]/g, "_") + (hasPdf ? ".pdf" : ".txt"),
+    mime: hasPdf ? "application/pdf" : "text/plain",
+    kind: docKind,
     text,
     folder: "contracts",
     createdAt: Date.now(),
   });
 
   let waMsgId: string | null = null;
+  let waError: string | null = null;
   if (body.send_to_wa) {
     if (body.pdf_url) {
       try {
@@ -66,12 +69,15 @@ export async function POST(req: NextRequest) {
             { force: true },
           );
         } else {
+          waError = `fetch_pdf_failed_${pdfRes.status}`;
           console.error(`sanad-ingest: failed to fetch pdf_url ${body.pdf_url} (${pdfRes.status}) for ${docId}`);
         }
       } catch (e) {
+        waError = `fetch_pdf_error`;
         console.error(`sanad-ingest: error fetching pdf_url for ${docId}:`, e instanceof Error ? e.message : e);
       }
     } else {
+      waError = "no_pdf_url";
       console.warn(`sanad-ingest: send_to_wa set but no pdf_url provided for ${docId}; skipping WhatsApp delivery`);
     }
   }
@@ -79,7 +85,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     docId,
+    kind: docKind,
     waMsgId,
+    waError,
     folder: "contracts",
   });
 }
