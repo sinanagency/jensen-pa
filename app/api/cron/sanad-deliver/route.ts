@@ -40,6 +40,15 @@ interface PendingDraftRow {
   metadata: { party_a_name?: string; party_b_name?: string } | null;
 }
 
+function sanadBaseUrl(): string | null {
+  const raw = process.env.SANAD_V1_BASE_URL?.trim();
+  return raw ? raw.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "") : null;
+}
+
+function sanadApiKey(): string | null {
+  return (process.env.SANAD_V1_API_KEY || "").trim() || null;
+}
+
 function authOk(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
@@ -99,6 +108,33 @@ async function pollAndDeliver(row: PendingDraftRow): Promise<{ id: string; outco
   }
   const filename = `${row.kind.replace(/_/g, "-")}-${row.id.slice(0, 8)}.pdf`;
   const msgId = await sendWhatsAppDocument(row.recipient_wa, pdf.data, filename, captionFor(row), { force: true });
+
+  // Save a copy to sanad's library for Jensen's portal
+  const sanadBase = sanadBaseUrl();
+  const sanadKey = sanadApiKey();
+  if (sanadBase && sanadKey && job.result?.body_markdown) {
+    try {
+      const kindNice = row.kind.replace(/_/g, " ");
+      await fetch(`${sanadBase}/api/v1/documents/ingest`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${sanadKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: `${kindNice} — ${row.metadata?.party_a_name || "Party A"} & ${row.metadata?.party_b_name || "Party B"}`,
+          surface: row.kind,
+          text_en: job.result.body_markdown,
+          citations: job.result.citations || [],
+          provenance_hash: job.result.provenance_hash || "",
+          pdf_url: job.result.pdf_url || "",
+        }),
+      });
+    } catch {
+      // best-effort; the PDF was already delivered to WhatsApp
+    }
+  }
+
   await sbUpdate("sanad_pending_drafts", `id=eq.${row.id}`, {
     status: "delivered",
     ready_at: job.updated_at,
