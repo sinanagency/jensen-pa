@@ -24,73 +24,7 @@ function owners(): string[] {
 
 async function handle(req: NextRequest) {
   if (!authed(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-  const rows = await sbSelect<any>(
-    "chat_messages",
-    `party=eq.jensen&role=eq.assistant&content=ilike.*My draft reply*&select=id,content,ts&order=ts.desc&limit=30`
-  ).catch(() => []);
-
-  if (!rows.length) return NextResponse.json({ ok: true, scanned: 0, nudged: 0 });
-
-  const now = Date.now();
-  const nudged: any[] = [];
-  const latched = await sbSelect<any>(
-    "kv",
-    `key=eq.draft_nudge_latched&select=value`
-  ).catch(() => []);
-
-  const alreadyNudged: Record<string, number> = (latched?.[0]?.value || {});
-
-  const skipped: any[] = [];
-
-  for (const row of rows) {
-    const draftTs: number = row.ts;
-    const age = now - draftTs;
-    if (age < NUDGE_AFTER_MS) continue;
-
-    const emailMatch = row.content.match(/\(email_id:\s*([^\s)]+)/);
-    if (!emailMatch) continue;
-    const emailId = emailMatch[1];
-    if ((alreadyNudged[emailId] || 0) >= MAX_NUDGES) continue;
-
-    if (age > SKIP_AFTER_MS) {
-      skipped.push({ emailId, draftTs, ageHours: Math.round(age / 3600000), reason: "24h_no_reply" });
-      alreadyNudged[emailId] = MAX_NUDGES;
-      continue;
-    }
-
-    const nextMsgs = await sbSelect<any>(
-      "chat_messages",
-      `party=eq.jensen&role=eq.user&ts=gt.${draftTs}&select=content&limit=3&order=ts.asc`
-    ).catch(() => []);
-
-    const actioned = nextMsgs.some((m: any) => {
-      const c = (m.content || "").toLowerCase().trim();
-      return c === "yes" || c === "send" || c.startsWith("change to") || c.startsWith("edit") || c.startsWith("skip") || c === "send it";
-    });
-    if (actioned) continue;
-
-    const to = owners().filter((n) => whoIs(n).role === "owner");
-    if (!to.length) break;
-
-    for (const num of to) {
-      const hours = Math.round(age / 3600000);
-      await sendTextAndLog(num, `Still waiting on your reply about a draft I sent ${hours}h ago. You can say "yes" to send, "change to: ..." to edit, or "skip" to drop it.`, { force: true, party: "jensen" });
-    }
-
-    nudged.push({ emailId, draftTs, ageHours: Math.round(age / 3600000) });
-    alreadyNudged[emailId] = (alreadyNudged[emailId] || 0) + 1;
-
-    if (nudged.length >= 3) break;
-  }
-
-  if (nudged.length || skipped.length) {
-    const prev = await sbSelect<any>("kv", "key=eq.draft_nudge_latched&select=value").catch(() => []);
-    const merged = { ...((prev?.[0]?.value) || {}), ...alreadyNudged };
-    await sbUpsert("kv", { key: "draft_nudge_latched", value: merged, updated_at: Date.now() }, "key").catch(() => {});
-  }
-
-  return NextResponse.json({ ok: true, scanned: rows.length, nudged: nudged.length, skipped: skipped.length, details: [...nudged, ...skipped].length ? [...nudged, ...skipped] : undefined });
+  return NextResponse.json({ ok: true, scanned: 0, nudged: 0, skipped: 0, disabled: true });
 }
 
 export async function GET(req: NextRequest) { return handle(req); }

@@ -17,10 +17,6 @@
       "schedule": "* * * * *"
     },
     {
-      "path": "/api/cron/draft-nudge",
-      "schedule": "0 */4 * * *"
-    },
-    {
       "path": "/api/cron/evening",
       "schedule": "0 16 * * *"
     }
