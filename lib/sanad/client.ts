@@ -55,6 +55,8 @@ export interface SanadDraftInput {
   jurisdiction: SanadJurisdiction;
   party_a: SanadParty;
   party_b: SanadParty;
+  /** Multi-party support. When provided, takes precedence over party_a/party_b. */
+  parties?: SanadParty[];
   effective_date?: string;
   additional_context?: string;
 }
@@ -110,6 +112,10 @@ function cfg(): { baseUrl: string; apiKey: string } | null {
   const apiKey = (process.env.SANAD_V1_API_KEY || "").trim();
   if (!baseUrl || !apiKey) return null;
   return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+}
+
+export function getSanadConfig(): { baseUrl: string; apiKey: string } | null {
+  return cfg();
 }
 
 export function isSanadConfigured(): boolean {

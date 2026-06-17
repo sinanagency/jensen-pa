@@ -52,18 +52,27 @@ export async function POST(req: NextRequest) {
   });
 
   let waMsgId: string | null = null;
-  if (body.send_to_wa && text.length > 0) {
-    try {
-      const pdfBuf = Buffer.from(text, "utf-8");
-      waMsgId = await sendWhatsAppDocument(
-        body.send_to_wa,
-        pdfBuf,
-        `${title.replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`,
-        `Contract: ${title}`,
-        { force: true },
-      );
-    } catch {
-      // best-effort WhatsApp delivery
+  if (body.send_to_wa) {
+    if (body.pdf_url) {
+      try {
+        const pdfRes = await fetch(body.pdf_url);
+        if (pdfRes.ok) {
+          const pdfBuf = Buffer.from(await pdfRes.arrayBuffer());
+          waMsgId = await sendWhatsAppDocument(
+            body.send_to_wa,
+            pdfBuf,
+            `${title.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`,
+            `Contract: ${title}`,
+            { force: true },
+          );
+        } else {
+          console.error(`sanad-ingest: failed to fetch pdf_url ${body.pdf_url} (${pdfRes.status}) for ${docId}`);
+        }
+      } catch (e) {
+        console.error(`sanad-ingest: error fetching pdf_url for ${docId}:`, e instanceof Error ? e.message : e);
+      }
+    } else {
+      console.warn(`sanad-ingest: send_to_wa set but no pdf_url provided for ${docId}; skipping WhatsApp delivery`);
     }
   }
 

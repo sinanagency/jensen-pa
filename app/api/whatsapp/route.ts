@@ -277,6 +277,9 @@ export async function POST(req: NextRequest) {
       const rest = text.replace(meetingLink, "").trim();
       const JOIN_INTENT_RE = /\b(join|go|now|attend|enter|dispatch|start)\b/i;
       const inboundParty = sender.role === "admin" ? "taona" : "jensen";
+      const botName = sender.name === "Nur" ? "Digital Nur"
+        : sender.role === "admin" ? "Digital Taona"
+        : "Digital Jensen";
       await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
 
       if (JOIN_INTENT_RE.test(rest)) {
@@ -284,7 +287,8 @@ export async function POST(req: NextRequest) {
         const dispatch = await dispatchMeetingBot({
           link: meetingLink,
           title: rest.replace(JOIN_INTENT_RE, "").trim().slice(0, 120) || "Meeting",
-          displayName: sender.role === "admin" ? "Digital Taona" : "Digital Jensen",
+          displayName: botName,
+          phone: from,
         });
         const ack = dispatch.ok
           ? (sender.role === "admin"
@@ -321,7 +325,8 @@ export async function POST(req: NextRequest) {
               link: meetingLink,
               title: match.title,
               scheduledAt: new Date(joinAt - 30000).toISOString(),
-              displayName: "Digital Jensen",
+              displayName: botName,
+              phone: from,
             }).catch(() => {});
           }
           const ack = `Got it. I saved the link to *${match.title}* on ${match.date} at ${match.time}. I will join 5 minutes before and send you the notes when it ends. Nothing to worry about.`;

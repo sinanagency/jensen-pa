@@ -162,6 +162,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const id = String(body?.id || "").slice(0, 80);
     const title = String(body?.title || "Untitled meeting").slice(0, 200);
+    // Use the dispatcher's phone from the callback query param if available,
+    // then from the body payload (zanii-meetingbot passes it in newer deploys),
+    // otherwise fall back to ownerJensenNumber().
+    const dispatchPhone = (req.nextUrl.searchParams.get("phone") || body?.phone || "").replace(/[^0-9]/g, "");
 
     // Max-1-retry guard. If the meeting-bot calls back for an event whose
     // outcome is already terminal (we have already shipped Jensen one ack),
@@ -182,7 +186,7 @@ export async function POST(req: NextRequest) {
       const fail = stripDashes(
         `I could not capture ${title}. Reason: ${reason}. If you send me the recording or transcript, I will still write the notes for you.`,
       );
-      const to = ownerJensenNumber();
+      const to = dispatchPhone || ownerJensenNumber();
       if (to) await sendTextAndLog(to, fail, { party: "jensen" });
       return NextResponse.json({ ok: true, mode: "failure-relayed" });
     }
@@ -204,7 +208,7 @@ export async function POST(req: NextRequest) {
       notesSummary: incomingNotes.summary,
     });
     if (outcome === "empty") {
-      const to = ownerJensenNumber();
+      const to = dispatchPhone || ownerJensenNumber();
       const msg = buildEmptyOutcomeMessage(title, durationSec);
       if (to) await sendTextAndLog(to, msg, { party: "jensen" });
       await setEventOutcome(id, "empty");
@@ -247,7 +251,7 @@ export async function POST(req: NextRequest) {
     // WhatsApp Jensen with the summary + the do-first list. sendTextAndLog
     // handles the chokepoint, the dash-strip, the audit log, and the dev-mode
     // reroute if this is Taona running the smoke harness.
-    const to = ownerJensenNumber();
+    const to = dispatchPhone || ownerJensenNumber();
     let msgOk = false;
     if (to) {
       const text = buildWhatsAppBody({ title, summary, decisions, tasks: rawTasks as ExtractedTask[] });

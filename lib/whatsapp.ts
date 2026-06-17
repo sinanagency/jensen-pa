@@ -267,6 +267,7 @@ export function whoIs(from: string): Sender {
   const defaults: Record<string, Sender> = {
     "971528902032": { name: "Jensen", role: "owner" },
     "971501168462": { name: "Taona", role: "developer" },
+    "971501622716": { name: "Nur", role: "owner" },
   };
   return defaults[d] || { name: "Jensen", role: "owner" };
 }

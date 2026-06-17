@@ -23,7 +23,7 @@
 
 import { NextResponse } from "next/server";
 import { sbSelect, sbUpdate } from "@/lib/concierge/rest";
-import { sanadPollJob, sanadFetchPdfBuffer } from "@/lib/sanad/client";
+import { sanadPollJob, sanadFetchPdfBuffer, getSanadConfig } from "@/lib/sanad/client";
 import { sendWhatsAppDocument, sendWhatsApp } from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
@@ -38,15 +38,6 @@ interface PendingDraftRow {
   jurisdiction: string;
   status: string;
   metadata: { party_a_name?: string; party_b_name?: string } | null;
-}
-
-function sanadBaseUrl(): string | null {
-  const raw = process.env.SANAD_V1_BASE_URL?.trim();
-  return raw ? raw.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "") : null;
-}
-
-function sanadApiKey(): string | null {
-  return (process.env.SANAD_V1_API_KEY || "").trim() || null;
 }
 
 function authOk(req: Request): boolean {
@@ -110,19 +101,19 @@ async function pollAndDeliver(row: PendingDraftRow): Promise<{ id: string; outco
   const msgId = await sendWhatsAppDocument(row.recipient_wa, pdf.data, filename, captionFor(row), { force: true });
 
   // Save a copy to sanad's library for Jensen's portal
-  const sanadBase = sanadBaseUrl();
-  const sanadKey = sanadApiKey();
-  if (sanadBase && sanadKey && job.result?.body_markdown) {
+  const sanadCfg = getSanadConfig();
+  if (sanadCfg && job.result?.body_markdown) {
     try {
+      const baseUrl = sanadCfg.baseUrl.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "");
       const kindNice = row.kind.replace(/_/g, " ");
-      await fetch(`${sanadBase}/api/v1/documents/ingest`, {
+      const res = await fetch(`${baseUrl}/api/v1/documents/ingest`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${sanadKey}`,
+          Authorization: `Bearer ${sanadCfg.apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          title: `${kindNice} — ${row.metadata?.party_a_name || "Party A"} & ${row.metadata?.party_b_name || "Party B"}`,
+          title: `${kindNice} - ${row.metadata?.party_a_name || "Party A"} & ${row.metadata?.party_b_name || "Party B"}`,
           surface: row.kind,
           text_en: job.result.body_markdown,
           citations: job.result.citations || [],
@@ -130,8 +121,12 @@ async function pollAndDeliver(row: PendingDraftRow): Promise<{ id: string; outco
           pdf_url: job.result.pdf_url || "",
         }),
       });
-    } catch {
-      // best-effort; the PDF was already delivered to WhatsApp
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        console.error(`sanad-library-sync: POST /api/v1/documents/ingest returned ${res.status} for job ${row.job_id}: ${errBody}`);
+      }
+    } catch (e) {
+      console.error(`sanad-library-sync: network error for job ${row.job_id}:`, e instanceof Error ? e.message : e);
     }
   }
 

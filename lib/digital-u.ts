@@ -71,6 +71,7 @@ export async function dispatchMeetingBot(opts: {
   title?: string;
   scheduledAt?: string; // ISO 8601
   displayName?: string;
+  phone?: string;       // WhatsApp number to send the summary back to
 }): Promise<{ ok: boolean; mode?: string; eventId?: string; botId?: string; error?: string }> {
   const base = (process.env.MEETING_BOT_URL || "").replace(/\/$/, "");
   const key = process.env.MEETING_BOT_API_KEY;
@@ -78,7 +79,7 @@ export async function dispatchMeetingBot(opts: {
     return { ok: false, error: "MEETING_BOT_URL or MEETING_BOT_API_KEY not configured" };
   }
   const ingestKey = process.env.INGEST_KEY;
-  const callbackUrl = `${siteUrl()}/api/ingest`;
+  const callbackUrl = `${siteUrl()}/api/ingest${opts.phone ? `?phone=${opts.phone}` : ""}`;
   try {
     const r = await fetch(`${base}/api/dispatch`, {
       method: "POST",
@@ -90,6 +91,7 @@ export async function dispatchMeetingBot(opts: {
         callbackUrl,
         callbackKey: ingestKey || undefined,
         displayName: opts.displayName || "Digital Jensen",
+        phone: opts.phone || undefined,
       }),
     });
     const body = await r.json().catch(() => ({}));
