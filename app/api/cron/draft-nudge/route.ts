@@ -7,6 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const NUDGE_AFTER_MS = 4 * 3600 * 1000;
+const SKIP_AFTER_MS = 24 * 3600 * 1000;
 
 function authed(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -39,6 +40,8 @@ async function handle(req: NextRequest) {
 
   const alreadyNudged: Record<string, true> = (latched?.[0]?.value || {});
 
+  const skipped: any[] = [];
+
   for (const row of rows) {
     const draftTs: number = row.ts;
     const age = now - draftTs;
@@ -48,6 +51,12 @@ async function handle(req: NextRequest) {
     if (!emailMatch) continue;
     const emailId = emailMatch[1];
     if (alreadyNudged[emailId]) continue;
+
+    if (age > SKIP_AFTER_MS) {
+      skipped.push({ emailId, draftTs, ageHours: Math.round(age / 3600000), reason: "24h_no_reply" });
+      alreadyNudged[emailId] = true;
+      continue;
+    }
 
     const nextMsgs = await sbSelect<any>(
       "chat_messages",
@@ -74,7 +83,7 @@ async function handle(req: NextRequest) {
     if (nudged.length >= 3) break;
   }
 
-  if (nudged.length) {
+  if (nudged.length || skipped.length) {
     const prev = await sbSelect<any>("kv", "key=eq.draft_nudge_latched&select=value").catch(() => []);
     const merged = { ...((prev?.[0]?.value) || {}), ...alreadyNudged };
     await fetch(`${process.env.SUPABASE_URL}/rest/v1/kv?key=eq.${enc("draft_nudge_latched")}`, {
@@ -92,7 +101,7 @@ async function handle(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, scanned: rows.length, nudged: nudged.length, details: nudged.length ? nudged : undefined });
+  return NextResponse.json({ ok: true, scanned: rows.length, nudged: nudged.length, skipped: skipped.length, details: [...nudged, ...skipped].length ? [...nudged, ...skipped] : undefined });
 }
 
 export async function GET(req: NextRequest) { return handle(req); }
