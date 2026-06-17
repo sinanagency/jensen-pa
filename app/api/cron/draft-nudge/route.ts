@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendTextAndLog } from "@/lib/sendTextAndLog";
 import { whoIs } from "@/lib/whatsapp";
-import { sbSelect, enc } from "@/lib/concierge/rest";
+import { sbSelect, sbUpsert, enc } from "@/lib/concierge/rest";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const NUDGE_AFTER_MS = 4 * 3600 * 1000;
 const SKIP_AFTER_MS = 24 * 3600 * 1000;
+const MAX_NUDGES = 2;
 
 function authed(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -38,7 +39,7 @@ async function handle(req: NextRequest) {
     `key=eq.draft_nudge_latched&select=value`
   ).catch(() => []);
 
-  const alreadyNudged: Record<string, true> = (latched?.[0]?.value || {});
+  const alreadyNudged: Record<string, number> = (latched?.[0]?.value || {});
 
   const skipped: any[] = [];
 
@@ -50,11 +51,11 @@ async function handle(req: NextRequest) {
     const emailMatch = row.content.match(/\(email_id:\s*([^\s)]+)/);
     if (!emailMatch) continue;
     const emailId = emailMatch[1];
-    if (alreadyNudged[emailId]) continue;
+    if ((alreadyNudged[emailId] || 0) >= MAX_NUDGES) continue;
 
     if (age > SKIP_AFTER_MS) {
       skipped.push({ emailId, draftTs, ageHours: Math.round(age / 3600000), reason: "24h_no_reply" });
-      alreadyNudged[emailId] = true;
+      alreadyNudged[emailId] = MAX_NUDGES;
       continue;
     }
 
@@ -78,7 +79,7 @@ async function handle(req: NextRequest) {
     }
 
     nudged.push({ emailId, draftTs, ageHours: Math.round(age / 3600000) });
-    alreadyNudged[emailId] = true;
+    alreadyNudged[emailId] = (alreadyNudged[emailId] || 0) + 1;
 
     if (nudged.length >= 3) break;
   }
@@ -86,19 +87,7 @@ async function handle(req: NextRequest) {
   if (nudged.length || skipped.length) {
     const prev = await sbSelect<any>("kv", "key=eq.draft_nudge_latched&select=value").catch(() => []);
     const merged = { ...((prev?.[0]?.value) || {}), ...alreadyNudged };
-    await fetch(`${process.env.SUPABASE_URL}/rest/v1/kv?key=eq.${enc("draft_nudge_latched")}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", apikey: process.env.SUPABASE_SERVICE_KEY || "", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY || ""}`, Prefer: "return=minimal" },
-      body: JSON.stringify({ value: merged, updated_at: Date.now() }),
-    }).catch(() => {
-      try {
-        const k = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SECRET_KEY || "";
-        fetch(`${process.env.SUPABASE_URL}/rest/v1/kv`, {
-          method: "POST", headers: { "Content-Type": "application/json", apikey: k, Authorization: `Bearer ${k}`, Prefer: "return=minimal" },
-          body: JSON.stringify({ key: "draft_nudge_latched", value: merged, updated_at: Date.now() }),
-        }).catch(() => {});
-      } catch {}
-    });
+    await sbUpsert("kv", { key: "draft_nudge_latched", value: merged, updated_at: Date.now() }, "key").catch(() => {});
   }
 
   return NextResponse.json({ ok: true, scanned: rows.length, nudged: nudged.length, skipped: skipped.length, details: [...nudged, ...skipped].length ? [...nudged, ...skipped] : undefined });
