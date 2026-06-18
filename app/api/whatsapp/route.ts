@@ -66,7 +66,7 @@ async function seen(id: string): Promise<boolean> {
 // gate only arms once WHATSAPP_APP_SECRET is set (early-setup escape hatch).
 function verifyMetaSignature(raw: string, header: string | null): boolean {
   const secret = process.env.WHATSAPP_APP_SECRET;
-  if (!secret) return true;
+  if (!secret) return false;
   if (!header) return false;
   const expected = "sha256=" + crypto.createHmac("sha256", secret).update(raw).digest("hex");
   const a = Buffer.from(header);
