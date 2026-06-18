@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     const from: string = msg?.from || "";
     if (!from || !msg?.id) return NextResponse.json({ ok: true });
-    if (await seen(msg.id)) return NextResponse.json({ ok: true });
+    if (await seen(msg.id)) { console.log(`[webhook] duplicate wamid: ${msg.id} from ${from}`); return NextResponse.json({ ok: true }); }
 
     // Brain-core webhook guard: concurrent dedup (2s lock per sender) + media-
     // pending buffer (wait for image webhook when text says "this"/"here").

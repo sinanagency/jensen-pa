@@ -269,7 +269,7 @@ export function whoIs(from: string): Sender {
     "971501168462": { name: "Taona", role: "developer" },
     "971501622716": { name: "Nur", role: "owner" },
   };
-  return defaults[d] || { name: "Jensen", role: "owner" };
+  return defaults[d] || { name: "Unknown", role: "admin" };
 }
 
 // Developer phone (E.164 digits, no plus). Resolved from whoIs defaults +
