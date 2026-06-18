@@ -380,6 +380,39 @@ check("seam.28 WA route fires mirror on non-admin inbound", () => {
 });
 
 // ============================================================================
+// FLEET MONITOR SEAMS
+// ============================================================================
+
+check("seam.29 monitor cron route exists with authed gate", () => {
+  const src = read("app/api/cron/monitor/route.ts");
+  if (!/authed/.test(src)) return "monitor route missing authed function";
+  if (!/CRON_SECRET/.test(src)) return "monitor route does not check CRON_SECRET";
+  if (!/health_checks/.test(src)) return "monitor route does not reference health_checks table";
+  if (!/sendTextAndLog/.test(src)) return "monitor route does not alert via sendTextAndLog";
+  if (!/degraded|down/.test(src)) return "monitor route does not detect degraded/down state";
+  return null;
+});
+
+check("seam.30 monitor registered in vercel.json cron schedule", () => {
+  const src = read("vercel.json");
+  if (!/monitor/.test(src)) return "monitor route not listed in vercel.json crons";
+  if (!/"schedule": "\* \* \* \* \*"/.test(src.replace(/\\n/g, ""))) {
+    const monitorEntry = src.match(/monitor[\s\S]{0,80}\* \* \* \* \*/);
+    if (!monitorEntry) return "monitor cron not on every-minute schedule";
+  }
+  return null;
+});
+
+check("seam.31 health_checks migration exists with correct schema", () => {
+  const src = read("db/2026-06-18_health_checks.sql");
+  if (!/create table if not exists health_checks/.test(src)) return "health_checks table not created";
+  if (!/bot text/.test(src)) return "bot column missing";
+  if (!/status text/.test(src)) return "status column missing";
+  if (!/checked_at/.test(src)) return "checked_at column missing";
+  return null;
+});
+
+// ============================================================================
 // REPORT
 // ============================================================================
 
