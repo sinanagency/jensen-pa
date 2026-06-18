@@ -113,10 +113,12 @@ export async function POST(req: NextRequest) {
     const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     const from: string = msg?.from || "";
     if (!from || !msg?.id) return NextResponse.json({ ok: true });
-    if (await seen(msg.id)) { console.log(`[webhook] duplicate wamid: ${msg.id} from ${from}`); return NextResponse.json({ ok: true }); }
-
     // Brain-core webhook guard: concurrent dedup (2s lock per sender) + media-
     // pending buffer (wait for image webhook when text says "this"/"here").
+    // Dedup via wa_seen table: insert is atomic, unique violation = already seen.
+    // NOTE: shouldProcess calls seenByWamid FIRST. If it returns false (not seen),
+    // the wamid MUST be persisted so subsequent retries are caught. That is why
+    // seenByWamid does the insert+check, same as the old standalone seen().
     const textBody = (msg.text?.body || "").trim();
     const guard = await shouldProcess("jensen", from, msg.id, textBody, {
       seenByWamid: async (id: string) => { const s = await seen(id); return s; },
