@@ -11,7 +11,7 @@
 // The actual send happens later through the existing reply_email tool, which
 // already gates on confirm:true.
 
-import { aggregateInbox, type UMailSummary } from "@/lib/mail-provider";
+import { aggregateInbox, readUnified, type UMailSummary } from "@/lib/mail-provider";
 import { triageInbox, type TriagedMail } from "@/lib/mail-triage";
 import { sendTextAndLog } from "@/lib/sendTextAndLog";
 import { kvGet, kvSet } from "@/lib/db";
@@ -332,7 +332,15 @@ export async function sweepAndPropose(): Promise<SweepResult> {
   for (const m of coalesced) {
     try {
       if (win.open) {
-        const r = await sendTextAndLog(to, buildEmailBody(m), { party: "jensen" });
+        // Fetch the full email body so the user sees the actual content, not the
+        // AI summary. Best-effort: if the fetch fails, fall through to snippet
+        // or summary (buildEmailBody handles that).
+        const withBody = { ...m };
+        try {
+          const full = await readUnified(m.id);
+          if (full?.text) withBody.snippet = full.text;
+        } catch { /* use snippet or summary fallback */ }
+        const r = await sendTextAndLog(to, buildEmailBody(withBody), { party: "jensen" });
         if (r.ok) await sendTextAndLog(to, buildDraft(m), { party: "jensen" });
         if (r.ok) proposed++;
         else errors.push(`whatsapp send failed for ${m.id}`);
