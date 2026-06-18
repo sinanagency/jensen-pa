@@ -81,7 +81,11 @@ export interface SanadJobPollResponse {
     kind: string;
     jurisdiction: SanadJurisdiction;
     body_markdown: string;
-    citations: Array<{ law_title?: string; article_number?: string; citation?: string }>;
+    citations: Array<{
+      law_title?: string;
+      article_number?: string;
+      citation?: string;
+    }>;
     provenance_hash: string;
     pdf_url: string;
   } | null;
@@ -98,9 +102,21 @@ export interface SanadReviewResponse {
   verdict: "GREEN" | "YELLOW" | "RED";
   summary: string;
   top_3: string[];
-  red_flags: Array<{ clause: string; issue: string; severity: "high" | "med" | "low" }>;
-  suggested_redlines: Array<{ original: string; replacement: string; rationale: string }>;
-  citations: Array<{ law_title?: string; article_number?: string; citation?: string }>;
+  red_flags: Array<{
+    clause: string;
+    issue: string;
+    severity: "high" | "med" | "low";
+  }>;
+  suggested_redlines: Array<{
+    original: string;
+    replacement: string;
+    rationale: string;
+  }>;
+  citations: Array<{
+    law_title?: string;
+    article_number?: string;
+    citation?: string;
+  }>;
 }
 
 export type SanadResult<T> =
@@ -125,7 +141,7 @@ export function isSanadConfigured(): boolean {
 async function call<T>(
   method: "GET" | "POST",
   path: string,
-  body?: unknown
+  body?: unknown,
 ): Promise<SanadResult<T>> {
   const c = cfg();
   if (!c) return { ok: false, status: 503, reason: "sanad_disabled" };
@@ -133,9 +149,9 @@ async function call<T>(
     method,
     headers: {
       authorization: `Bearer ${c.apiKey}`,
-      ...(body ? { "content-type": "application/json" } : {})
+      ...(body ? { "content-type": "application/json" } : {}),
     },
-    body: body ? JSON.stringify(body) : undefined
+    body: body ? JSON.stringify(body) : undefined,
   }).catch((e) => {
     return null as unknown as Response | null;
   });
@@ -157,26 +173,41 @@ async function call<T>(
   return { ok: false, status: r.status, reason: "non_json_response" };
 }
 
-export function sanadDraftContract(input: SanadDraftInput): Promise<SanadResult<SanadDraftResponse>> {
+export function sanadDraftContract(
+  input: SanadDraftInput,
+): Promise<SanadResult<SanadDraftResponse>> {
   return call<SanadDraftResponse>("POST", "/api/v1/contract/draft", input);
 }
 
-export function sanadPollJob(jobId: string): Promise<SanadResult<SanadJobPollResponse>> {
-  return call<SanadJobPollResponse>("GET", `/api/v1/jobs/${encodeURIComponent(jobId)}`);
+export function sanadPollJob(
+  jobId: string,
+): Promise<SanadResult<SanadJobPollResponse>> {
+  return call<SanadJobPollResponse>(
+    "GET",
+    `/api/v1/jobs/${encodeURIComponent(jobId)}`,
+  );
 }
 
-export async function sanadFetchPdfBuffer(jobId: string): Promise<SanadResult<Buffer>> {
+export async function sanadFetchPdfBuffer(
+  jobId: string,
+): Promise<SanadResult<Buffer>> {
   const c = cfg();
   if (!c) return { ok: false, status: 503, reason: "sanad_disabled" };
-  const r = await fetch(`${c.baseUrl}/api/v1/jobs/${encodeURIComponent(jobId)}/pdf`, {
-    headers: { authorization: `Bearer ${c.apiKey}` }
-  }).catch(() => null);
+  const r = await fetch(
+    `${c.baseUrl}/api/v1/jobs/${encodeURIComponent(jobId)}/pdf`,
+    {
+      headers: { authorization: `Bearer ${c.apiKey}` },
+    },
+  ).catch(() => null);
   if (!r) return { ok: false, status: 0, reason: "network_error" };
-  if (!r.ok) return { ok: false, status: r.status, reason: `sanad_pdf_${r.status}` };
+  if (!r.ok)
+    return { ok: false, status: r.status, reason: `sanad_pdf_${r.status}` };
   const ab = await r.arrayBuffer();
   return { ok: true, data: Buffer.from(ab) };
 }
 
-export function sanadReviewContract(input: SanadReviewInput): Promise<SanadResult<SanadReviewResponse>> {
+export function sanadReviewContract(
+  input: SanadReviewInput,
+): Promise<SanadResult<SanadReviewResponse>> {
   return call<SanadReviewResponse>("POST", "/api/v1/contract/review", input);
 }

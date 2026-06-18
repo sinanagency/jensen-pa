@@ -71,14 +71,15 @@ async function saveSeen(seen: SeenMap): Promise<void> {
   await kvSet(SEEN_KEY, seen);
 }
 
-// Build the WhatsApp proposal body. No em-dashes (Law 5), first person (Law 1).
-function buildProposal(m: TriagedMail): string {
+// Build the email body bubble. Shows sender, subject, and actual email text (snippet/bodyPreview).
+function buildEmailBody(m: TriagedMail): string {
   const q = m.quadrant === 1 ? "Q1 (urgent, important)"
           : m.quadrant === 2 ? "Q2 (important)"
           : m.quadrant === 3 ? "Q3 (urgent only)"
           : "Q4";
   const fromLine = m.from && m.from !== m.fromEmail ? `${m.from} <${m.fromEmail}>` : (m.fromEmail || m.from);
-  const lines = [
+  const body = m.snippet || m.summary || "(no preview)";
+  return [
     "I noticed a new email that needs your eyes.",
     "",
     `From: ${fromLine}`,
@@ -86,16 +87,18 @@ function buildProposal(m: TriagedMail): string {
     `Mailbox: ${m.accountEmail}`,
     `Priority: ${q}`,
     "",
-    m.snippet ? `What it says:\n"${m.snippet}"` : `What it says: ${m.summary}`,
-    "",
+    body,
+  ].join("\n");
+}
+
+// Build the draft reply bubble.
+function buildDraft(m: TriagedMail): string {
+  return [
     "My draft reply:",
     `"${m.draft.trim()}"`,
     "",
     "Reply 'yes' to send as is, 'change to: ...' to edit, or 'skip' to drop.",
-    "",
-    `(email_id: ${m.id})`,
-  ];
-  return lines.join("\n");
+  ].join("\n");
 }
 
 export type SweepResult = {
@@ -310,10 +313,11 @@ export async function sweepAndPropose(): Promise<SweepResult> {
           urgent: p.quadrant === 1 || p.quadrant === 3,
           needsReply: true, quadrant: p.quadrant, summary: p.summary, draft: p.draft,
         };
-        const body = `(catching up while you were away)\n\n` + buildProposal(m);
-        const r = await sendTextAndLog(to, body, { party: "jensen" });
-        if (r.ok) drained++;
-        else errors.push(`drain send failed for ${p.id}`);
+        const body1 = `(catching up while you were away)\n\n` + buildEmailBody(m);
+        const r1 = await sendTextAndLog(to, body1, { party: "jensen" });
+        if (!r1.ok) { errors.push(`drain send failed for ${p.id}`); continue; }
+        await sendTextAndLog(to, buildDraft(m), { party: "jensen" });
+        drained++;
       } catch (e: any) {
         errors.push(`drain ${p.id}: ${e?.message || String(e)}`);
       }
@@ -328,8 +332,8 @@ export async function sweepAndPropose(): Promise<SweepResult> {
   for (const m of coalesced) {
     try {
       if (win.open) {
-        const body = buildProposal(m);
-        const r = await sendTextAndLog(to, body, { party: "jensen" });
+        const r = await sendTextAndLog(to, buildEmailBody(m), { party: "jensen" });
+        if (r.ok) await sendTextAndLog(to, buildDraft(m), { party: "jensen" });
         if (r.ok) proposed++;
         else errors.push(`whatsapp send failed for ${m.id}`);
       } else {
