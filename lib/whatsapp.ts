@@ -264,10 +264,12 @@ export function whoIs(from: string): Sender {
     const profiles = process.env.OWNER_PROFILES ? JSON.parse(process.env.OWNER_PROFILES) : null;
     if (profiles && profiles[d]) return profiles[d];
   } catch { /* fall through to defaults */ }
+  // Nur is NOT an owner of Jensen's concierge. She is an operator of Sasa only.
+  // Hardcoding her here re-arms the June 17 misroute the moment any env lists
+  // her number. If she ever needs owner access, set it via OWNER_PROFILES env.
   const defaults: Record<string, Sender> = {
     "971528902032": { name: "Jensen", role: "owner" },
     "971501168462": { name: "Taona", role: "developer" },
-    "971501622716": { name: "Nur", role: "owner" },
   };
   return defaults[d] || { name: "Unknown", role: "admin" };
 }

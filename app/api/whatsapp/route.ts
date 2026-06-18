@@ -291,9 +291,7 @@ export async function POST(req: NextRequest) {
       const rest = text.replace(meetingLink, "").trim();
       const JOIN_INTENT_RE = /\b(join|go|now|attend|enter|dispatch|start)\b/i;
       const inboundParty = sender.role === "admin" ? "taona" : "jensen";
-      const botName = sender.name === "Nur" ? "Digital Nur"
-        : sender.role === "admin" ? "Digital Taona"
-        : "Digital Jensen";
+      const botName = sender.role === "admin" ? "Digital Taona" : "Digital Jensen";
       await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
 
       if (JOIN_INTENT_RE.test(rest)) {

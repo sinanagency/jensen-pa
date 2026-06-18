@@ -66,16 +66,21 @@ check("seam.04 lib/whatsapp.ts:sendWhatsApp has JENSEN_MODE chokepoint", () => {
   return null;
 });
 
-check("seam.05 WA route POST has maintenance gate after seen() and before isOwner()", () => {
+check("seam.05 WA route POST has shouldProcess BEFORE maintenance BEFORE isOwner", () => {
   const src = read("app/api/whatsapp/route.ts");
-  const seenIdx = src.indexOf("if (await seen(");
-  const maintIdx = src.indexOf("JENSEN_MODE");
+  const shouldProcessIdx = src.indexOf("shouldProcess(");
+  const maintIdx = src.indexOf('JENSEN_MODE === "TRAINING"');
   const ownerIdx = src.indexOf("if (!isOwner(");
-  if (seenIdx === -1) return "seen() dedupe not present at top of POST";
+  if (shouldProcessIdx === -1) return "shouldProcess dedup call not present at top of POST";
   if (maintIdx === -1) return "no JENSEN_MODE check in WA route";
   if (ownerIdx === -1) return "isOwner gate not present";
-  if (maintIdx < seenIdx) return "maintenance gate runs before seen() (would notify on every retry)";
+  // shouldProcess must come FIRST (immediately after EARLY SAVE)
+  if (maintIdx < shouldProcessIdx) return "maintenance gate runs before shouldProcess (would notify on retries before dedup)";
   if (maintIdx > ownerIdx) return "maintenance gate runs after isOwner (would leak 'private line' notice)";
+  // Assert seenByWamid callback exists (passes through to atomic wa_seen insert)
+  const callbackBlock = src.slice(shouldProcessIdx, maintIdx);
+  if (!/seenByWamid/.test(callbackBlock)) return "shouldProcess call lacks seenByWamid callback (dedup path missing)";
+  if (!/logToChat/.test(callbackBlock)) return "shouldProcess call lacks logToChat callback (media-buffer chat logging missing)";
   return null;
 });
 
