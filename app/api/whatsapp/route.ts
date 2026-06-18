@@ -116,9 +116,23 @@ export async function POST(req: NextRequest) {
 
     // EARLY SAVE: persist every inbound message before any processing gate so
     // the message is never lost even if shouldProcess, runConcierge, or any
-    // subsequent step fails or returns early. The text/voice/image handler
-    // below will call chatAppend again; that is fine (idempotent append).
-    const earlyText = (msg.text?.body || "").trim();
+    // subsequent step fails or returns early. Covers text, voice, audio,
+    // image, document, video, reaction, sticker, location, and contacts.
+    // The type-specific handler below will call chatAppend again with the
+    // full content (transcript, OCR, etc.); that is fine (idempotent append).
+    const earlyText = (() => {
+      if (msg.text?.body) return msg.text.body.trim();
+      if (msg.voice) return "[voice note]";
+      if (msg.audio) return "[audio]";
+      if (msg.image) return msg.image.caption ? `[image] ${msg.image.caption}` : "[image]";
+      if (msg.document) return msg.document.caption ? `[document] ${msg.document.caption}` : `[document: ${msg.document.filename || "file"}]`;
+      if (msg.video) return msg.video.caption ? `[video] ${msg.video.caption}` : "[video]";
+      if (msg.reaction) return `[reaction: ${msg.reaction.emoji || ""}]`;
+      if (msg.sticker) return "[sticker]";
+      if (msg.location) return `[location: ${msg.location.latitude},${msg.location.longitude}]`;
+      if (msg.contacts?.length) return `[contact: ${msg.contacts[0].name?.formatted_name || "shared"}]`;
+      return "";
+    })();
     if (earlyText) {
       const sender = whoIs(from);
       const party = sender.role === "admin" ? "taona" : "jensen";
@@ -131,7 +145,10 @@ export async function POST(req: NextRequest) {
     // NOTE: shouldProcess calls seenByWamid FIRST. If it returns false (not seen),
     // the wamid MUST be persisted so subsequent retries are caught. That is why
     // seenByWamid does the insert+check, same as the old standalone seen().
-    const textBody = earlyText;
+    // textBody is the raw text for shouldProcess media-buffer matching.
+    // Non-text types pass empty so "this"/"here" text is not confused with
+    // "[voice note]" stub content.
+    const textBody = msg.text?.body?.trim() || "";
     const guard = await shouldProcess("jensen", from, msg.id, textBody, {
       seenByWamid: async (id: string) => { const s = await seen(id); return s; },
       logToChat: async (sender: string, t: string) => {
