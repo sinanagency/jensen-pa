@@ -211,6 +211,7 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
       }
       // calendar
       case "query_calendar": result = await ops.queryCalendar(input); break;
+      case "day_log": result = await ops.dayLog(input.date); break;
       case "create_event": result = await ops.createEvent(input); break;
       case "update_event": result = await ops.updateEvent(input); break;
       case "delete_event": result = await ops.deleteEvent(input.id); break;

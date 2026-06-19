@@ -167,6 +167,16 @@ check("seam.12 honesty rail replaces fail-open verify; lie-engine patterns gone"
   return null;
 });
 
+check("seam.13b day_log wall: date-bounded activity tool wired end-to-end", () => {
+  if (!/export async function dayLog/.test(read("lib/concierge/ops.ts"))) return "ops.dayLog not exported";
+  if (!/name: "day_log"/.test(read("lib/concierge/tools.ts"))) return "day_log tool not defined";
+  if (!/case "day_log":\s*result = await ops\.dayLog/.test(read("lib/concierge/dispatch.ts"))) return "day_log not dispatched";
+  const loopSrc = read("lib/concierge/loop.ts");
+  if (!/DAY ACTIVITY/.test(loopSrc)) return "DAY ACTIVITY rule missing from system prompt";
+  if (!/day_log/.test(loopSrc)) return "system prompt does not point day questions at day_log";
+  return null;
+});
+
 check("seam.13 verifier uses COMPLETION_TOOLS set, not heuristic", () => {
   const src = read("lib/concierge/verify.ts");
   if (!/COMPLETION_TOOLS/.test(src)) return "verifier doesn't reference COMPLETION_TOOLS";

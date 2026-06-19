@@ -118,6 +118,40 @@ export async function queryCalendar(f: { from?: string; to?: string; entityId?: 
   const nowHHMM = dubaiHHMM();
   return rows.map((r: any) => tagEventStatus(r, today, nowHHMM));
 }
+
+// Date-bounded activity for ONE Dubai day. Wall-at-primitive (same shape as the
+// EVENT STATUS calendar wall, KT #229/#243): the runtime returns the real dated
+// rows so the model never INFERS which day things happened on. Fixes the
+// "summarize yesterday" bug where mixed-date scrollback got stamped with one day.
+export async function dayLog(date: string) {
+  const dateISO = (date || "").slice(0, 10);
+  const start = Date.parse(`${dateISO}T00:00:00+04:00`); // Dubai midnight -> epoch ms
+  if (Number.isNaN(start)) return { date: dateISO, error: "invalid date, expected YYYY-MM-DD" };
+  const end = start + 86_400_000;
+  const [msgs, events, tasks] = await Promise.all([
+    sbSelect<any>("chat_messages", `party=eq.jensen&ts=gte.${start}&ts=lt.${end}&order=ts.asc&select=role,content,ts&limit=200`).catch(() => []),
+    sbSelect<any>("events", `date=eq.${enc(dateISO)}&order=time.asc&select=time,title`).catch(() => []),
+    sbSelect<any>("tasks", `created_at=gte.${start}&created_at=lt.${end}&order=created_at.asc&select=title,quadrant`).catch(() => []),
+  ]);
+  const hhmm = (ts: number) => {
+    const d = new Date(ts + 4 * 3_600_000); // shift epoch ms into Dubai local
+    return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  };
+  const messages = (msgs as any[])
+    .filter((m) => (m.role === "user" || m.role === "assistant") && String(m.content || "").trim())
+    .map((m) => ({ time: hhmm(m.ts), who: m.role === "assistant" ? "Dorje" : "Jensen", text: String(m.content).slice(0, 300) }));
+  const evs = (events as any[]).map((e) => ({ time: e.time, title: e.title }));
+  const tks = (tasks as any[]).map((t) => ({ title: t.title, quadrant: t.quadrant }));
+  return {
+    date: dateISO,
+    messages,
+    events: evs,
+    tasksCreated: tks,
+    note: messages.length === 0 && evs.length === 0 && tks.length === 0
+      ? `No recorded activity on ${dateISO}.`
+      : `This is the COMPLETE record for ${dateISO}. Report only what is listed here; do not add items from other days.`,
+  };
+}
 // Normalized title key for soft-dedup. Strips lead "meeting with the",
 // trailing " at <location>", lowercases, collapses whitespace. Two model-produced
 // titles describing the same meeting (one with location in title, one with
