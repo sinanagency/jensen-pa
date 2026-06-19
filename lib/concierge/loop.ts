@@ -71,7 +71,7 @@ async function buildSystem(lastUser: string, sender?: Sender, onboarding = false
       ? `FORMAT FOR WHATSAPP: keep replies short and scannable (a few lines). Use WhatsApp formatting ONLY: *single asterisks* for bold, _underscores_ for italics. Never use markdown headings (#), never use **double asterisks**, never use tables. Bullets as "• ".`
       : "";
   const speaking =
-    s.role === "admin"
+    s.role !== "owner"
       ? `You are CURRENTLY speaking with ${s.name}, the admin and architect who built and oversees you (not Jensen). Address him as ${s.name}. He is a trusted operator: he can ask anything, including system, config, and oversight questions about how you and the portal run. When he asks you to do something in Jensen's world, do it on Jensen's behalf.`
       : `You are CURRENTLY speaking with ${s.name}, the founder and principal you serve. Address him as ${s.name}.`;
   const today = dubaiToday();
@@ -237,8 +237,8 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
   // Privacy wall: which conversation this is. Taona (admin/dev) is walled off from
   // Jensen; his messages and memory never mix into Jensen's, and only the admin
   // toolset can read Jensen's chats (one-way).
-  const party = input.sender?.role === "admin" ? "taona" : "jensen";
-  const toolset = input.sender?.role === "admin" ? TOOLS : TOOLS.filter((t) => !ADMIN_ONLY.has(t.name));
+  const party = (input.sender?.role ?? "owner") !== "owner" ? "taona" : "jensen";
+  const toolset = (input.sender?.role ?? "owner") !== "owner" ? TOOLS : TOOLS.filter((t) => !ADMIN_ONLY.has(t.name));
 
   const convo: Turn[] = history.map((m) => ({ role: m.role, content: m.content }));
   const runs: { name: string; ok: boolean }[] = [];

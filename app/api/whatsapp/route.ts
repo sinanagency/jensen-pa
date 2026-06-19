@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     })();
     if (earlyText) {
       const sender = whoIs(from);
-      const party = sender.role === "admin" ? "taona" : "jensen";
+      const party = sender.role !== "owner" ? "taona" : "jensen";
       await ops.chatAppend("user", earlyText, "whatsapp", party).catch(() => {});
     }
 
@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     const guard = await shouldProcess("jensen", from, msg.id, textBody, {
       seenByWamid: async (id: string) => { const s = await seen(id); return s; },
       logToChat: async (sender: string, t: string) => {
-        const party = whoIs(sender)?.role === "admin" ? "taona" : "jensen";
+        const party = whoIs(sender)?.role !== "owner" ? "taona" : "jensen";
         await ops.chatAppend("user", t, "whatsapp", party).catch(() => {});
       },
     });
@@ -192,9 +192,10 @@ export async function POST(req: NextRequest) {
 
     const sender = whoIs(from);
     // OPERATOR MIRROR (silent, never shown to the sender). Forward Jensen's inbound
-    // to Taona's number so he can live-tail conversations. Operator's own messages
-    // are not mirrored (the helper handles the loop guard). Media is summarised.
-    if (sender.role !== "admin") {
+    // to Taona's number so he can live-tail conversations. Only the principal's
+    // (owner's) inbound is mirrored; the operator's own messages are never echoed
+    // back to himself. Media is summarised.
+    if (sender.role === "owner") {
       const inboundSummary =
         msg.text?.body ||
         (msg.voice ? "[voice note]" :
@@ -204,7 +205,7 @@ export async function POST(req: NextRequest) {
          "[message]");
       mirrorInbound(inboundSummary, from).catch(() => {});
     }
-    const history = await recentHistory(sender.role === "admin" ? "taona" : "jensen");
+    const history = await recentHistory(sender.role !== "owner" ? "taona" : "jensen");
     // Voice notes arrive as msg.voice (push-to-talk) or msg.audio (uploaded audio).
     // Treat both: transcribe and flow into the concierge as text.
     const audio = msg.voice || msg.audio || (msg.document?.mime_type?.startsWith("audio/") ? msg.document : null);
@@ -217,7 +218,7 @@ export async function POST(req: NextRequest) {
       if (!dl) { await sendWhatsApp(from, "I couldn't fetch that voice note. Try again."); return NextResponse.json({ ok: true }); }
       const transcript = await transcribeAudio(dl.buf, dl.mime);
       if (!transcript) { await sendWhatsApp(from, "I got your voice note but couldn't make out the words. Could you re-record or type it?"); return NextResponse.json({ ok: true }); }
-      const party = sender.role === "admin" ? "taona" : "jensen";
+      const party = sender.role !== "owner" ? "taona" : "jensen";
       // Persist with a [voice note] marker so chat history shows it came as audio.
       await ops.chatAppend("user", `[voice note] ${transcript}`, "whatsapp", party).catch(() => {});
       const { reply } = await runConcierge({ messages: [...history, { role: "user", content: transcript }], channel: "whatsapp", sender });
@@ -266,7 +267,7 @@ export async function POST(req: NextRequest) {
         if (filed.finance) msg += ` Logged an expense of AED ${filed.finance.amount} (${filed.finance.label}).`;
         msg += ` I've read it, so I can pull it up or send it whenever you need.`;
       }
-      const party = sender.role === "admin" ? "taona" : "jensen";
+      const party = sender.role !== "owner" ? "taona" : "jensen";
       await ops.chatAppend("user", `[sent a document: ${title}]`, "whatsapp", party).catch(() => {});
       await ops.chatAppend("assistant", msg, "whatsapp", party).catch(() => {});
       await sendWhatsApp(from, msg);
@@ -284,7 +285,7 @@ export async function POST(req: NextRequest) {
     // caught. Same pattern as the link-detection below: deterministic verbs
     // deserve deterministic code (KT #127).
     if (isCancelIntent(text)) {
-      const inboundParty = sender.role === "admin" ? "taona" : "jensen";
+      const inboundParty = sender.role !== "owner" ? "taona" : "jensen";
       await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
       const r = await cancelActiveBot();
       const ack = r.ok
@@ -307,8 +308,8 @@ export async function POST(req: NextRequest) {
     if (meetingLink) {
       const rest = text.replace(meetingLink, "").trim();
       const JOIN_INTENT_RE = /\b(join|go|now|attend|enter|dispatch|start)\b/i;
-      const inboundParty = sender.role === "admin" ? "taona" : "jensen";
-      const botName = sender.role === "admin" ? "Digital Taona" : "Digital Jensen";
+      const inboundParty = sender.role !== "owner" ? "taona" : "jensen";
+      const botName = sender.role !== "owner" ? "Digital Taona" : "Digital Jensen";
       await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
 
       if (JOIN_INTENT_RE.test(rest)) {
@@ -320,7 +321,7 @@ export async function POST(req: NextRequest) {
           phone: from,
         });
         const ack = dispatch.ok
-          ? (sender.role === "admin"
+          ? (sender.role !== "owner"
               ? `On it. I am dispatching the notetaker to ${meetingLink}. I will send the summary here when it finishes.`
               : `On it. I am sending the notetaker to that meeting now. I will message you with the summary and your action items when the room closes.`)
           : `I tried to join that meeting and the service returned: ${dispatch.error}. Let me check on it, or you can ask me to retry.`;
@@ -379,7 +380,7 @@ export async function POST(req: NextRequest) {
     // runs, so an Anthropic / Vercel failure mid-runConcierge does not lose
     // what Jensen sent. The runConcierge end-path also appends, but Jensen's
     // message must be safe before any failure can swallow it.
-    const inboundParty = sender.role === "admin" ? "taona" : "jensen";
+    const inboundParty = sender.role !== "owner" ? "taona" : "jensen";
     await ops.chatAppend("user", text, "whatsapp", inboundParty, {
       externalId: msg.id ? String(msg.id) : null,
       replyToExternalId,

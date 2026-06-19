@@ -372,10 +372,13 @@ check("seam.27 sendWhatsApp fires mirror after successful outbound", () => {
   return null;
 });
 
-check("seam.28 WA route fires mirror on non-admin inbound", () => {
+check("seam.28 WA route mirrors only the principal's (owner's) inbound", () => {
   const src = read("app/api/whatsapp/route.ts");
   if (!/mirrorInbound\(/.test(src)) return "WA route does not call mirrorInbound";
-  if (!/sender\.role !== ["']admin["']/.test(src)) return "mirror not gated to non-admin senders (would mirror operator's own messages)";
+  // Gate must mirror ONLY the served principal (owner = Jensen) so the operator's
+  // own messages are never echoed back to himself. whoIs maps Taona to role
+  // "developer" (not "admin"), so the old !== "admin" guard mirrored his messages.
+  if (!/sender\.role === ["']owner["']/.test(src)) return "mirror not gated to owner inbound (would echo operator's own messages)";
   return null;
 });
 
