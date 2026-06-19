@@ -292,6 +292,23 @@ export async function chatAppend(
   party = "jensen",
   opts?: { externalId?: string | null; replyToExternalId?: string | null }
 ): Promise<number | null> {
+  // Idempotent on external_id (the WhatsApp message id). A text inbound is
+  // early-saved before the gates AND re-saved with the swipe anchor; both carry
+  // the same id, so the second call must UPDATE the existing row, not insert a
+  // duplicate. This was the "ok sure"/"organic food" double-row bug. Never drops:
+  // on any lookup error it falls through to a normal insert.
+  if (opts?.externalId) {
+    try {
+      const existing: any[] = await sbSelect("chat_messages", `external_id=eq.${enc(opts.externalId)}&role=eq.${role}&select=id&limit=1`);
+      const exId = existing?.[0]?.id;
+      if (typeof exId === "number") {
+        if (opts.replyToExternalId) {
+          await sbUpdate("chat_messages", `id=eq.${exId}`, { reply_to_external_id: opts.replyToExternalId }).catch(() => {});
+        }
+        return exId;
+      }
+    } catch { /* fall through to insert (never drop a message) */ }
+  }
   const row: any = { role, content, channel, party, ts: now() };
   if (opts?.externalId) row.external_id = opts.externalId;
   if (opts?.replyToExternalId) row.reply_to_external_id = opts.replyToExternalId;

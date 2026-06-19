@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
     if (earlyText) {
       const sender = whoIs(from);
       const party = sender.role !== "owner" ? "taona" : "jensen";
-      await ops.chatAppend("user", earlyText, "whatsapp", party).catch(() => {});
+      await ops.chatAppend("user", earlyText, "whatsapp", party, { externalId: msg.id ? String(msg.id) : null }).catch(() => {});
     }
 
     // Brain-core webhook guard: concurrent dedup (2s lock per sender) + media-
@@ -436,8 +436,29 @@ export async function POST(req: NextRequest) {
       // No open tasks: fall through to the brain so Jensen gets a graceful reply.
     }
 
-    const { reply } = await runConcierge({ messages: [...history, { role: "user", content: text }], channel: "whatsapp", sender, swipeAnchor });
-    await sendWhatsApp(from, reply || "I'm here.");
+    // FAIL-CLOSED REPLY (never go silent). If the brain throws (Anthropic
+    // outage, dead key, any error) the user must still hear back, not get
+    // silence. We send an honest fallback (sending does not need the brain) and
+    // log the error to the audit channel so the operator sees it. The inbound
+    // is already persisted above (NO-CHAT-LOST), so nothing is lost either way.
+    try {
+      const { reply } = await runConcierge({ messages: [...history, { role: "user", content: text }], channel: "whatsapp", sender, swipeAnchor });
+      await sendWhatsApp(from, reply || "I'm here.");
+    } catch (brainErr: any) {
+      await sendWhatsApp(
+        from,
+        "I hit a snag on my end and could not finish that just now. Your message is saved, give me a moment and resend it and I will pick it straight up.",
+      ).catch(() => {});
+      try {
+        await admin().from("chat_messages").insert({
+          role: "system",
+          content: `reply_failed: ${String(brainErr?.message || brainErr).slice(0, 400)}`,
+          channel: "audit",
+          party: inboundParty,
+          ts: Date.now(),
+        });
+      } catch { /* best-effort audit log, never block */ }
+    }
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 200 });

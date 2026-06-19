@@ -177,6 +177,22 @@ check("seam.13b day_log wall: date-bounded activity tool wired end-to-end", () =
   return null;
 });
 
+check("seam.32 fail-closed reply: brain errors never go silent", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  if (!/catch \(brainErr/.test(src)) return "no fail-closed catch around runConcierge";
+  if (!/reply_failed:/.test(src)) return "brain failure not logged to audit channel";
+  if (!/I hit a snag/.test(src)) return "no honest fallback message sent to the user on failure";
+  return null;
+});
+
+check("seam.33 chatAppend idempotent on external_id (no double-save)", () => {
+  const ops = read("lib/concierge/ops.ts");
+  const fn = ops.slice(ops.indexOf("export async function chatAppend"));
+  if (!/external_id=eq\.\$\{enc\(opts\.externalId\)\}/.test(fn)) return "chatAppend does not dedupe on external_id";
+  if (!/earlyText, "whatsapp", party, \{ externalId/.test(read("app/api/whatsapp/route.ts"))) return "early-save does not pass the WhatsApp id";
+  return null;
+});
+
 check("seam.13 verifier uses COMPLETION_TOOLS set, not heuristic", () => {
   const src = read("lib/concierge/verify.ts");
   if (!/COMPLETION_TOOLS/.test(src)) return "verifier doesn't reference COMPLETION_TOOLS";
