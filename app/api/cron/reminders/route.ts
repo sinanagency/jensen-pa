@@ -83,7 +83,9 @@ async function handle(req: NextRequest) {
 
   const fired: any[] = [];
   for (const ev of due) {
-    const body = `Reminder. ${ev.title} at ${ev.time}.`;
+    // Surface the meeting link AT reminder time (the thing he actually wanted).
+    // It was saved on the event but the reminder never showed it (Sotiris, Jun 16).
+    const body = `Reminder. ${ev.title} at ${ev.time}.${ev.meeting_url ? `\nHere is your link to join: ${ev.meeting_url}` : ""}`;
     for (const num of to) {
       await sendTextAndLog(num, body, { force: true, party: "jensen" });
     }

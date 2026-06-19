@@ -193,6 +193,21 @@ check("seam.33 chatAppend idempotent on external_id (no double-save)", () => {
   return null;
 });
 
+check("seam.34 reminder surfaces the meeting link at reminder time", () => {
+  const src = read("app/api/cron/reminders/route.ts");
+  if (!/ev\.meeting_url/.test(src)) return "reminder body does not include the meeting link";
+  return null;
+});
+
+check("seam.35 meeting link: saved + join promised at meeting time, never immediate", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  if (!/meeting_url: meetingLink/.test(src)) return "meeting link not saved onto the event";
+  if (!/scheduledAt: new Date\(joinAt/.test(src)) return "join not scheduled for meeting time";
+  if (/the service returned: \$\{dispatch\.error\}/.test(src)) return "still surfaces the join failure to the user (immediate attempt)";
+  if (!/reminder so you can/.test(src)) return "ack does not promise the link in the reminder";
+  return null;
+});
+
 check("seam.13 verifier uses COMPLETION_TOOLS set, not heuristic", () => {
   const src = read("lib/concierge/verify.ts");
   if (!/COMPLETION_TOOLS/.test(src)) return "verifier doesn't reference COMPLETION_TOOLS";

@@ -297,40 +297,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // MEETING-LINK CHOKEPOINT. When the inbound contains a Meet/Zoom/Teams link,
-    // we check the INTENT: if the message explicitly asks the bot to join now
-    // ("join this", "go now", "attend this meeting", "take notes"), dispatch
-    // immediately. Otherwise the link is for a FUTURE meeting: save it to the
-    // matching event row and let the brain respond naturally ("I'll join at
-    // the meeting time"). This prevents 2026-06-16 pattern where sharing a
-    // link for tomorrow's Sotiris meeting triggered an immediate dispatch + 401.
+    // MEETING-LINK CHOKEPOINT. When the inbound carries a Meet/Zoom/Teams link,
+    // save it onto the matching upcoming event so the 5-minute reminder can hand
+    // the link back to him at meeting time (the thing he actually wanted: the
+    // Sotiris 2026-06-16 incident, where he asked for the link in the reminder
+    // and instead got a bare cron line because the reminder never read meeting_url).
+    //
+    // We NEVER attempt to join right now. DigitalJensen (the note-taker) was
+    // returning "unauthorized" at that time, and an immediate attempt surfaced
+    // that failure straight to Jensen. Instead we PROMISE to join at the meeting
+    // time and schedule the join best-effort (silent: it just starts working once
+    // the note-taker auth is fixed). The link reaches him via the reminder either
+    // way, independent of whether the join ever succeeds.
     const meetingLink = extractMeetingLink(text);
     if (meetingLink) {
       const rest = text.replace(meetingLink, "").trim();
-      const JOIN_INTENT_RE = /\b(join|go|now|attend|enter|dispatch|start)\b/i;
+      const JOIN_INTENT_RE = /\b(join|take notes|note ?taker|attend|cover)\b/i;
+      const wantsJoin = JOIN_INTENT_RE.test(rest);
       const inboundParty = sender.role !== "owner" ? "taona" : "jensen";
       const botName = sender.role !== "owner" ? "Digital Taona" : "Digital Jensen";
       await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
 
-      if (JOIN_INTENT_RE.test(rest)) {
-        // Explicit join intent: dispatch the meeting bot immediately.
-        const dispatch = await dispatchMeetingBot({
-          link: meetingLink,
-          title: rest.replace(JOIN_INTENT_RE, "").trim().slice(0, 120) || "Meeting",
-          displayName: botName,
-          phone: from,
-        });
-        const ack = dispatch.ok
-          ? (sender.role !== "owner"
-              ? `On it. I am dispatching the notetaker to ${meetingLink}. I will send the summary here when it finishes.`
-              : `On it. I am sending the notetaker to that meeting now. I will message you with the summary and your action items when the room closes.`)
-          : `I tried to join that meeting and the service returned: ${dispatch.error}. Let me check on it, or you can ask me to retry.`;
-        await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
-        return NextResponse.json({ ok: true });
-      }
-
-      // Future meeting link: try to attach it to a matching upcoming event.
-      // Best-effort: if no event matches, the brain saves the link context.
       try {
         const today = new Date().toISOString().slice(0, 10);
         const events = await sbSelect<any>(
@@ -342,15 +329,17 @@ export async function POST(req: NextRequest) {
           return rest.toLowerCase().split(/\s+/).some((w: string) => w.length > 3 && t.includes(w));
         });
         if (match) {
+          // Save the link so the reminder can surface it.
           await fetch(`${process.env.SUPABASE_URL}/rest/v1/events?id=eq.${enc(match.id)}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", apikey: process.env.SUPABASE_SERVICE_KEY || "", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY || ""}` },
             body: JSON.stringify({ meeting_url: meetingLink }),
           }).catch(() => {});
-          // Schedule the meeting bot to join 30s before the event.
+          // Schedule the join FOR THE MEETING TIME (never immediate, never shows an
+          // error). Only when he actually asked us to take notes.
           const localIso = `${match.date}T${match.time.padStart(5, "0")}:00+04:00`;
           const joinAt = new Date(localIso).getTime();
-          if (!Number.isNaN(joinAt) && joinAt > Date.now() + 60000) {
+          if (wantsJoin && !Number.isNaN(joinAt) && joinAt > Date.now() + 60000) {
             dispatchMeetingBot({
               link: meetingLink,
               title: match.title,
@@ -359,7 +348,9 @@ export async function POST(req: NextRequest) {
               phone: from,
             }).catch(() => {});
           }
-          const ack = `Got it. I saved the link to *${match.title}* on ${match.date} at ${match.time}. I will join 5 minutes before and send you the notes when it ends. Nothing to worry about.`;
+          const ack = wantsJoin
+            ? `Saved. I will join *${match.title}* at ${match.time} on ${match.date} to take notes, and you will get the link in your reminder so you can hop in too.`
+            : `Saved your link to *${match.title}* at ${match.time} on ${match.date}. I will send it to you in the reminder so you can join when it is time.`;
           await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
           return NextResponse.json({ ok: true });
         }
