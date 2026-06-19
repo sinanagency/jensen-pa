@@ -322,7 +322,7 @@ export async function POST(req: NextRequest) {
         const today = new Date().toISOString().slice(0, 10);
         const events = await sbSelect<any>(
           "events",
-          `date=gte.${enc(today)}&time=is.not.null&order=date.asc&limit=5&select=id,title,date,time`
+          `date=gte.${enc(today)}&time=not.is.null&order=date.asc&limit=5&select=id,title,date,time`
         ).catch(() => []);
         const match = (events as any[]).find((e: any) => {
           const t = (e.title || "").toLowerCase();
