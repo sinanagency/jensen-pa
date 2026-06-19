@@ -60,6 +60,13 @@ export async function sendWhatsApp(to: string, body: string, opts?: { force?: bo
 export async function sendWhatsAppRaw(to: string, body: string, opts?: { force?: boolean }): Promise<{ ok: boolean; wamid: string | null }> {
   if (!waConfigured()) return { ok: false, wamid: null };
   if (!passesTrainingGate(to, body, opts)) return { ok: false, wamid: null };
+  // MUTE KILL SWITCH. Set bot_muted=true in KV to block all outbound sends
+  // instantly. Unset or set to false to re-enable. No deploy needed.
+  try {
+    const { kvGet } = await import("@/lib/db");
+    const muted = await kvGet("bot_muted", false);
+    if (muted) return { ok: false, wamid: null };
+  } catch { /* fail open on error; never let a mute check block sends */ }
   // ── THE WALL (Architecture 2, 2026-06-12). sanitizeReply runs HERE, in the
   // primitive. Before this date it lived only in sendTextAndLog while the
   // concierge webhook replies (all nine of them), the morning brief in

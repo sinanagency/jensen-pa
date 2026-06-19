@@ -14,6 +14,7 @@ const BOTS = [
 
 const DEGRADED_CONSECUTIVE_THRESHOLD = 3;
 const INBOUND_DROP_FACTOR = 0.2;
+const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 
 function authed(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -67,12 +68,14 @@ export async function GET(req: NextRequest) {
       const http = await httpCheck(bot.url);
       let status = "ok";
       let error: string | null = null;
+      let ir: { last5m: number; baseline: number } | null = null;
 
       if (!http.ok || http.status === 0) {
         status = "down";
         error = `HTTP unreachable`;
       } else if (bot.name === "jensen") {
-        const { last5m, baseline } = await inboundRate(db);
+        ir = await inboundRate(db);
+        const { last5m, baseline } = ir;
         if (last5m < baseline * INBOUND_DROP_FACTOR) {
           const recentChecks = await db
             .from("health_checks")
@@ -85,8 +88,6 @@ export async function GET(req: NextRequest) {
           if (degradedCount >= DEGRADED_CONSECUTIVE_THRESHOLD - 1) {
             status = "degraded";
             error = `Inbound ${last5m}/5m vs baseline ${baseline}/5m for ${degradedCount + 1}+ checks`;
-          } else {
-            status = "degraded";
           }
         }
       }
@@ -97,8 +98,8 @@ export async function GET(req: NextRequest) {
         error,
         latency_ms: http.ms,
         http_status: http.status,
-        inbound_last_5m: bot.name === "jensen" ? (await inboundRate(db)).last5m : null,
-        inbound_baseline: bot.name === "jensen" ? (await inboundRate(db)).baseline : null,
+        inbound_last_5m: ir?.last5m ?? null,
+        inbound_baseline: ir?.baseline ?? null,
       });
 
       results.push({ bot: bot.name, status, error, http: http.status, ms: http.ms });
@@ -109,12 +110,21 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Alert if fleet has issues
+  // Alert if fleet has issues (with cooldown)
   if (fleetDegraded) {
-    const to = owners();
-    const msg = `[fleet monitor] ${new Date().toISOString()}\n${results.map((r) => `${r.bot}: ${r.status}${r.error ? ` (${r.error})` : ""}`).join("\n")}`;
-    for (const owner of to) {
-      sendTextAndLog(owner, msg, { party: "taona", dev: false }).catch(() => {});
+    const lastAlerts = await db
+      .from("health_checks")
+      .select("checked_at")
+      .eq("status", "degraded")
+      .order("checked_at", { ascending: false })
+      .limit(2);
+    const prevAlert = lastAlerts.data?.[1];
+    if (!prevAlert || Date.now() - new Date(prevAlert.checked_at).getTime() >= ALERT_COOLDOWN_MS) {
+      const to = owners();
+      const msg = `[fleet monitor] ${new Date().toISOString()}\n${results.map((r) => `${r.bot}: ${r.status}${r.error ? ` (${r.error})` : ""}`).join("\n")}`;
+      for (const owner of to) {
+        sendTextAndLog(owner, msg, { party: "taona", dev: false }).catch(() => {});
+      }
     }
   }
 

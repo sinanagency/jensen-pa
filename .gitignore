@@ -31,3 +31,5 @@ supabase/.temp/
 *.p12
 *.pfx
 .env.prod
+.env.cron
+.env.supabase
