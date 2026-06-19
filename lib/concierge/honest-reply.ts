@@ -20,6 +20,11 @@ const SENT_CLAIM = /\b(sent|messaged|emailed|notified|told|forwarded)\b/i;
 // generic "send" tool (his WhatsApp reply IS the message); the only outbound
 // tools are reply_email (sends an email) and call_owner (places a call).
 const SEND_TOOLS = new Set<string>(["reply_email", "call_owner"]);
+// Tools that REPORT existing records (a day's activity, the morning brief). Their
+// replies are full of historical completion language ("vendors saved", "meeting
+// set") that describes the PAST, not a fresh action this turn. The claim-rewrite
+// must never fire on a report, or it eats correct summaries.
+const REPORT_TOOLS = new Set<string>(["day_log", "morning_brief"]);
 
 const okIn = (runs: ToolRun[], names: Set<string>) =>
   runs.some((r) => names.has(r.name) && r.ok);
@@ -55,6 +60,9 @@ export async function honestReply(reply: string, runs: ToolRun[]): Promise<strin
   const text = (reply || "").trim();
   if (!text)
     return "I do not have anything to confirm there. Tell me what you need and I will action it.";
+  // A record report (day_log / morning_brief) is not a fresh-action claim. Its
+  // historical completion language must never be rewritten. Ship it as-is.
+  if (runs.some((r) => REPORT_TOOLS.has(r.name))) return text;
   if (!CLAIM.test(text) || NOT_A_CLAIM.test(text)) return text;
 
   const backed = SENT_CLAIM.test(text)
