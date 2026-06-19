@@ -5,7 +5,7 @@
 import { SONNET, NO_DASHES } from "../anthropic";
 import { TOOLS, ADMIN_ONLY } from "./tools";
 import { runAction } from "./dispatch";
-import { verifyReply } from "./verify";
+import { honestReply } from "./honest-reply";
 import { stripDashes } from "../whatsapp";
 import { recall, captureSalience, listDirectives } from "./brain";
 import * as ops from "./ops";
@@ -241,7 +241,7 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
   const toolset = (input.sender?.role ?? "owner") !== "owner" ? TOOLS : TOOLS.filter((t) => !ADMIN_ONLY.has(t.name));
 
   const convo: Turn[] = history.map((m) => ({ role: m.role, content: m.content }));
-  const runs: { name: string; ok: boolean }[] = [];
+  const runs: { name: string; ok: boolean; result?: any }[] = [];
   let reply = "";
 
   if (onboarding) {
@@ -263,7 +263,7 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
       const toolResults: any[] = [];
       for (const tu of toolUses) {
         const r = await runAction(tu.name, tu.input || {}, { party });
-        runs.push({ name: tu.name, ok: r.ok });
+        runs.push({ name: tu.name, ok: r.ok, result: r.ok ? r.result : { summary: r.error } });
         toolResults.push({
           type: "tool_result",
           tool_use_id: tu.id,
@@ -273,13 +273,11 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
       }
       convo.push({ role: "user", content: toolResults });
     }
-    if (!reply) reply = "Done.";
-
-    // anti-fake-done check (only when actions were possible)
-    try {
-      const v = await verifyReply(reply, runs);
-      if (!v.ok) reply += `\n\n(Honest note: I could not fully confirm that action just now. Tell me to retry if needed.)`;
-    } catch { /* fail-open */ }
+    // Honesty rail (replaces the old empty-reply fallback + fail-open append).
+    // Empty reply -> honest fallback, never a bare confirmation. A completion claim
+    // not backed by a successful tool is rewritten to the truth; we never append
+    // a contradicting note after a standing lie. Deterministic and fail-closed.
+    reply = await honestReply(reply, runs);
   }
 
   // JENSEN-DOCTRINE Law 5 enforcement — strip every em/en dash from the reply

@@ -156,11 +156,14 @@ check("seam.11 standing directives injected into system prompt", () => {
 // VERIFIER SEAM — FM-01, FM-06 (anti-fake-done)
 // ============================================================================
 
-check("seam.12 verify.verifyReply exported and called in runConcierge", () => {
-  const verifySrc = read("lib/concierge/verify.ts");
-  if (!/export async function verifyReply/.test(verifySrc)) return "verifyReply not exported";
+check("seam.12 honesty rail replaces fail-open verify; lie-engine patterns gone", () => {
+  const railSrc = read("lib/concierge/honest-reply.ts");
+  if (!/export async function honestReply/.test(railSrc)) return "honestReply not exported";
   const loopSrc = read("lib/concierge/loop.ts");
-  if (!/verifyReply/.test(loopSrc)) return "verifyReply not called in loop";
+  if (!/honestReply\(/.test(loopSrc)) return "honestReply not called in loop";
+  // Prevention, not detection: the old lie-engine must be gone.
+  if (/reply\s*=\s*"Done\."/.test(loopSrc)) return "empty reply still becomes \"Done.\"";
+  if (/Honest note/.test(loopSrc)) return "still appends a contradicting honest note after a claim";
   return null;
 });
 
