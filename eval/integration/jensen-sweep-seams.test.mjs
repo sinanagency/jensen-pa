@@ -563,6 +563,22 @@ check("seam.48 persona rule: address Jensen in 2nd person, never narrate the eng
   return null;
 });
 
+check("seam.49 persona rule: peer not intake clerk, close own loops, no hollow all-clear, no over-apology", () => {
+  const src = read("lib/concierge/loop.ts");
+  if (!/BE THE PEER, NOT THE INTAKE CLERK/.test(src)) return "peer-not-clerk rule missing";
+  if (!/CLOSE YOUR OWN LOOPS/.test(src)) return "close-your-loops clause missing";
+  if (!/hollow all-clear|NEVER a hollow all-clear/.test(src)) return "no-hollow-all-clear clause missing";
+  if (!/FIX QUIETLY/.test(src)) return "no-over-apology clause missing";
+  return null;
+});
+
+check("seam.50 daily brief tags stale Q1 items so high-priority work cannot rot silently", () => {
+  const src = read("app/api/cron/daily/route.ts");
+  if (!/open \$\{days\}d/.test(src)) return "no staleness age-tag on Q1 items";
+  if (!/days >= 2/.test(src)) return "staleness threshold not applied";
+  return null;
+});
+
 // ============================================================================
 // REPORT
 // ============================================================================

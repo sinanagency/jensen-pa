@@ -39,7 +39,16 @@ async function buildBrief(): Promise<{ text: string; q1: number; call: string }>
   const lines: string[] = [greeting, "", `Here is your board for today.`];
   if (q1.length) {
     lines.push(`\n*Do first (${q1.length}):*`);
-    q1.slice(0, 5).forEach((t: any) => lines.push(`• ${t.title}`));
+    // Surface staleness so a high-priority item can never rot silently the way
+    // the two contracts sat untouched for 4 days in the Jun 15-19 window
+    // (KT #329). A Q1 item open 2+ days gets an age tag so it nags by being
+    // visible, not by a separate message.
+    const nowMs = Date.now();
+    q1.slice(0, 5).forEach((t: any) => {
+      const created = Number(t.created_at) || 0;
+      const days = created ? Math.floor((nowMs - created) / 86_400_000) : 0;
+      lines.push(`• ${t.title}${days >= 2 ? ` (open ${days}d)` : ""}`);
+    });
   } else if (readFailed) {
     lines.push(`\n*Do first:* I could not fully read your board just now. Open the portal or ask me again in a moment, I do not want to tell you it is clear if it is not.`);
   } else {
