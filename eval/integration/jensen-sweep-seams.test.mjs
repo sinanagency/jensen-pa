@@ -662,6 +662,16 @@ check("seam.57 honesty rail exempts a recap/summary read (does not eat it into '
   return null;
 });
 
+check("seam.58 send wall is recipient-aware: skips the developer; a client-facing DROP routes the diagnostic to dev + gives Jensen a graceful line (never the cryptic reaskPhrase)", () => {
+  const src = read("lib/whatsapp.ts");
+  if (!/const toDev = whoIs\(to\)\.role === "developer"/.test(src)) return "wall is not recipient-aware (a dev-routed reply still hits the client wall and over-fires)";
+  if (!/if \(!toDev\)/.test(src)) return "wall not gated to non-dev (client) recipients only";
+  if (!/guarded\.dropped/.test(src)) return "drop vs strip not distinguished";
+  if (!/sendWhatsAppRaw\(dev,/.test(src)) return "on a drop the diagnostic is not routed to the developer";
+  if (!/Let me get back to you on that in a moment/.test(src)) return "Jensen does not get a graceful line on a drop (would still get the cryptic reaskPhrase)";
+  return null;
+});
+
 // ============================================================================
 // REPORT
 // ============================================================================

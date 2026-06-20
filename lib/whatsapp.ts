@@ -75,25 +75,45 @@ export async function sendWhatsAppRaw(to: string, body: string, opts?: { force?:
   // Jensen's BotGuardsConfig (brand wall) after Law 5's dash repair. A catch
   // is audited to chat_messages best effort and never blocks delivery.
   let cleaned = stripDashes(body); // Law 5: no em/en dashes leave this chokepoint
-  try {
-    const { sanitizeReply } = await import("@/lib/bot-guards/index.js");
-    const { JENSEN_BOT_GUARDS_CONFIG } = await import("@/lib/bot/guards-config");
-    const guarded = sanitizeReply(cleaned, JENSEN_BOT_GUARDS_CONFIG);
-    if (guarded.caught.length) {
-      cleaned = guarded.body;
-      import("@/lib/db").then(({ admin }) =>
-        admin().from("chat_messages").insert({
-          role: "system",
-          channel: "audit",
-          party: "jensen",
-          ts: Date.now(),
-          content: `pre_send_caught: ${guarded.caught.map((c) => `${c.kind}:${c.pattern}`).join(",")} | ${String(body).slice(0, 300)}`,
-        })
-      ).then(() => {}, () => {});
+  // The wall protects the CLIENT (Jensen). A message routed to the DEVELOPER skips
+  // it entirely: the developer is allowed to see the dev name, brands, infra, and a
+  // reply that simply addresses him as "Taona" must NOT be dropped into the cryptic
+  // reaskPhrase (the over-fire that hit Taona's own test). KT #338.
+  const toDev = whoIs(to).role === "developer";
+  if (!toDev) {
+    try {
+      const { sanitizeReply } = await import("@/lib/bot-guards/index.js");
+      const { JENSEN_BOT_GUARDS_CONFIG } = await import("@/lib/bot/guards-config");
+      const guarded = sanitizeReply(cleaned, JENSEN_BOT_GUARDS_CONFIG);
+      if (guarded.caught.length) {
+        const caughtStr = guarded.caught.map((c) => `${c.kind}:${c.pattern}`).join(",");
+        if (guarded.dropped) {
+          // CONTAMINATION on a client-facing reply (a bug). NEVER hand Jensen the
+          // cryptic reaskPhrase. Route the full diagnostic to the DEVELOPER, and
+          // give Jensen ONE graceful, wall-safe line (Taona's rule: generic/error
+          // goes to the developer only; always protect the client). The dev send is
+          // toDev, so it skips the wall and cannot loop.
+          const dev = devPhone();
+          if (dev) sendWhatsAppRaw(dev, `[Dorje wall] blocked a reply to the client (caught: ${caughtStr}). Original: ${String(body).slice(0, 500)}`).catch(() => {});
+          cleaned = "Let me get back to you on that in a moment.";
+        } else {
+          // strip mode: the offending token was removed, the rest is fine to send.
+          cleaned = guarded.body;
+        }
+        import("@/lib/db").then(({ admin }) =>
+          admin().from("chat_messages").insert({
+            role: "system",
+            channel: "audit",
+            party: "jensen",
+            ts: Date.now(),
+            content: `pre_send_caught[${guarded.dropped ? "dropped->dev,graceful->jensen" : "stripped"}]: ${caughtStr} | ${String(body).slice(0, 300)}`,
+          })
+        ).then(() => {}, () => {});
+      }
+    } catch {
+      // The wall must never break delivery; a guards failure ships the dash
+      // repaired body unfiltered this once and surfaces in logs.
     }
-  } catch {
-    // The wall must never break delivery; a guards failure ships the dash
-    // repaired body unfiltered this once and surfaces in logs.
   }
   try {
     const res = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
