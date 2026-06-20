@@ -536,6 +536,33 @@ check("seam.31 health_checks migration exists with correct schema", () => {
   return null;
 });
 
+check("seam.46 Class A leakage wall: developer name + zanii/sanad are forbidden brands", () => {
+  const src = read("lib/bot/guards-config.ts");
+  const i = src.indexOf("forbiddenBrands:");
+  const set = src.slice(i, i + 600);
+  for (const b of ["'Taona'", "'zanii'", "'sanad'"]) {
+    if (!set.includes(b)) return `${b} not in forbiddenBrands (would leak to the client)`;
+  }
+  return null;
+});
+
+check("seam.47 Class A leakage wall: credential + infra + test patterns drop the reply", () => {
+  const src = read("lib/bot/guards-config.ts");
+  const need = ["plaintext_credential", "login_credential", "infra_api_token", "infra_system_logs", "infra_code_bug", "test_artifact_only", "test_recant"];
+  for (const label of need) {
+    const re = new RegExp(`label:\\s*'${label}'[^}]*mode:\\s*'drop'|mode:\\s*'drop'[^}]*label:\\s*'${label}'`);
+    if (!re.test(src)) return `${label} missing or not in drop mode`;
+  }
+  return null;
+});
+
+check("seam.48 persona rule: address Jensen in 2nd person, never narrate the engine room", () => {
+  const src = read("lib/concierge/loop.ts");
+  if (!/SPEAK TO JENSEN, NEVER ABOUT HIM/.test(src)) return "persona-address rule missing from system head";
+  if (!/never name the developer or operator/.test(src)) return "no-infra-narration clause missing";
+  return null;
+});
+
 // ============================================================================
 // REPORT
 // ============================================================================
