@@ -9,6 +9,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "npx tsx --test eval/**/*.test.mjs eval/integration/*.test.mjs",
+    "gate": "npm run typecheck && npm test",
     "predeploy": "bash scripts/pre-deploy.sh",
     "postinstall": "bash scripts/install-hooks.sh"
   },
