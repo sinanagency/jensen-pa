@@ -157,6 +157,16 @@ export async function POST(req: NextRequest) {
       seenByWamid: async (id: string) => { const s = await seen(id); return s; },
       logToChat: async (sender: string, t: string) => {
         const party = whoIs(sender)?.role !== "owner" ? "taona" : "jensen";
+        // The buffered text was already early-saved (with its wamid) when it first
+        // arrived; flushing it here would create a second, id-less row (the
+        // text-then-image "this" double-save). Skip if an identical row from this
+        // party exists in the last 2 minutes. Fail safe: on any error or no match,
+        // save it so a message is never lost.
+        try {
+          const recent = await sbSelect<any>("chat_messages", `party=eq.${enc(party)}&role=eq.user&content=eq.${enc(t)}&order=ts.desc&limit=1`);
+          const ts0 = recent?.[0]?.ts;
+          if (ts0 && Date.now() - Number(ts0) < 120000) return;
+        } catch { /* fall through to save (never drop a message) */ }
         await ops.chatAppend("user", t, "whatsapp", party).catch(() => {});
       },
     });

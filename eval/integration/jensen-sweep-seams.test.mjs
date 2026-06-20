@@ -274,6 +274,15 @@ check("seam.44 complete_event is a completion tool (its success must not be rewr
   return null;
 });
 
+check("seam.45 media-buffer flush dedups against the early-save (no phantom double)", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  const i = src.indexOf("logToChat: async");
+  const cb = src.slice(i, i + 1100);
+  if (!/content=eq\.\$\{enc\(t\)\}/.test(cb)) return "logToChat flush does not check for an existing identical row";
+  if (!/< 120000/.test(cb)) return "no recency window on the flush dedup";
+  return null;
+});
+
 check("seam.13 honesty rail uses COMPLETION_TOOLS set, not heuristic", () => {
   const src = read("lib/concierge/honest-reply.ts");
   if (!/COMPLETION_TOOLS/.test(src)) return "honesty rail doesn't reference COMPLETION_TOOLS";
