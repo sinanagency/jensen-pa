@@ -199,12 +199,14 @@ check("seam.34 reminder surfaces the meeting link at reminder time", () => {
   return null;
 });
 
-check("seam.35 meeting link: saved + join promised at meeting time, never immediate", () => {
+check("seam.35 meeting link: saved onto event; future scheduled, ad-hoc/now joined immediately, dispatch awaited", () => {
   const src = read("app/api/whatsapp/route.ts");
   if (!/meeting_url: meetingLink/.test(src)) return "meeting link not saved onto the event";
-  if (!/scheduledAt: new Date\(joinAt/.test(src)) return "join not scheduled for meeting time";
-  if (/the service returned: \$\{dispatch\.error\}/.test(src)) return "still surfaces the join failure to the user (immediate attempt)";
-  if (!/reminder so you can/.test(src)) return "ack does not promise the link in the reminder";
+  if (!/scheduledAt: future \?/.test(src)) return "future calendar match is not scheduled at meeting time";
+  if (!/const d = await dispatchMeetingBot/.test(src)) return "dispatch is not awaited (serverless can SIGTERM a fire-and-forget dispatch before it lands)";
+  if (!/now to take notes/.test(src)) return "no immediate-join path for ad-hoc / now meetings";
+  if (!/could not reach my note-taker/.test(src)) return "ack does not honestly report a dispatch failure";
+  if (!/reminder so you can/.test(src)) return "future-scheduled ack does not promise the link in the reminder";
   return null;
 });
 
@@ -245,8 +247,8 @@ check("seam.40 briefs never claim 'clean board' on a read error", () => {
 
 check("seam.41 meeting-link ack checks the write before saying 'Saved'", () => {
   const src = read("app/api/whatsapp/route.ts");
-  if (!/const saved = await fetch/.test(src)) return "meeting-link PATCH result not captured";
-  if (!/!saved/.test(src)) return "ack does not branch on whether the save succeeded";
+  if (!/saved = await fetch/.test(src)) return "meeting-link PATCH result not captured";
+  if (!/saved\s*\?/.test(src)) return "ack does not branch on whether the save succeeded";
   return null;
 });
 

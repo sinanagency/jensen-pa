@@ -342,37 +342,63 @@ export async function POST(req: NextRequest) {
           const t = (e.title || "").toLowerCase();
           return rest.toLowerCase().split(/\s+/).some((w: string) => w.length > 3 && t.includes(w));
         });
+
+        // Save the link onto a matched event so the reminder can surface it,
+        // regardless of whether he also asked us to join.
+        let saved = false;
         if (match) {
-          // Save the link so the reminder can surface it.
-          const saved = await fetch(`${process.env.SUPABASE_URL}/rest/v1/events?id=eq.${enc(match.id)}`, {
+          saved = await fetch(`${process.env.SUPABASE_URL}/rest/v1/events?id=eq.${enc(match.id)}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", apikey: process.env.SUPABASE_SERVICE_KEY || "", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY || ""}` },
             body: JSON.stringify({ meeting_url: meetingLink }),
           }).then((r) => r.ok).catch(() => false);
-          // Schedule the join FOR THE MEETING TIME (never immediate, never shows an
-          // error). Only when he actually asked us to take notes.
-          const localIso = `${match.date}T${match.time.padStart(5, "0")}:00+04:00`;
-          const joinAt = new Date(localIso).getTime();
-          if (wantsJoin && !Number.isNaN(joinAt) && joinAt > Date.now() + 60000) {
-            dispatchMeetingBot({
-              link: meetingLink,
-              title: match.title,
-              scheduledAt: new Date(joinAt - 30000).toISOString(),
-              displayName: botName,
-              phone: from,
-            }).catch(() => {});
-          }
-          const ack = !saved
-            ? `I had trouble saving that link just now. Send it to me again in a moment and I will get it onto *${match.title}*.`
-            : wantsJoin
-            ? `Saved. I will join *${match.title}* at ${match.time} on ${match.date} to take notes, and you will get the link in your reminder so you can hop in too.`
-            : `Saved your link to *${match.title}* at ${match.time} on ${match.date}. I will send it to you in the reminder so you can join when it is time.`;
+        }
+
+        if (wantsJoin) {
+          // WHEN to join: only a clearly-future calendar match is scheduled (the
+          // time comes from the calendar, never parsed from free text). Anything
+          // else (no event, or the matched meeting is happening now / already
+          // started) joins IMMEDIATELY, because an explicit "join + link" means
+          // the call is live. We AWAIT the dispatch so (a) the serverless worker
+          // is not SIGTERM'd before the request reaches the note-taker, and
+          // (b) the ack reflects what actually happened, never a promised join
+          // that never queued.
+          const matchJoinAt = match
+            ? new Date(`${match.date}T${String(match.time).padStart(5, "0")}:00+04:00`).getTime()
+            : NaN;
+          const future = !Number.isNaN(matchJoinAt) && matchJoinAt > Date.now() + 60000;
+          const title = match ? match.title : "your meeting";
+          const d = await dispatchMeetingBot({
+            link: meetingLink,
+            title,
+            scheduledAt: future ? new Date(matchJoinAt - 30000).toISOString() : undefined,
+            displayName: botName,
+            phone: from,
+          }).catch((e: any) => ({ ok: false, error: e?.message || String(e) }));
+
+          const ack = !d.ok
+            ? `I could not reach my note-taker just now to set up the join. Send me the link again in a moment and I will retry.`
+            : future
+            ? `Saved. I will join *${title}* at ${match.time} on ${match.date} to take notes, and you will get the link in your reminder so you can hop in too.`
+            : match
+            ? `I am joining *${title}* now to take notes. I will send you the summary and the action items when it wraps.`
+            : `I am joining the meeting now to take notes. I will send you the summary and the action items when it wraps.`;
+          await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
+          return NextResponse.json({ ok: true });
+        }
+
+        // Link but no explicit join intent: save it to the event for the
+        // reminder, or fall through to the brain if there is no event.
+        if (match) {
+          const ack = saved
+            ? `Saved your link to *${match.title}* at ${match.time} on ${match.date}. I will send it to you in the reminder so you can join when it is time.`
+            : `I had trouble saving that link just now. Send it to me again in a moment and I will get it onto *${match.title}*.`;
           await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
           return NextResponse.json({ ok: true });
         }
       } catch {}
-      // No event match: let the brain handle it (will respond naturally).
-      // Fall through to runConcierge below.
+      // Link with no join intent and no event match: let the brain handle it
+      // (it will respond naturally). Fall through to runConcierge below.
     }
 
     // Wall 1 of "fragment match without anchor" (2026-06-16, KT #293). When the

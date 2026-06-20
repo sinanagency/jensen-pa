@@ -45,7 +45,7 @@ Production: `jensen.larencontre.ae` + `jensen.zanii.agency` (same Vercel app).
 
 | ID | Gap                                                              |
 |----|-------------------------------------------------------------------|
-| C1 | Note-taker can't actually JOIN meetings (Teams/Zoom auth fails)    |
+| C1 | ✅ FIXED — was NOT external auth. jensen-pa prod env was corrupt: `MEETING_BOT_URL="y\n"` + wrong key (`e89b29…`). Set correct `https://digitalu.zanii.agency` + key `c8a25c…`, verified auth against live digitalu (401→400 link-required), redeployed. KT #326. |
 | C2 | Model auto-completes the WRONG task on vague input                 |
 | C3 | Date math on WRITES (relative day → wrong calendar date)           |
 | C4 | Confident-wrong on outside facts (model limitation)                |
