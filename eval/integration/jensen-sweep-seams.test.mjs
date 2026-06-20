@@ -255,6 +255,17 @@ check("seam.42 aggregateInbox throws when ALL mail accounts fail", () => {
   return null;
 });
 
+check("seam.43 every inbound save carries the WhatsApp id (converges to one row)", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  const calls = src.match(/chatAppend\("user"[^;]*/g) || [];
+  // All inbound user-saves must pass externalId so chatAppend's idempotency
+  // dedupes them. The one allowed exception is the shouldProcess buffer-flush
+  // callback (saves a DIFFERENT buffered message, no clean wamid).
+  const missing = calls.filter((c) => !/externalId/.test(c));
+  if (missing.length > 1) return `${missing.length} inbound saves missing externalId (will duplicate)`;
+  return null;
+});
+
 check("seam.13 verifier uses COMPLETION_TOOLS set, not heuristic", () => {
   const src = read("lib/concierge/verify.ts");
   if (!/COMPLETION_TOOLS/.test(src)) return "verifier doesn't reference COMPLETION_TOOLS";

@@ -113,6 +113,10 @@ export async function POST(req: NextRequest) {
     const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     const from: string = msg?.from || "";
     if (!from || !msg?.id) return NextResponse.json({ ok: true });
+    // Capture the WhatsApp message id once. Later branches shadow `msg` (e.g. the
+    // media branch reuses `msg` as a reply string), so every inbound save passes
+    // this stable id to chatAppend's idempotency to converge on one row.
+    const inboundWamid: string | null = msg?.id ? String(msg.id) : null;
 
     // EARLY SAVE: persist every inbound message before any processing gate so
     // the message is never lost even if shouldProcess, runConcierge, or any
@@ -136,7 +140,7 @@ export async function POST(req: NextRequest) {
     if (earlyText) {
       const sender = whoIs(from);
       const party = sender.role !== "owner" ? "taona" : "jensen";
-      await ops.chatAppend("user", earlyText, "whatsapp", party, { externalId: msg.id ? String(msg.id) : null }).catch(() => {});
+      await ops.chatAppend("user", earlyText, "whatsapp", party, { externalId: inboundWamid }).catch(() => {});
     }
 
     // Brain-core webhook guard: concurrent dedup (2s lock per sender) + media-
@@ -220,7 +224,7 @@ export async function POST(req: NextRequest) {
       if (!transcript) { await sendWhatsApp(from, "I got your voice note but couldn't make out the words. Could you re-record or type it?"); return NextResponse.json({ ok: true }); }
       const party = sender.role !== "owner" ? "taona" : "jensen";
       // Persist with a [voice note] marker so chat history shows it came as audio.
-      await ops.chatAppend("user", `[voice note] ${transcript}`, "whatsapp", party).catch(() => {});
+      await ops.chatAppend("user", `[voice note] ${transcript}`, "whatsapp", party, { externalId: inboundWamid }).catch(() => {});
       const { reply } = await runConcierge({ messages: [...history, { role: "user", content: transcript }], channel: "whatsapp", sender });
       await sendWhatsApp(from, reply || "I'm here.");
       return NextResponse.json({ ok: true });
@@ -268,7 +272,7 @@ export async function POST(req: NextRequest) {
         msg += ` I've read it, so I can pull it up or send it whenever you need.`;
       }
       const party = sender.role !== "owner" ? "taona" : "jensen";
-      await ops.chatAppend("user", `[sent a document: ${title}]`, "whatsapp", party).catch(() => {});
+      await ops.chatAppend("user", `[sent a document: ${title}]`, "whatsapp", party, { externalId: inboundWamid }).catch(() => {});
       await ops.chatAppend("assistant", msg, "whatsapp", party).catch(() => {});
       await sendWhatsApp(from, msg);
       return NextResponse.json({ ok: true });
@@ -286,7 +290,7 @@ export async function POST(req: NextRequest) {
     // deserve deterministic code (KT #127).
     if (isCancelIntent(text)) {
       const inboundParty = sender.role !== "owner" ? "taona" : "jensen";
-      await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
+      await ops.chatAppend("user", text, "whatsapp", inboundParty, { externalId: inboundWamid }).catch(() => {});
       const r = await cancelActiveBot();
       const ack = r.ok
         ? `Stopping. I am leaving ${r.title || "the meeting"} now. Anything I caught up to this point will land here with the notes and tasks in a moment.`
@@ -316,7 +320,7 @@ export async function POST(req: NextRequest) {
       const wantsJoin = JOIN_INTENT_RE.test(rest);
       const inboundParty = sender.role !== "owner" ? "taona" : "jensen";
       const botName = sender.role !== "owner" ? "Digital Taona" : "Digital Jensen";
-      await ops.chatAppend("user", text, "whatsapp", inboundParty).catch(() => {});
+      await ops.chatAppend("user", text, "whatsapp", inboundParty, { externalId: inboundWamid }).catch(() => {});
 
       try {
         const today = new Date().toISOString().slice(0, 10);
@@ -375,7 +379,7 @@ export async function POST(req: NextRequest) {
     // message must be safe before any failure can swallow it.
     const inboundParty = sender.role !== "owner" ? "taona" : "jensen";
     await ops.chatAppend("user", text, "whatsapp", inboundParty, {
-      externalId: msg.id ? String(msg.id) : null,
+      externalId: inboundWamid,
       replyToExternalId,
     }).catch(() => {});
     // Mirror inbound into Chatwoot (read-only, Path B). Best-effort.
@@ -420,7 +424,7 @@ export async function POST(req: NextRequest) {
       const open = await ops.listTasks({ done: false }).catch(() => [] as any[]);
       if (open.length > 0) {
         await ops.updateTask({ id: open[0].id, done: true }).catch(() => {});
-        await ops.chatAppend("user", text, "whatsapp", "jensen").catch(() => {});
+        await ops.chatAppend("user", text, "whatsapp", "jensen", { externalId: inboundWamid }).catch(() => {});
         const reply = `Done. Marked "${open[0].title}" complete.`;
         await ops.chatAppend("assistant", reply, "whatsapp", "jensen").catch(() => {});
         await sendWhatsApp(from, reply);

@@ -90,7 +90,9 @@ check("seam: whatsapp route persists replyToExternalId on inbound chat_messages 
   if (idx < 0) return "replyToExternalId not declared in webhook";
   const after = src.slice(idx, idx + 1500);
   if (!/replyToExternalId,/.test(after)) return "replyToExternalId not threaded into chatAppend opts";
-  if (!/externalId:\s*msg\.id\s*\?\s*String\(msg\.id\)\s*:\s*null/.test(after)) return "inbound external_id (msg.id) not captured";
+  // external_id is now captured once as inboundWamid (msg shadows in later branches).
+  if (!/externalId:\s*inboundWamid/.test(after)) return "inbound external_id not threaded into chatAppend opts";
+  if (!/const inboundWamid[^\n]*msg\?\.id \? String\(msg\.id\) : null/.test(src)) return "inboundWamid not captured from msg.id";
   return null;
 });
 

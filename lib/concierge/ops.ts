@@ -303,13 +303,19 @@ export async function chatAppend(
   // on any lookup error it falls through to a normal insert.
   if (opts?.externalId) {
     try {
-      const existing: any[] = await sbSelect("chat_messages", `external_id=eq.${enc(opts.externalId)}&role=eq.${role}&select=id&limit=1`);
-      const exId = existing?.[0]?.id;
-      if (typeof exId === "number") {
-        if (opts.replyToExternalId) {
-          await sbUpdate("chat_messages", `id=eq.${exId}`, { reply_to_external_id: opts.replyToExternalId }).catch(() => {});
-        }
-        return exId;
+      const existing: any[] = await sbSelect("chat_messages", `external_id=eq.${enc(opts.externalId)}&role=eq.${role}&select=id,content&limit=1`);
+      const ex = existing?.[0];
+      if (ex && typeof ex.id === "number") {
+        // Same WhatsApp message re-saved (early-save stub -> full transcript/OCR,
+        // or a chokepoint re-save of the same text). Update the existing row to
+        // the RICHER content instead of inserting a duplicate. "Only grow" guard:
+        // never let a shorter stub overwrite a fuller body if calls arrive out of
+        // order. This makes every inbound path converge on ONE row per message.
+        const patch: any = {};
+        if (content && content.length > String(ex.content || "").length) patch.content = content;
+        if (opts.replyToExternalId) patch.reply_to_external_id = opts.replyToExternalId;
+        if (Object.keys(patch).length) await sbUpdate("chat_messages", `id=eq.${ex.id}`, patch).catch(() => {});
+        return ex.id;
       }
     } catch { /* fall through to insert (never drop a message) */ }
   }
