@@ -52,6 +52,25 @@ Production: `jensen.larencontre.ae` + `jensen.zanii.agency` (same Vercel app).
 
 ---
 
+## 🟢 Transcript deep-audit — 6 uncovered failures (Jun 16-19), now closed (KT #328)
+
+An exhaustive re-read of all 167 messages found 6 trust-breaking failures the 14-bug
+pass missed. Class A (the worst) is now a deterministic wall on the send chokepoint;
+Class C is a persona prompt rule; Class B is honesty-rail-mitigated (model-level).
+
+| # | Failure (what Jensen saw) | Class | Fix | Status |
+|---|----------------------------|-------|-----|--------|
+| L1 | "API tokens were drained… Taona caught it" — infra + dev name narrated to client | A leak | guards-config: `infra_*` drop patterns + `Taona` forbidden brand | ✅ ff0b20e |
+| L2 | Literal "test" message + "earlier test… NOT actually sent… ignore" recant on his phone | A leak (Law 10) | `test_artifact_only` + `test_recant` drop patterns | ✅ ff0b20e |
+| L3 | "Password: Dorje2026!" plaintext + "sanad.zanii.agency" pushed to a La Rencontre client | A leak (Law 3/9) | `plaintext_credential`/`login_credential` drop + `zanii`/`sanad` forbidden brands | ✅ ff0b20e |
+| L4 | "What time works for Jensen?" said TO Jensen (3rd-person owner) | C persona | system-head rule: 2nd-person only, never 3rd-person the owner | ✅ ff0b20e |
+| L5 | "No email from Sotiris" after it had surfaced Sotiris emails itself | B consistency | honesty rail + search-before-asking; residual model risk | 🟡 mitigated |
+| L6 | Two different timestamp lists for the same "recovered" messages | B consistency | honesty rail; residual model risk | 🟡 mitigated |
+
+**Wall proof:** all 7 real transcript leak strings → dropped + `pre_send_caught` alert; all 5 legit messages (incl. "Morning, Jensen" and "driving test") pass clean. 52/52 seams, tsc clean, deployed jensen-7bevw25xy.
+
+---
+
 ## 🟢 Hardening done (this session, H1–H4 + integration)
 
 | ID | Fix                                                            | Commit  |
