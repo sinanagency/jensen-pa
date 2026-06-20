@@ -266,9 +266,17 @@ check("seam.43 every inbound save carries the WhatsApp id (converges to one row)
   return null;
 });
 
-check("seam.13 verifier uses COMPLETION_TOOLS set, not heuristic", () => {
-  const src = read("lib/concierge/verify.ts");
-  if (!/COMPLETION_TOOLS/.test(src)) return "verifier doesn't reference COMPLETION_TOOLS";
+check("seam.44 complete_event is a completion tool (its success must not be rewritten)", () => {
+  const src = read("lib/concierge/tools.ts");
+  const i = src.indexOf("COMPLETION_TOOLS = new Set");
+  const set = src.slice(i, i + 760);
+  if (!/"complete_event"/.test(set)) return "complete_event missing from COMPLETION_TOOLS: the honesty rail would rewrite 'marked done' into a lie";
+  return null;
+});
+
+check("seam.13 honesty rail uses COMPLETION_TOOLS set, not heuristic", () => {
+  const src = read("lib/concierge/honest-reply.ts");
+  if (!/COMPLETION_TOOLS/.test(src)) return "honesty rail doesn't reference COMPLETION_TOOLS";
   const toolsSrc = read("lib/concierge/tools.ts");
   if (!/COMPLETION_TOOLS/.test(toolsSrc)) return "COMPLETION_TOOLS not exported from tools.ts";
   return null;

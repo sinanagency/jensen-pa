@@ -29,7 +29,7 @@ export const TOOLS: Tool[] = [
   { name: "create_event", description: "Add a calendar event. Use recurrence for repeating events: 'weekly' (every week same day/time), 'monthly' (same day each month), 'yearly' (same date each year). Set recurrenceUntil to stop after a certain date.", input_schema: obj({ title: str(""), date: str("YYYY-MM-DD"), time: str("HH:MM"), entityId: str(""), note: str(""), recurrence: str("'weekly', 'monthly', 'yearly', or omit for one-off"), recurrenceUntil: str("YYYY-MM-DD last occurrence date") }, ["title", "date"]) },
   { name: "update_event", description: "Update an event. Set recurrence=null to make a recurring event stop recurring.", input_schema: obj({ id: str(""), title: str(""), date: str(""), time: str(""), note: str(""), recurrence: str("'weekly', 'monthly', 'yearly', or null"), recurrenceUntil: str("YYYY-MM-DD") }, ["id"]) },
   { name: "delete_event", description: "Delete an event. DESTRUCTIVE: ask the user to confirm in conversation first, then call again with confirm:true.", input_schema: obj({ id: str(""), confirm: bool("must be true; only set after user explicitly confirms") }, ["id"]) },
-  { name: "complete_event", description: "Mark a calendar event (meeting, visit, call, payment-event) as completed. SAFE: stamps outcome='completed' on the events row and appends a one-line marker to note. Use when Jensen reports a meeting actually happened: 'meeting with Taona is done', 'Sara done', 'Toana done', 'I met Bashir'. THIS IS FOR CALENDAR EVENTS, not to-do TASKS — for tasks use complete_task. Look up the event id first via query_calendar.", input_schema: obj({ id: str("the events.id of the calendar event"), note: str("optional one-line note on how it went") }, ["id"]) },
+  { name: "complete_event", description: "Mark a calendar event (meeting, visit, call, payment-event) as completed. SAFE: stamps outcome='happened' on the events row and appends a one-line marker to note. Use when Jensen reports a meeting actually happened: 'meeting with Taona is done', 'Sara done', 'Toana done', 'I met Bashir'. THIS IS FOR CALENDAR EVENTS, not to-do TASKS — for tasks use complete_task. Look up the event id first via query_calendar.", input_schema: obj({ id: str("the events.id of the calendar event"), note: str("optional one-line note on how it went") }, ["id"]) },
 
   // ---- Finance (UAE) ----
   { name: "finance_summary", description: "Income, expense, net. Optionally per entity or period.", input_schema: obj({ entityId: str(""), from: str("YYYY-MM-DD"), to: str("YYYY-MM-DD") }) },
@@ -135,7 +135,7 @@ export const ADMIN_ONLY = new Set(["read_owner_chats"]);
 // Tools whose ok=true is required to back a "done/saved/sent" claim (verifier).
 export const COMPLETION_TOOLS = new Set([
   "create_entity", "update_entity", "delete_entity", "create_task", "update_task", "complete_task", "delete_task",
-  "create_event", "update_event", "delete_event", "record_finance", "update_finance", "delete_finance",
+  "create_event", "update_event", "delete_event", "complete_event", "record_finance", "update_finance", "delete_finance",
   // generate_document/generate_legal produce DRAFT TEXT only (no file saved, no
   // delivery), so they must NOT back a "filed/generated your document" claim.
   // Keeping them out of COMPLETION_TOOLS lets the honesty rail rewrite any such
