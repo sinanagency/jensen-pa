@@ -52,5 +52,26 @@ Production: `jensen.larencontre.ae` + `jensen.zanii.agency` (same Vercel app).
 
 ---
 
+## 🟢 Hardening done (this session, H1–H4 + integration)
+
+| ID | Fix                                                            | Commit  |
+|----|-----------------------------------------------------------------|---------|
+| H1 | Briefs say "couldn't read your board" instead of fake "clean"   | daf7bd2 |
+| H2 | Dedup logs the failure (kept fail-open: duplicate > lost task)   | daf7bd2 |
+| H3 | Meeting-link checks the write before saying "Saved"             | daf7bd2 |
+| H4 | aggregateInbox throws if ALL accounts fail (no false "clear")    | daf7bd2 |
+| I1 | All 8 inbound paths converge on ONE chat row (idempotent grow)   | d159c1a |
+| I2 | complete_event added to COMPLETION_TOOLS (rail collision fix)    | 0cd2c9a |
+
+## Integration review (final gate) — PASS
+
+All of the night's fixes were traced as a SET across the whole codebase (not just
+individually). 7 of 8 interactions composed cleanly; **1 cross-fix regression found
+and fixed**: complete_event now succeeds (fix #5) but wasn't a completion tool, so
+the honesty rail (fix #2) rewrote "marked done" into "I have not done that yet" —
+fixed by I2. Verified: honesty-rail vs draft tools, chatAppend grow vs swipe-anchor,
+routing vs day_log, latch-before-send, meeting-link scope, silent-drop catch scope.
+tsc clean · 48 seam + 26 + 7 tests green · dead verify.ts removed.
+
 ## Verified clean (audited, no action needed)
 Finance (VAT 5% + corp tax 9% over 375k) math correct and traced · email sends from the correct mailbox · Shopify orders real · voice/image intake honest on failure · all 59 tools wired · no other broken PostgREST queries.
