@@ -13,6 +13,7 @@ import { transcribeAudio } from "@/lib/transcribe";
 import { sbSelect, enc } from "@/lib/concierge/rest";
 import { extractMeetingLink, dispatchMeetingBot, isCancelIntent, cancelActiveBot } from "@/lib/digital-u";
 import { shouldProcess, mediaArrived } from "@/lib/brain-core/index.js";
+import { coalesceTurn, finishTurn } from "@/lib/whatsapp-coalesce";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -469,13 +470,38 @@ export async function POST(req: NextRequest) {
       // No open tasks: fall through to the brain so Jensen gets a graceful reply.
     }
 
+    // DURABLE TURN COALESCING (KT #330, ported from Sasa KT #327). A rapid burst
+    // from the same sender must produce ONE reply, not one per message. brain-core's
+    // shouldProcess lock is an in-memory Map that does NOT survive across Vercel
+    // invocations; the durable wa_turn_claim (keyed by sender phone) is what
+    // actually coalesces. FAIL-OPEN: any error degrades to the single-message
+    // reply below (a double-reply at worst, never silence). The inbound is already
+    // persisted above (NO-CHAT-LOST), so a loser's text is safe for the winner to
+    // fold in.
+    let co: { proceed: boolean; winner: boolean; failOpen?: boolean; command?: string };
+    try {
+      co = await coalesceTurn(from, inboundParty, inboundWamid, text);
+    } catch (coErr) {
+      // The module is self-fail-open, but double-guard here: any unexpected throw
+      // degrades to the single-message reply (proceed:true), never silence.
+      co = { proceed: true, winner: false, failOpen: true };
+    }
+    if (!co.proceed) {
+      // LOSER: another invocation holds the claim and will fold this message's
+      // text into its turn. Return without replying (exactly-once).
+      return NextResponse.json({ ok: true, coalesced: true });
+    }
+    // WINNER assembled the whole burst into co.command; a fail-open reply uses the
+    // single message we already have.
+    const turnInput = co.winner && co.command ? co.command : text;
+
     // FAIL-CLOSED REPLY (never go silent). If the brain throws (Anthropic
     // outage, dead key, any error) the user must still hear back, not get
     // silence. We send an honest fallback (sending does not need the brain) and
     // log the error to the audit channel so the operator sees it. The inbound
     // is already persisted above (NO-CHAT-LOST), so nothing is lost either way.
     try {
-      const { reply } = await runConcierge({ messages: [...history, { role: "user", content: text }], channel: "whatsapp", sender, swipeAnchor });
+      const { reply } = await runConcierge({ messages: [...history, { role: "user", content: turnInput }], channel: "whatsapp", sender, swipeAnchor });
       await sendWhatsApp(from, reply || "I'm here.");
     } catch (brainErr: any) {
       await sendWhatsApp(
@@ -491,6 +517,11 @@ export async function POST(req: NextRequest) {
           ts: Date.now(),
         });
       } catch { /* best-effort audit log, never block */ }
+    } finally {
+      // The winner releases the claim AFTER the reply, so a crash mid-brain leaves
+      // the claim to expire (TTL) rather than wedging the sender into silence. A
+      // loser never reaches here (it returned above).
+      if (co.winner) await finishTurn(from).catch(() => {});
     }
     return NextResponse.json({ ok: true });
   } catch (e: any) {

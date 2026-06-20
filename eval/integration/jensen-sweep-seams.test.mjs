@@ -347,7 +347,7 @@ check("seam.18 WA route has deterministic DONE-resolution before runConcierge", 
   // Both indexes must exist and DONE must come first (it shortcircuits)
   if (doneIdx === -1) return "no bare-done regex";
   // There are multiple runConcierge calls (media path uses one); find the LAST plain-text one
-  const plainTextConcierge = src.lastIndexOf("runConcierge({ messages: [...history, { role: \"user\", content: text }]");
+  const plainTextConcierge = src.lastIndexOf("runConcierge({ messages: [...history, { role: \"user\", content: turnInput }]");
   if (plainTextConcierge === -1) return "could not locate plain-text runConcierge dispatch";
   if (doneIdx > plainTextConcierge) return "DONE-resolution runs AFTER runConcierge (would never short-circuit)";
   return null;
@@ -373,7 +373,7 @@ check("seam.21bis WA route persists inbound to chat_messages BEFORE runConcierge
   if (!/NO-CHAT-LOST/.test(src)) return "no NO-CHAT-LOST marker";
   // The chatAppend for inbound must run BEFORE runConcierge in plain-text path
   const inboundChat = src.indexOf('chatAppend("user", text');
-  const conciergeIdx = src.indexOf('runConcierge({ messages: [...history, { role: "user", content: text }]');
+  const conciergeIdx = src.indexOf('runConcierge({ messages: [...history, { role: "user", content: turnInput }]');
   if (inboundChat === -1) return "no pre-brain chatAppend for inbound text";
   if (conciergeIdx === -1) return "could not locate plain-text runConcierge";
   if (inboundChat > conciergeIdx) return "inbound persistence runs AFTER runConcierge (would lose message on brain error)";
