@@ -71,6 +71,22 @@ Class C is a persona prompt rule; Class B is honesty-rail-mitigated (model-level
 
 ---
 
+## 🟢 Transcript 2nd-lens re-audit — 3 parallel lenses (omissions / numbers / tone), KT #329
+
+Ran 3 more adversarial passes. Verified every concrete claim before acting (2 turned out false).
+
+| Finding | Verdict | Action |
+|---------|---------|--------|
+| "Fabricated nag-hours (98h/114h)" | ❌ FALSE — nag feature already deleted from code | none |
+| "Frozen/templated board counts" | ❌ FALSE — briefs compute counts live (`listTasks().length`); board truly didn't change | none |
+| Meetings claimed "saved ✅" but absent from calendar (Bouchara, "Sunday"-person) | ✅ REAL (verified in prod) | Bouchara (Sun 21 11:00) restored in prod; "Sunday"-person was Fri 19, now past |
+| Open-loops: bot raises questions/offers/stale items and never closes them (contracts sat 4d, false all-clear, dropped offers) | ✅ REAL theme | slice built: stale-Q1 age-tags in brief + "close your own loops / no hollow all-clear" persona rule. Full open-loop tracker DEFERRED |
+| Persona: anxious attendant, not senior peer (telegram reminders, intake-clerk Qs, over-apology) | ✅ REAL theme | slice built: BE-THE-PEER persona block. Deep retrain DEFERRED |
+
+**Shipped:** commit 5cbdb3f, deploy jensen-euuct93kg, 54/54 seams. **Deferred (named, not dropped):** full open-loop engine + deep persona retrain → own session.
+
+---
+
 ## 🟢 Hardening done (this session, H1–H4 + integration)
 
 | ID | Fix                                                            | Commit  |
