@@ -62,6 +62,21 @@ Production: `jensen.larencontre.ae` + `jensen.zanii.agency` (same Vercel app).
 | H4 | aggregateInbox throws if ALL accounts fail (no false "clear")    | daf7bd2 |
 | I1 | All 8 inbound paths converge on ONE chat row (idempotent grow)   | d159c1a |
 | I2 | complete_event added to COMPLETION_TOOLS (rail collision fix)    | 0cd2c9a |
+| A1 | Autonomous join now works for ad-hoc + happening-now meetings (was future-only); dispatch awaited so Vercel can't SIGTERM it; ack reflects real result, never a promised-but-unqueued join | 64a81c4 |
+
+## 🟢 Autonomous meeting-join leg — verified seam by seam (2026-06-20)
+
+Root cause of the dead leg was NOT external auth (C1 myth). Two corrupt env vars (`MEETING_BOT_URL="y\n"` + wrong key) — fixed + redeployed, KT #326. Then the whole leg was walked end to end:
+
+| Seam | State | Proof |
+|------|-------|-------|
+| Credential handshake (jensen-pa → digitalu) | ✅ | live: bad key 401, correct key `link required` 400 |
+| Callback URL/key config (`JENSEN_PUBLIC_URL`, `INGEST_KEY`) | ✅ | both set; `INGEST_KEY` round-trips by construction (same key both sides) |
+| digitalu callback sender (`postCallback`) | ✅ | code: posts `x-api-key: callbackKey` to callbackUrl |
+| jensen-pa `/api/ingest` auth + handling | ✅ | live: wrong key 401, right key `transcript required` 400 (no ping) |
+| Engine join + capture + summarize | ✅ | real history: 3 `done` records incl. 2 Jensen meetings 17 Jun |
+| Dispatch behavior (ad-hoc/now/future + awaited) | ✅ | A1 fix, 49/49 seams, tsc clean, deployed 64a81c4 |
+| Live audio round-trip on a Jensen meeting | ⏳ | needs a real meeting (Taona declined a test); every seam around it is proven, so the first real meeting is the live proof |
 
 ## Integration review (final gate) — PASS
 
