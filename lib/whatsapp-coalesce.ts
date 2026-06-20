@@ -77,26 +77,35 @@ async function emitCoalesce(kind: string, sender: string | null, payload: Record
   } catch { /* best-effort; observability must never block or throw */ }
 }
 
+// The durable claim lives as a row in the EXISTING `kv` table, keyed by
+// `coalesce:<sender>`. kv(key PRIMARY KEY, value jsonb) already exists, so this
+// needs NO new table / no DDL / no Supabase dashboard access — the service key's
+// PostgREST data layer is enough. The PK on `key` makes a concurrent second
+// insert a 23505 unique_violation = the loser. expires_at is carried in the
+// value for the steal-if-stale self-heal (KT #336, supersedes the wa_turn_claim
+// table approach which could not be created on Jensen's Supabase account).
+const claimKey = (sender: string) => `coalesce:${sender}`;
+
 // Acquire the durable per-sender claim. Returns true if THIS invocation won it.
 async function acquireClaim(db: any, sender: string, traceId: string | null): Promise<boolean> {
   const now = Date.now();
-  const expiresAt = new Date(now + CLAIM_TTL_MS).toISOString();
-  // Fast path: insert. The PRIMARY KEY on sender rejects a concurrent sibling
-  // (unique_violation) => that sibling is the loser.
-  const { error } = await db
-    .from("wa_turn_claim")
-    .insert({ sender, claimed_at: new Date(now).toISOString(), expires_at: expiresAt, claimed_by: "whatsapp.route", trace_id: traceId });
+  const row = { key: claimKey(sender), value: { expires_at: now + CLAIM_TTL_MS, claimed_by: "whatsapp.route", trace_id: traceId } };
+  // Fast path: insert. The PK on kv.key rejects a concurrent sibling => loser.
+  const { error } = await db.from("kv").insert(row);
   if (!error) return true;
   if (!isUniqueViolation(error)) throw error; // schema-class error -> fail-open upstream
-  // A row already exists. If EXPIRED (crashed prior winner), steal it so the
-  // sender is never wedged. The steal is raced-safe: guarded on expires_at < now.
-  const { data: stolen } = await db
-    .from("wa_turn_claim")
-    .update({ claimed_at: new Date(now).toISOString(), expires_at: expiresAt, claimed_by: "whatsapp.route", trace_id: traceId })
-    .eq("sender", sender)
-    .lt("expires_at", new Date(now).toISOString())
-    .select("sender");
-  return Boolean(stolen && stolen.length);
+  // A claim already exists. If EXPIRED (a crashed prior winner), steal it so the
+  // sender is never wedged into silence: delete the stale row, then re-insert.
+  const { data: existing } = await db.from("kv").select("value").eq("key", claimKey(sender)).limit(1);
+  const exp = existing && existing[0] ? Number(existing[0].value?.expires_at) : NaN;
+  if (Number.isFinite(exp) && exp < now) {
+    // Confirmed stale in JS; delete it and re-insert. The tiny race (two
+    // invocations both stealing) degrades to a double-reply at worst, never silence.
+    await db.from("kv").delete().eq("key", claimKey(sender));
+    const { error: e2 } = await db.from("kv").insert(row);
+    return !e2;
+  }
+  return false;
 }
 
 // Assemble the burst: ALL inbound (role='user') for this party SINCE the last
@@ -156,7 +165,7 @@ export async function coalesceTurn(
   try {
     won = await acquireClaim(db, sender, traceId);
   } catch (e: any) {
-    // Schema-class error (e.g. wa_turn_claim not yet migrated). FAIL-OPEN:
+    // Schema-class error (e.g. the kv table unreachable). FAIL-OPEN:
     // process this one message and reply, exactly like the pre-coalescer flow.
     await emitCoalesce("fail_open", sender, { stage: "acquire", error: String(e?.message || e).slice(0, 200) });
     return { proceed: true, winner: false, failOpen: true, command: fallbackCommand };
@@ -182,7 +191,7 @@ export async function coalesceTurn(
   } catch (e: any) {
     // Assembly failed AFTER we won. Release the claim so the next message can
     // recover, and fail-open on the single message (never silent).
-    try { await db.from("wa_turn_claim").delete().eq("sender", sender); } catch {}
+    try { await db.from("kv").delete().eq("key", claimKey(sender)); } catch {}
     await emitCoalesce("fail_open", sender, { stage: "assemble", error: String(e?.message || e).slice(0, 200) });
     return { proceed: true, winner: false, failOpen: true, command: fallbackCommand };
   }
@@ -195,6 +204,6 @@ export async function coalesceTurn(
 export async function finishTurn(sender: string | null): Promise<void> {
   if (!sender) return;
   try {
-    await admin().from("wa_turn_claim").delete().eq("sender", sender);
+    await admin().from("kv").delete().eq("key", claimKey(sender));
   } catch { /* best effort: TTL sweep / next acquire overwrite covers it */ }
 }

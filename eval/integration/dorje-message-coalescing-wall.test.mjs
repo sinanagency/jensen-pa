@@ -77,10 +77,12 @@ check("S2: coalesce module exists", () => {
   return null;
 });
 
-check("S2: claim is a Postgres table (wa_turn_claim), inserted via .from(...).insert", () => {
+check("S2: claim is a durable Postgres row (kv table, no DDL needed), inserted via .from(...).insert", () => {
   const src = read(COALESCE);
-  if (!/wa_turn_claim/.test(src)) return "wa_turn_claim not referenced — claim is not durable";
-  if (!/\.from\(\s*["'`]wa_turn_claim["'`]\s*\)/.test(src)) return "wa_turn_claim not accessed via .from(...)";
+  // The claim lives in the EXISTING kv table keyed by `coalesce:<sender>` — no new
+  // table / no DDL, since Jensen's Supabase is on an account we can't run DDL on.
+  if (!/\.from\(\s*["'`]kv["'`]\s*\)/.test(src)) return "claim not stored in the durable kv table";
+  if (!/coalesce:/.test(src)) return "claim key is not the per-sender coalesce: namespace";
   if (!/\.insert\(/.test(src)) return "claim is never INSERTed (the durable acquire)";
   return null;
 });
@@ -173,14 +175,13 @@ check("S5: only the winner releases the claim via finishTurn", () => {
   return null;
 });
 
-// ─── MIGRATION: durable claim table shipped idempotently ─────────────────────
-check("MIGRATION: an idempotent migration creates wa_turn_claim", () => {
-  const files = readdirSync(resolve(ROOT, "db"));
-  const migFile = files.find((f) => { try { return /wa_turn_claim/.test(read(`db/${f}`)); } catch { return false; } });
-  if (!migFile) return "no migration in db/ creates wa_turn_claim";
-  const mig = read(`db/${migFile}`);
-  if (!/create table if not exists/i.test(mig)) return "migration not idempotent (missing CREATE TABLE IF NOT EXISTS)";
-  if (!/sender/i.test(mig)) return "migration does not key the claim by sender";
+// ─── NO MIGRATION: the claim rides the existing kv table, so coalescing needs
+// no DDL and no Supabase-account access to switch on (KT #336). ───────────────
+check("NO-DDL: the claim uses the existing kv table + carries an expires_at TTL self-heal", () => {
+  const src = read(COALESCE);
+  if (/wa_turn_claim/.test(codeOnly(src))) return "still references the uncreatable wa_turn_claim table in code";
+  if (!/expires_at/.test(src)) return "no expires_at TTL carried on the claim (a crashed winner would wedge the sender)";
+  if (!/CLAIM_TTL_MS/.test(src)) return "no claim TTL constant";
   return null;
 });
 
