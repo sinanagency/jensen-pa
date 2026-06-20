@@ -662,6 +662,26 @@ check("seam.57 honesty rail exempts a recap/summary read (does not eat it into '
   return null;
 });
 
+check("seam.59 brand wall does not drop a real client contact: 'Stephen' removed (collides with 'Stephen Sutherland'), dev/brand bans kept", () => {
+  const src = read("lib/bot/guards-config.ts");
+  const i = src.indexOf("forbiddenBrands:");
+  const set = src.slice(i, i + 800);
+  // the bare 'Stephen' entry must be gone from the active list (a comment mention is fine)
+  if (/^\s*'Stephen',/m.test(set)) return "'Stephen' is still an active forbidden brand (drops replies about the real contact Stephen Sutherland)";
+  // but the genuine protections must remain
+  for (const b of ["'Taona'", "'zanii'", "'sanad'", "'Sasa'"]) {
+    if (!set.includes(b)) return `${b} was wrongly removed from forbiddenBrands`;
+  }
+  return null;
+});
+
+check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
+  const src = read("lib/mail-sweep.ts");
+  if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
+  if (!/__nosubj_\$\{m\.id\}/.test(src)) return "no per-email fallback key for blank subjects";
+  return null;
+});
+
 check("seam.58 send wall is recipient-aware: skips the developer; a client-facing DROP routes the diagnostic to dev + gives Jensen a graceful line (never the cryptic reaskPhrase)", () => {
   const src = read("lib/whatsapp.ts");
   if (!/const toDev = whoIs\(to\)\.role === "developer"/.test(src)) return "wall is not recipient-aware (a dev-routed reply still hits the client wall and over-fires)";

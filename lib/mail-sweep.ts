@@ -284,8 +284,10 @@ export async function sweepAndPropose(): Promise<SweepResult> {
   // signal. The user can reply "what else in that thread" if they want more.
   const threadGroups = new Map<string, TriagedMail[]>();
   for (const m of needsReply) {
-    const key = (m.subject || "").replace(/^(Re|Fwd|Aw|Antwort|RE|FWD|AW):\s*/i, "").trim().toLowerCase().slice(0, 80);
-    if (!key) continue;
+    // A blank/whitespace subject must NOT be dropped (KT #339): fall back to a
+    // per-email key so a real client email with no subject still surfaces to Jensen
+    // as its own proposal instead of being silently skipped.
+    const key = (m.subject || "").replace(/^(Re|Fwd|Aw|Antwort|RE|FWD|AW):\s*/i, "").trim().toLowerCase().slice(0, 80) || `__nosubj_${m.id}`;
     if (!threadGroups.has(key)) threadGroups.set(key, []);
     threadGroups.get(key)!.push(m);
   }

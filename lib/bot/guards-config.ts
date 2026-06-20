@@ -49,6 +49,10 @@ export const JENSEN_BOT_GUARDS_CONFIG = defineBotConfig({
     'Canada Made',
     'Sinan Agency',
     'sinanagency',
+    // 'Stephen' REMOVED (KT #339): it was a Sasa-only fictional-persona guard, and
+    // the file's own header says Jensen should ALLOW it. Jensen has a REAL contact
+    // "Stephen Sutherland", so banning the bare first name dropped legitimate replies
+    // about a real client into the graceful fallback. Sasa keeps it in Sasa's config.
     'Taona',             // the developer — never named to the client (Law 1)
     'zanii',             // agency brand — Jensen is single-tenant larencontre.ae (Law 9)
     'sanad',             // sibling zanii product — never surfaced to this client
