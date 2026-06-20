@@ -19,6 +19,10 @@ export type Triage = {
   quadrant: Quadrant;
   summary: string;
   draft: string;
+  // When the bot cannot ground a reply, it does NOT guess: draft is "" and it
+  // asks Jensen for steer, naming the missing info in steerGap (KT #332).
+  needsSteer?: boolean;
+  steerGap?: string;
   event?: EmailEvent | null;
 };
 export type TriagedMail = UMailSummary & Triage;
@@ -154,7 +158,12 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
     `- urgent: TRUE only if time sensitive within ~48h (a real deadline TODAY or TOMORROW, someone visibly blocked waiting, a payment due date imminent, a meeting time today). Otherwise FALSE.`,
     `- needsReply: TRUE if a real human is expecting a written reply from him. FALSE for automated mail.`,
     `- summary: max 14 words, plain, what it is and what is wanted (or "Newsletter from <vendor>" / "Auto-receipt <vendor>" for noise).`,
-    `- draft: ONLY if needsReply=true (else ""). 1-2 sentences, warm, professional, FIRST PERSON as Jensen. Never use dash characters (no -, no —, no –); use commas or periods. When a "[Draft context: ...]" line is present, USE it to make the draft specific (the relationship, past discussion, last event, known facts). GROUNDING RULE (critical, overrides the urge to be helpful): you may ONLY state a specific (a price or amount, availability, a date or time, headcount, menu, logistics, a deliverable, a commitment) if that exact specific appears in the "[Draft context: ...]" line or in the email's own text. If the email asks for specifics you do NOT have grounded, do NOT invent or estimate them. Instead write a brief HONEST HOLDING reply, in this spirit: "Thank you for reaching out, let me pull the details together and come back to you shortly." NEVER quote a number, price, date, or capacity that is not in the provided context or the email. A warm honest "let me get back to you" is always better than a confident wrong answer, and a wrong specific to a client is far more damaging than a holding reply.`,
+    `- draft + needs: the SUGGESTED REPLY is a draft for Jensen to review, never auto-sent. Decide between two outcomes and NEVER guess:`,
+    `    GROUNDING RULE (critical): you may ONLY state a specific (a price or amount, availability, a date or time, headcount, menu, logistics, a deliverable, a commitment) if that exact specific appears in the "[Draft context: ...]" line or in the email's own text.`,
+    `    (a) CONFIDENT: if needsReply=true AND every specific the reply needs is grounded in the context or the email, write draft = a warm 1-2 sentence reply, FIRST PERSON as Jensen, no dash characters (use commas/periods). Set needs = "".`,
+    `    (b) NOT SURE: if needsReply=true but the email asks for specifics you do NOT have grounded (price, availability, dates, capacity, menu, logistics), do NOT invent them and do NOT write a vague holding reply. Instead set draft = "" and set needs = a few words naming exactly what you'd need from Jensen to answer (e.g. "Upaya ticket price and the Saturday date", "availability for 12 Aug"). The bot will ask Jensen for that, then draft properly. Asking is better than guessing.`,
+    `    If needsReply=false, both draft and needs are "".`,
+    `    NEVER quote a number, price, date, or capacity that is not in the provided context or the email.`,
     `- event: ONLY for a SPECIFIC scheduled meeting/booking/event with a CONCRETE YYYY-MM-DD date. Otherwise null. Never invent dates. Never resolve "next week" or "Q3" into a date. Include meetingUrl if the preview shows a Zoom/Meet/Teams/Whereby link (full URL, http or https), else omit. Shape: {"title":"...", "date":"YYYY-MM-DD", "time":"HH:MM"|null, "note":"...", "meetingUrl":"https://..."|null}.`,
     ``,
     `Quadrant = (important ? 1 : 3) when urgent, else (important ? 2 : 4). Computed automatically from important + urgent — do NOT return quadrant directly.`,
@@ -171,7 +180,7 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
     `- Unfamiliar sender, vague subject, hard to tell → important:TRUE, urgent:false, Q2 (default to surfacing).`,
     ``,
     `Return ONLY a JSON array (no prose, no markdown). One object per email. Use the exact id strings given:`,
-    `[{"id":"...","important":true,"urgent":false,"needsReply":true,"summary":"...","draft":"...","event":null}]`,
+    `[{"id":"...","important":true,"urgent":false,"needsReply":true,"summary":"...","draft":"...","needs":"","event":null}]`,
   ].join("\n");
 
   const txt = await askClaude({
@@ -201,18 +210,39 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
           meetingUrl: url,
         };
       }
-      // GROUNDING GUARD (KT #331): a suggested reply that quotes a price, headcount,
-      // or percentage not present in the grounded sources is a fabrication; downgrade
-      // it to an honest holding reply. Backstops the prompt's grounding rule.
+      // GROUNDING (KT #331/#332): never put a guessed reply in front of Jensen.
+      // Two ways the bot signals "not sure": the model itself returns needs="..."
+      // (it could not ground the reply), OR the deterministic groundDraft backstop
+      // catches a fabricated price/headcount/percent the model slipped in. Either
+      // way: draft = "", needsSteer = true, and steerGap names what to ask Jensen.
       const rawDraft = String(o.draft || "").slice(0, 600);
-      const grounded = groundDraft(rawDraft, sourcesById.get(String(o.id)) || "");
+      const modelNeeds = String(o.needs || "").slice(0, 120).trim();
+      let draft = rawDraft;
+      let needsSteer = false;
+      let steerGap = "";
+      if (modelNeeds) {
+        needsSteer = true;
+        steerGap = modelNeeds;
+        draft = "";
+      } else {
+        const grounded = groundDraft(rawDraft, sourcesById.get(String(o.id)) || "");
+        if (grounded.needsSteer) {
+          needsSteer = true;
+          steerGap = grounded.gap || "details I do not have on file";
+          draft = "";
+        } else {
+          draft = grounded.draft;
+        }
+      }
       out[String(o.id)] = {
         important,
         urgent,
         needsReply: !!o.needsReply,
         quadrant: quadrantOf(important, urgent),
         summary: String(o.summary || "").slice(0, 140),
-        draft: grounded.draft,
+        draft,
+        needsSteer,
+        steerGap,
         event,
       };
     }

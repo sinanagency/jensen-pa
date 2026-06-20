@@ -19,8 +19,14 @@
 // reply). Dates/times are handled by the prompt's honest-holding rule + the
 // existing event-extraction "never invent dates" guard.
 
-export const HOLDING_REPLY =
-  "Thank you for reaching out. Let me pull the details together and come back to you shortly with everything you need.";
+// Human-readable name of the kind of specific that was fabricated, for the
+// "needs your steer" ask shown to Jensen.
+const GAP_LABEL: Record<string, string> = {
+  money: "a price or amount",
+  money_suffix: "a price or amount",
+  headcount: "a headcount",
+  percent: "a discount or percentage",
+};
 
 // Quantitative specifics a draft might fabricate. Each carries a unit (currency,
 // a headcount noun, or %) so it is a real commitment, never incidental prose.
@@ -39,11 +45,15 @@ function digitTokens(s: string): Set<string> {
   return new Set((String(s || "").toLowerCase().match(/\d[\d,]*(?:\.\d+)?/g) || []).map((x) => x.replace(/,/g, "")));
 }
 
-// Returns the draft unchanged when grounded, or the honest holding reply when a
-// quantitative specific is not backed by the sources.
-export function groundDraft(draft: string, sources: string): { draft: string; downgraded: boolean; reason?: string } {
+// Deterministic backstop. Returns the draft unchanged when grounded. When the
+// draft quotes a quantitative specific NOT backed by the sources, it is a
+// fabrication: returns needsSteer:true with NO draft (never a guess, never a
+// holding reply pretending to be the answer) and a human-readable gap, so the
+// caller can turn the suggestion into a "needs your steer" ask to Jensen
+// instead of putting a fabricated reply in front of him (KT #332).
+export function groundDraft(draft: string, sources: string): { draft: string; needsSteer: boolean; gap?: string } {
   const d = String(draft || "").trim();
-  if (!d) return { draft: d, downgraded: false };
+  if (!d) return { draft: d, needsSteer: false };
   const srcDigits = digitTokens(sources);
   for (const p of RISKY) {
     const hits = d.match(p.re);
@@ -52,9 +62,9 @@ export function groundDraft(draft: string, sources: string): { draft: string; do
       const num = (hit.match(/\d[\d,]*(?:\.\d+)?/) || [""])[0].replace(/,/g, "");
       // Grounded if the figure appears in the sources; otherwise it is invented.
       if (num && !srcDigits.has(num)) {
-        return { draft: HOLDING_REPLY, downgraded: true, reason: `${p.label}:${hit.trim()}` };
+        return { draft: "", needsSteer: true, gap: GAP_LABEL[p.label] || "specifics I do not have on file" };
       }
     }
   }
-  return { draft: d, downgraded: false };
+  return { draft: d, needsSteer: false };
 }

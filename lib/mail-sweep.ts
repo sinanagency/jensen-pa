@@ -101,6 +101,20 @@ function buildDraft(m: TriagedMail): string {
   ].join("\n");
 }
 
+// Build the "needs your steer" bubble for an email the bot could NOT ground
+// (KT #332). CRITICAL: this is addressed to JENSEN, names the missing info, and
+// carries NO "My draft reply" / "yes to send" affordance, so a stray "yes" can
+// never fire it at the sender. The bot asks; it never guesses.
+function buildSteerAsk(m: TriagedMail): string {
+  const gap = (m.steerGap || "some details I do not have on file").trim();
+  return [
+    "On this one I do not want to guess.",
+    `They are asking about ${gap}, and I do not have that on file.`,
+    "",
+    "Send me the details and I will draft the reply for you, or tell me how you want to handle it.",
+  ].join("\n");
+}
+
 export type SweepResult = {
   ok: boolean;
   scanned: number;
@@ -260,7 +274,10 @@ export async function sweepAndPropose(): Promise<SweepResult> {
     }
   }
 
-  const needsReply = triaged.filter((m) => m.needsReply && (m.draft || "").trim().length > 0);
+  // Surface both a real grounded draft AND a "needs your steer" ask (KT #332):
+  // an ungrounded email has draft="" but must still reach Jensen as a question,
+  // not be silently dropped.
+  const needsReply = triaged.filter((m) => m.needsReply && ((m.draft || "").trim().length > 0 || m.needsSteer));
   // Thread coalescing: group emails by normalized subject and keep the most
   // recent per thread. Same thread showing up as 2+ separate proposals (e.g.
   // Thomas+Sohum + Petra+Sohum on the same purchasing thread) is noise, not
@@ -312,11 +329,12 @@ export async function sweepAndPropose(): Promise<SweepResult> {
           important: p.quadrant === 1 || p.quadrant === 2,
           urgent: p.quadrant === 1 || p.quadrant === 3,
           needsReply: true, quadrant: p.quadrant, summary: p.summary, draft: p.draft,
+          needsSteer: p.needsSteer, steerGap: p.steerGap,
         };
         const body1 = `(catching up while you were away)\n\n` + buildEmailBody(m);
         const r1 = await sendTextAndLog(to, body1, { party: "jensen" });
         if (!r1.ok) { errors.push(`drain send failed for ${p.id}`); continue; }
-        await sendTextAndLog(to, buildDraft(m), { party: "jensen" });
+        await sendTextAndLog(to, m.needsSteer ? buildSteerAsk(m) : buildDraft(m), { party: "jensen" });
         drained++;
       } catch (e: any) {
         errors.push(`drain ${p.id}: ${e?.message || String(e)}`);
@@ -341,7 +359,7 @@ export async function sweepAndPropose(): Promise<SweepResult> {
           if (full?.text) withBody.snippet = full.text;
         } catch { /* use snippet or summary fallback */ }
         const r = await sendTextAndLog(to, buildEmailBody(withBody), { party: "jensen" });
-        if (r.ok) await sendTextAndLog(to, buildDraft(m), { party: "jensen" });
+        if (r.ok) await sendTextAndLog(to, m.needsSteer ? buildSteerAsk(m) : buildDraft(m), { party: "jensen" });
         if (r.ok) proposed++;
         else errors.push(`whatsapp send failed for ${m.id}`);
       } else {
@@ -350,6 +368,7 @@ export async function sweepAndPropose(): Promise<SweepResult> {
           from: m.from, fromEmail: m.fromEmail, subject: m.subject,
           summary: m.summary, draft: m.draft, quadrant: m.quadrant,
           queuedAt: Date.now(),
+          needsSteer: m.needsSteer, steerGap: m.steerGap,
         };
         await enqueue(p);
         queued++;

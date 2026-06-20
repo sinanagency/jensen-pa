@@ -20,6 +20,10 @@ export type PendingProposal = {
   draft: string;
   quadrant: 1 | 2 | 3 | 4;
   queuedAt: number;
+  // When the bot could not ground a draft, it asks Jensen for steer instead of
+  // putting a guessed reply in front of him (KT #332). draft is "" in that case.
+  needsSteer?: boolean;
+  steerGap?: string;
 };
 
 export async function loadPending(): Promise<PendingProposal[]> {

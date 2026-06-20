@@ -579,25 +579,46 @@ check("seam.50 daily brief tags stale Q1 items so high-priority work cannot rot 
   return null;
 });
 
-check("seam.51 draft-grounding guard exists: downgrades ungrounded money/headcount/percent to a holding reply", () => {
+check("seam.51 draft-grounding guard: ungrounded money/headcount/percent -> needsSteer (no guess), not a fabricated draft", () => {
   const src = read("lib/draft-grounding.ts");
   if (!/export function groundDraft/.test(src)) return "groundDraft not exported";
-  if (!/HOLDING_REPLY/.test(src)) return "no honest holding-reply fallback";
+  if (!/needsSteer/.test(src)) return "guard does not return a needsSteer signal";
+  if (/HOLDING_REPLY/.test(src)) return "guard still substitutes a holding reply instead of asking for steer";
   for (const label of ["money", "headcount", "percent"]) {
     if (!new RegExp(`label:\\s*"${label}`).test(src)) return `no ${label} risk pattern`;
   }
-  // grounded check must compare the draft figure against the sources' digit tokens
   if (!/digitTokens|srcDigits/.test(src)) return "no source-grounding check (would downgrade everything or nothing)";
   return null;
 });
 
-check("seam.52 mail-triage applies the grounding guard + prompt enforces the honest-holding rule", () => {
+check("seam.52 mail-triage: confident->draft, not-sure->needsSteer (asks Jensen), never a guessed draft", () => {
   const src = read("lib/mail-triage.ts");
   if (!/from "\.\/draft-grounding"/.test(src)) return "mail-triage does not import the grounding guard";
-  if (!/groundDraft\(/.test(src)) return "groundDraft is never applied to the generated draft";
-  if (!/draft:\s*grounded\.draft/.test(src)) return "the stored draft is not the grounded result";
-  if (!/GROUNDING RULE/.test(src)) return "the triage prompt lost the honest-grounding rule";
-  if (!/HOLDING reply|holding reply/i.test(src)) return "prompt does not instruct the honest holding fallback";
+  if (!/groundDraft\(/.test(src)) return "groundDraft backstop never applied";
+  if (!/needsSteer/.test(src) || !/steerGap/.test(src)) return "triage does not propagate the needsSteer / steerGap state";
+  if (!/GROUNDING RULE/.test(src)) return "the triage prompt lost the grounding rule";
+  if (!/NOT SURE/.test(src) || !/needs =/.test(src)) return "prompt does not instruct the ask-when-not-sure (needs) branch";
+  // when not sure the draft must be emptied, never a guessed/holding draft
+  if (!/draft = "";/.test(src)) return "not-sure path does not clear the draft (would surface a guess)";
+  return null;
+});
+
+check("seam.53 needsSteer ask carries NO send affordance (can never be fired at the sender)", () => {
+  const src = read("lib/mail-sweep.ts");
+  if (!/function buildSteerAsk/.test(src)) return "no buildSteerAsk bubble for ungrounded emails";
+  // brace-match the buildSteerAsk body and assert it has no 'My draft reply' /
+  // 'yes to send' affordance that the MAIL PROPOSAL CONFIRM flow would bind to.
+  const i = src.search(/function buildSteerAsk/);
+  const open = src.indexOf("{", i);
+  let j = open + 1, depth = 1;
+  while (j < src.length && depth > 0) { const c = src[j]; if (c === "{") depth++; else if (c === "}") depth--; j++; }
+  const bodyText = src.slice(open, j);
+  if (/My draft reply/.test(bodyText)) return "steer ask contains 'My draft reply' (a yes would send it to the client)";
+  if (/yes' to send|to send as is/.test(bodyText)) return "steer ask offers a send confirmation (would fire at the client)";
+  // ungrounded items (draft "") must still be surfaced, not filtered out
+  if (!/\|\|\s*m\.needsSteer/.test(src)) return "needsReply filter drops needsSteer items (Jensen never sees the ask)";
+  // the propose paths must branch to buildSteerAsk for needsSteer
+  if (!/m\.needsSteer \? buildSteerAsk\(m\) : buildDraft\(m\)/.test(src)) return "propose path does not use buildSteerAsk for needsSteer";
   return null;
 });
 

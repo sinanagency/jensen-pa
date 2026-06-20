@@ -9,6 +9,7 @@ type Mail = {
   id: string; accountId: string; accountEmail: string; provider: "microsoft" | "zoho" | "imap";
   from: string; fromEmail: string; subject: string; date: string; seen: boolean; attachments: number;
   important: boolean; urgent: boolean; needsReply: boolean; quadrant: 1 | 2 | 3 | 4; summary: string; draft: string;
+  needsSteer?: boolean; steerGap?: string;
   event?: { title: string; date: string; time?: string; note?: string } | null;
 };
 
@@ -244,6 +245,11 @@ function MailModal({ m, onClose }: { m: Mail; onClose: () => void }) {
             : <div className="lr-emailbody">{body}</div>}
         </div>
         <div className="lr-modal-foot">
+          {m.needsSteer && (
+            <div style={{ fontSize: 12.5, color: "#9a6a00", background: "rgba(245,166,35,.10)", border: "1px solid rgba(245,166,35,.30)", borderRadius: 10, padding: "9px 12px", marginBottom: 10 }}>
+              I did not draft this one. They are asking about {m.steerGap || "details I do not have on file"}, and I will not guess. Add the details and I will draft it for you, or write your reply below.
+            </div>
+          )}
           <ReplyBox m={m} presetTo={to} presetSubject={subject} onDone={onClose} />
         </div>
       </div>
