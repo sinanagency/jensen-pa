@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as ops from "@/lib/concierge/ops";
 import { sendWhatsApp, sendWhatsAppTemplate, whoIs } from "@/lib/whatsapp";
+import { sendTextAndLog } from "@/lib/sendTextAndLog";
 import { callOwner, twilioConfigured } from "@/lib/voice-call";
 import { dubaiToday, dayPart } from "@/lib/time";
 import { isInWindow } from "@/lib/whatsapp-window";
@@ -98,7 +99,11 @@ export async function GET(req: NextRequest) {
     for (const n of to) {
       const win = await isInWindow("jensen");
       if (win.open) {
-        const ok = await sendWhatsApp(n, brief.text);
+        // sendTextAndLog (not raw sendWhatsApp) so the brief is LOGGED to
+        // chat_messages like reminders + the evening check. Raw sendWhatsApp only
+        // logs when the wall catches something, so the 8am brief was invisible to
+        // the bot's own memory of the day (KT #334).
+        const ok = await sendTextAndLog(n, brief.text, { party: "jensen" });
         sent[n] = { mode: "text", ok, hoursSince: Number(win.hoursSince.toFixed(1)) };
       } else if (tmplName && tmplName.length > 0) {
         // Template parameters: [q1 count, q2 count, today events count]. Must

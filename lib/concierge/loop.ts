@@ -280,7 +280,7 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
     // Empty reply -> honest fallback, never a bare confirmation. A completion claim
     // not backed by a successful tool is rewritten to the truth; we never append
     // a contradicting note after a standing lie. Deterministic and fail-closed.
-    reply = await honestReply(reply, runs);
+    reply = await honestReply(reply, runs, lastUser);
   }
 
   // JENSEN-DOCTRINE Law 5 enforcement — strip every em/en dash from the reply

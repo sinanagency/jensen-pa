@@ -645,6 +645,23 @@ check("seam.55 the tricky-logic protocol is wired into the doctrine (always load
   return null;
 });
 
+check("seam.56 morning brief is LOGGED (sendTextAndLog), not sent via the raw unlogged path", () => {
+  const src = read("app/api/cron/daily/route.ts");
+  if (!/from "@\/lib\/sendTextAndLog"/.test(src)) return "daily cron does not import sendTextAndLog";
+  if (!/sendTextAndLog\(n, brief\.text/.test(src)) return "brief still sent via raw sendWhatsApp (invisible to the bot's memory)";
+  return null;
+});
+
+check("seam.57 honesty rail exempts a recap/summary read (does not eat it into 'I have not done that yet')", () => {
+  const src = read("lib/concierge/honest-reply.ts");
+  if (!/READ_ASK/.test(src)) return "no READ_ASK exemption for summary/recap requests";
+  if (!/if \(READ_ASK\.test\(userAsk\)\) return text;/.test(src)) return "READ_ASK is not applied before the claim-rewrite";
+  if (!/honestReply\(reply: string, runs: ToolRun\[\], userAsk/.test(src)) return "honestReply does not accept the userAsk argument";
+  const loop = read("lib/concierge/loop.ts");
+  if (!/honestReply\(reply, runs, lastUser\)/.test(loop)) return "loop does not pass the user's request into the rail";
+  return null;
+});
+
 // ============================================================================
 // REPORT
 // ============================================================================

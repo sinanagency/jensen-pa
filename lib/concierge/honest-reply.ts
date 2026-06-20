@@ -25,6 +25,13 @@ const SEND_TOOLS = new Set<string>(["reply_email", "call_owner"]);
 // set") that describes the PAST, not a fresh action this turn. The claim-rewrite
 // must never fire on a report, or it eats correct summaries.
 const REPORT_TOOLS = new Set<string>(["day_log", "morning_brief"]);
+// The user ASKED for a recap / summary / "what did X do". The answer is a report
+// of the PAST whether or not the model remembered to call day_log, so its
+// past-tense verbs ("saved", "set", "booked") are NOT fresh-action claims. Without
+// this, a day summary answered from memory gets eaten into "I have not done that
+// yet" (the June 20 over-fire, KT #334).
+const READ_ASK =
+  /\b(summari[sz]e|summary|recap|run.?down|catch me up|what (did|happened|came in|was on)|how (was|did) (the|his|your|my) day|walk me through (the|his|your|my) day)\b/i;
 
 const okIn = (runs: ToolRun[], names: Set<string>) =>
   runs.some((r) => names.has(r.name) && r.ok);
@@ -56,13 +63,16 @@ function rewriteToHonest(runs: ToolRun[]): string {
  * - A finished-action claim with no backing tool success is rewritten to the truth.
  * - We never append a contradicting note after a standing lie.
  */
-export async function honestReply(reply: string, runs: ToolRun[]): Promise<string> {
+export async function honestReply(reply: string, runs: ToolRun[], userAsk = ""): Promise<string> {
   const text = (reply || "").trim();
   if (!text)
     return "I do not have anything to confirm there. Tell me what you need and I will action it.";
   // A record report (day_log / morning_brief) is not a fresh-action claim. Its
   // historical completion language must never be rewritten. Ship it as-is.
   if (runs.some((r) => REPORT_TOOLS.has(r.name))) return text;
+  // Same when the USER asked for a recap/summary: the reply describes the past,
+  // so its past-tense verbs are not claims of a fresh action this turn (KT #334).
+  if (READ_ASK.test(userAsk)) return text;
   if (!CLAIM.test(text) || NOT_A_CLAIM.test(text)) return text;
 
   const backed = SENT_CLAIM.test(text)
