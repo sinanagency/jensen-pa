@@ -22,10 +22,14 @@ function authed(req: NextRequest): boolean {
 
 async function buildBrief(): Promise<{ text: string; q1: number; call: string }> {
   const today = dubaiToday();
+  // Track read failure so a query error is never rendered to Jensen as a
+  // confident "clean board" (that would be the is.not.null lie all over again).
+  let readFailed = false;
+  const onFail = () => { readFailed = true; return [] as any[]; };
   const [q1, q2, events] = await Promise.all([
-    ops.listTasks({ quadrant: 1, done: false }).catch(() => []),
-    ops.listTasks({ quadrant: 2, done: false }).catch(() => []),
-    ops.queryCalendar({ from: today, to: today }).catch(() => []),
+    ops.listTasks({ quadrant: 1, done: false }).catch(onFail),
+    ops.listTasks({ quadrant: 2, done: false }).catch(onFail),
+    ops.queryCalendar({ from: today, to: today }).catch(onFail),
   ]);
   // Open warm, peer-counsel tone (matches Jensen's persona tree), then drop
   // into the board. Greeting first so the brief never reads sterile.
@@ -36,6 +40,8 @@ async function buildBrief(): Promise<{ text: string; q1: number; call: string }>
   if (q1.length) {
     lines.push(`\n*Do first (${q1.length}):*`);
     q1.slice(0, 5).forEach((t: any) => lines.push(`• ${t.title}`));
+  } else if (readFailed) {
+    lines.push(`\n*Do first:* I could not fully read your board just now. Open the portal or ask me again in a moment, I do not want to tell you it is clear if it is not.`);
   } else {
     lines.push(`\n*Do first:* nothing urgent. Clean board.`);
   }
@@ -48,6 +54,8 @@ async function buildBrief(): Promise<{ text: string; q1: number; call: string }>
   const call =
     q1.length > 0
       ? `Hello, this is your A.I. concierge from La Rencontre. A quick reminder: you have ${q1.length} urgent item${q1.length > 1 ? "s" : ""} today, starting with ${q1[0].title}. The full brief is on WhatsApp. Have a great day.`
+      : readFailed
+      ? `Hello, this is your A.I. concierge from La Rencontre. I had trouble reading your board just now, please check WhatsApp. Have a great day.`
       : `Hello, this is your A.I. concierge from La Rencontre. Your board is clear today, nothing urgent. The full brief is on WhatsApp. Have a great day.`;
   return { text: lines.join("\n"), q1: q1.length, call };
 }

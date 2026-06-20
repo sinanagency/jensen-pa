@@ -237,6 +237,24 @@ check("seam.39 reminder latches before sending (no duplicate spam)", () => {
   return null;
 });
 
+check("seam.40 briefs never claim 'clean board' on a read error", () => {
+  if (!/readFailed/.test(read("app/api/cron/daily/route.ts"))) return "daily brief does not guard against query failure";
+  if (!/readFailed/.test(read("app/api/cron/evening/route.ts"))) return "evening brief does not guard against query failure";
+  return null;
+});
+
+check("seam.41 meeting-link ack checks the write before saying 'Saved'", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  if (!/const saved = await fetch/.test(src)) return "meeting-link PATCH result not captured";
+  if (!/!saved/.test(src)) return "ack does not branch on whether the save succeeded";
+  return null;
+});
+
+check("seam.42 aggregateInbox throws when ALL mail accounts fail", () => {
+  if (!/errors === accounts\.length/.test(read("lib/mail-provider.ts"))) return "aggregateInbox cannot tell all-failed from empty (false 'inbox clear' risk)";
+  return null;
+});
+
 check("seam.13 verifier uses COMPLETION_TOOLS set, not heuristic", () => {
   const src = read("lib/concierge/verify.ts");
   if (!/COMPLETION_TOOLS/.test(src)) return "verifier doesn't reference COMPLETION_TOOLS";

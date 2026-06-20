@@ -132,6 +132,7 @@ function imapToSummary(accountId: string, accountEmail: string, m: any): UMailSu
 
 export async function aggregateInbox(perAccount = 15): Promise<UMailSummary[]> {
   const accounts = await listAccounts();
+  let errors = 0;
   const batches = await Promise.all(accounts.map(async (a) => {
     try {
       if (a.provider === "imap") {
@@ -142,8 +143,14 @@ export async function aggregateInbox(perAccount = 15): Promise<UMailSummary[]> {
       return a.provider === "microsoft"
         ? await msList(a.id, a.email, t.accessToken, perAccount)
         : await zoList(a.id, a.email, t.accessToken, perAccount);
-    } catch { return [] as UMailSummary[]; }
+    } catch { errors++; return [] as UMailSummary[]; }
   }));
+  // Never report a false "inbox clear". If EVERY account failed to read, that is
+  // an error, not an empty inbox: throw so the tool surfaces it honestly. A
+  // partial failure (some accounts read) still returns what we could fetch.
+  if (accounts.length > 0 && errors === accounts.length) {
+    throw new Error(`could not read inbox: all ${accounts.length} mail account(s) failed`);
+  }
   return batches.flat().sort((x, y) => (y.date || "").localeCompare(x.date || ""));
 }
 

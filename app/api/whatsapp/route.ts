@@ -330,11 +330,11 @@ export async function POST(req: NextRequest) {
         });
         if (match) {
           // Save the link so the reminder can surface it.
-          await fetch(`${process.env.SUPABASE_URL}/rest/v1/events?id=eq.${enc(match.id)}`, {
+          const saved = await fetch(`${process.env.SUPABASE_URL}/rest/v1/events?id=eq.${enc(match.id)}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", apikey: process.env.SUPABASE_SERVICE_KEY || "", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY || ""}` },
             body: JSON.stringify({ meeting_url: meetingLink }),
-          }).catch(() => {});
+          }).then((r) => r.ok).catch(() => false);
           // Schedule the join FOR THE MEETING TIME (never immediate, never shows an
           // error). Only when he actually asked us to take notes.
           const localIso = `${match.date}T${match.time.padStart(5, "0")}:00+04:00`;
@@ -348,7 +348,9 @@ export async function POST(req: NextRequest) {
               phone: from,
             }).catch(() => {});
           }
-          const ack = wantsJoin
+          const ack = !saved
+            ? `I had trouble saving that link just now. Send it to me again in a moment and I will get it onto *${match.title}*.`
+            : wantsJoin
             ? `Saved. I will join *${match.title}* at ${match.time} on ${match.date} to take notes, and you will get the link in your reminder so you can hop in too.`
             : `Saved your link to *${match.title}* at ${match.time} on ${match.date}. I will send it to you in the reminder so you can join when it is time.`;
           await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });

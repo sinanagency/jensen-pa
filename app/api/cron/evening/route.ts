@@ -23,10 +23,12 @@ function authed(req: NextRequest): boolean {
 
 async function buildBrief(): Promise<string> {
   const today = dubaiToday();
+  let readFailed = false;
+  const onFail = () => { readFailed = true; return [] as any[]; };
   const [q1, q2, events, fin] = await Promise.all([
-    ops.listTasks({ quadrant: 1, done: false }).catch(() => []),
-    ops.listTasks({ quadrant: 2, done: false }).catch(() => []),
-    ops.queryCalendar({ from: today, to: today }).catch(() => []),
+    ops.listTasks({ quadrant: 1, done: false }).catch(onFail),
+    ops.listTasks({ quadrant: 2, done: false }).catch(onFail),
+    ops.queryCalendar({ from: today, to: today }).catch(onFail),
     ops.listFinance({}).catch(() => []),
   ]);
   const totalQ1 = q1.length;
@@ -38,6 +40,7 @@ async function buildBrief(): Promise<string> {
 
   const lines: string[] = [`Evening check, Jensen. Here is how your board sits.`];
   if (totalQ1) lines.push(`\nYou have ${totalQ1} Q1 item${totalQ1 > 1 ? "s" : ""} still open.`);
+  else if (readFailed) lines.push(`\nI could not fully read your board just now, so I will not tell you it is clear. Check the portal or ask me again.`);
   else lines.push(`\nQ1 is clear.`);
   if (totalQ2) lines.push(`${totalQ2} Q2 item${totalQ2 > 1 ? "s" : ""} protected.`);
   if (todaysEvents) {

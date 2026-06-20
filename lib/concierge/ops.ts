@@ -70,7 +70,7 @@ export async function listTasks(f: { quadrant?: number; entityId?: string; done?
 export async function createTask(i: { title: string; quadrant?: number; entityId?: string; due?: string }) {
   const q = [1, 2, 3, 4].includes(i.quadrant as any) ? i.quadrant : 2;
   // Soft-dedup: never create a duplicate of an existing open task (Memorae's worst bug).
-  const dup = await sbSelect<any>("tasks", `title=eq.${enc(i.title)}&done=is.false&select=id,quadrant&limit=1`).catch(() => []);
+  const dup = await sbSelect<any>("tasks", `title=eq.${enc(i.title)}&done=is.false&select=id,quadrant&limit=1`).catch((e) => { console.warn(`createTask dedup query failed (inserting anyway, may duplicate): ${String(e?.message || e).slice(0, 160)}`); return []; });
   if (dup.length) return { id: dup[0].id, title: i.title, quadrant: dup[0].quadrant, deduped: true };
   const row = { id: uid(), title: i.title, quadrant: q, entity_id: i.entityId ?? null, done: false, due: i.due ?? null, created_at: now() };
   await sbInsert("tasks", row);
@@ -173,7 +173,7 @@ export async function createEvent(i: { title: string; date: string; time?: strin
   // "Meeting with the Karafotias" 75s apart for the same 14:30 slot.
   const key = normalizeEventTitleKey(i.title);
   if (key) {
-    const sameDay = await sbSelect<any>("events", `date=eq.${enc(i.date)}&select=id,title,time&limit=20`).catch(() => []);
+    const sameDay = await sbSelect<any>("events", `date=eq.${enc(i.date)}&select=id,title,time&limit=20`).catch((e) => { console.warn(`createEvent dedup query failed (inserting anyway, may duplicate): ${String(e?.message || e).slice(0, 160)}`); return []; });
     const dup = sameDay.find((r: any) => {
       if (normalizeEventTitleKey(r.title) !== key) return false;
       if (i.time && r.time && i.time !== r.time) return false;
