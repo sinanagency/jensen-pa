@@ -579,6 +579,28 @@ check("seam.50 daily brief tags stale Q1 items so high-priority work cannot rot 
   return null;
 });
 
+check("seam.51 draft-grounding guard exists: downgrades ungrounded money/headcount/percent to a holding reply", () => {
+  const src = read("lib/draft-grounding.ts");
+  if (!/export function groundDraft/.test(src)) return "groundDraft not exported";
+  if (!/HOLDING_REPLY/.test(src)) return "no honest holding-reply fallback";
+  for (const label of ["money", "headcount", "percent"]) {
+    if (!new RegExp(`label:\\s*"${label}`).test(src)) return `no ${label} risk pattern`;
+  }
+  // grounded check must compare the draft figure against the sources' digit tokens
+  if (!/digitTokens|srcDigits/.test(src)) return "no source-grounding check (would downgrade everything or nothing)";
+  return null;
+});
+
+check("seam.52 mail-triage applies the grounding guard + prompt enforces the honest-holding rule", () => {
+  const src = read("lib/mail-triage.ts");
+  if (!/from "\.\/draft-grounding"/.test(src)) return "mail-triage does not import the grounding guard";
+  if (!/groundDraft\(/.test(src)) return "groundDraft is never applied to the generated draft";
+  if (!/draft:\s*grounded\.draft/.test(src)) return "the stored draft is not the grounded result";
+  if (!/GROUNDING RULE/.test(src)) return "the triage prompt lost the honest-grounding rule";
+  if (!/HOLDING reply|holding reply/i.test(src)) return "prompt does not instruct the honest holding fallback";
+  return null;
+});
+
 // ============================================================================
 // REPORT
 // ============================================================================
