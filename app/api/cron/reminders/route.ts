@@ -86,10 +86,16 @@ async function handle(req: NextRequest) {
     // Surface the meeting link AT reminder time (the thing he actually wanted).
     // It was saved on the event but the reminder never showed it (Sotiris, Jun 16).
     const body = `Reminder. ${ev.title} at ${ev.time}.${ev.meeting_url ? `\nHere is your link to join: ${ev.meeting_url}` : ""}`;
+    // CLAIM the reminder BEFORE sending. If we sent first and the reminded_at
+    // latch then failed, the event would re-match reminded_at=is.null every tick
+    // and spam the same reminder forever. At-most-once: only send after we have
+    // successfully latched; if the latch fails, skip and retry next tick (no dup).
+    const latched = await sbUpdate("events", `id=eq.${enc(ev.id)}`, { reminded_at: Date.now() })
+      .then(() => true).catch(() => false);
+    if (!latched) continue;
     for (const num of to) {
       await sendTextAndLog(num, body, { force: true, party: "jensen" });
     }
-    await sbUpdate("events", `id=eq.${enc(ev.id)}`, { reminded_at: Date.now() }).catch(() => {});
     fired.push({ id: ev.id, title: ev.title, time: ev.time });
 
     // Recurring: create the next occurrence if recurrence is set and not past until.

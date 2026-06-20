@@ -210,7 +210,11 @@ export async function completeEvent(i: { id: string; note?: string }) {
   const rows = await sbSelect<any>("events", `id=eq.${enc(i.id)}&select=note&limit=1`).catch(() => []);
   const prev = rows?.[0]?.note || "";
   const merged = prev ? `${noteLine}\n${prev}` : noteLine;
-  await sbUpdate("events", `id=eq.${enc(i.id)}`, { outcome: "completed", note: merged });
+  // outcome must be a constraint-allowed value (events_outcome.sql): "completed"
+  // is NOT allowed and the write 400'd every time, so "mark the meeting done"
+  // silently failed. "happened" is the allowed value meaning the meeting took
+  // place; the human-readable completion stamp lives on the note above.
+  await sbUpdate("events", `id=eq.${enc(i.id)}`, { outcome: "happened", note: merged });
   return { id: i.id, completed: true };
 }
 

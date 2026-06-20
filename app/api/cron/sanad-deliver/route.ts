@@ -130,10 +130,13 @@ async function pollAndDeliver(row: PendingDraftRow): Promise<{ id: string; outco
     }
   }
 
+  // Only mark "delivered" if the WhatsApp send actually returned a message id.
+  // On send failure (msgId null) keep status "processing" so the next cron tick
+  // re-selects and retries; never record a delivery that did not reach him.
   await sbUpdate("sanad_pending_drafts", `id=eq.${row.id}`, {
-    status: "delivered",
+    status: msgId ? "delivered" : "processing",
     ready_at: job.updated_at,
-    delivered_at: new Date().toISOString(),
+    delivered_at: msgId ? new Date().toISOString() : null,
     delivered_msg_id: msgId || null,
     pdf_url: job.result?.pdf_url || null,
     last_polled_at: new Date().toISOString()

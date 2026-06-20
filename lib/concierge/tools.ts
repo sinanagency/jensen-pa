@@ -136,7 +136,11 @@ export const ADMIN_ONLY = new Set(["read_owner_chats"]);
 export const COMPLETION_TOOLS = new Set([
   "create_entity", "update_entity", "delete_entity", "create_task", "update_task", "complete_task", "delete_task",
   "create_event", "update_event", "delete_event", "record_finance", "update_finance", "delete_finance",
-  "file_document", "delete_document", "generate_document", "generate_legal", "set_legal_blueprint",
+  // generate_document/generate_legal produce DRAFT TEXT only (no file saved, no
+  // delivery), so they must NOT back a "filed/generated your document" claim.
+  // Keeping them out of COMPLETION_TOOLS lets the honesty rail rewrite any such
+  // claim to the truth. file_document (a real save) stays.
+  "file_document", "delete_document", "set_legal_blueprint",
   "add_contact", "update_contact", "delete_contact", "add_note", "delete_note", "remember_fact",
   "remember_preference", "forget_memory", "update_prefs", "set_goals", "reply_email",
 ]);

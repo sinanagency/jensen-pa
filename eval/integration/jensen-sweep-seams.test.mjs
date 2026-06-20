@@ -208,6 +208,35 @@ check("seam.35 meeting link: saved + join promised at meeting time, never immedi
   return null;
 });
 
+check("seam.36 complete_event writes a constraint-allowed outcome", () => {
+  const src = read("lib/concierge/ops.ts");
+  const fn = src.slice(src.indexOf("export async function completeEvent"));
+  if (/outcome: "completed"/.test(fn)) return "completeEvent writes 'completed' which the CHECK constraint rejects";
+  if (!/outcome: "(happened|empty|awaiting_human_verdict|resolved_by_email)"/.test(fn)) return "completeEvent does not write an allowed outcome";
+  return null;
+});
+
+check("seam.37 draft-only doc tools are not completion tools", () => {
+  const src = read("lib/concierge/tools.ts");
+  const i = src.indexOf("COMPLETION_TOOLS = new Set");
+  const set = src.slice(i, i + 700);
+  if (/"generate_document"/.test(set)) return "generate_document still in COMPLETION_TOOLS (can back a fake 'filed')";
+  if (/"generate_legal"/.test(set)) return "generate_legal still in COMPLETION_TOOLS";
+  return null;
+});
+
+check("seam.38 sanad marks delivered only on a real send", () => {
+  const src = read("app/api/cron/sanad-deliver/route.ts");
+  if (!/status: msgId \? "delivered" : "processing"/.test(src)) return "sanad-deliver records delivered even when the send failed";
+  return null;
+});
+
+check("seam.39 reminder latches before sending (no duplicate spam)", () => {
+  const src = read("app/api/cron/reminders/route.ts");
+  if (!/if \(!latched\) continue/.test(src)) return "reminder sends before latching reminded_at (can spam every tick on latch failure)";
+  return null;
+});
+
 check("seam.13 verifier uses COMPLETION_TOOLS set, not heuristic", () => {
   const src = read("lib/concierge/verify.ts");
   if (!/COMPLETION_TOOLS/.test(src)) return "verifier doesn't reference COMPLETION_TOOLS";
