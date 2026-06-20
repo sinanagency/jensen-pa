@@ -46,6 +46,20 @@ docs/decisions/ (ADRs when a law gets refined).
 
 Each module gets its own CLAUDE.md when it grows past a single file (lib/tools/CLAUDE.md, app/api/whatsapp/CLAUDE.md, etc.). Load only what you need. Invoke the doctrine-reviewer sub-agent before claiming done.
 
+## The tricky-logic protocol (MANDATORY on intent-loaded changes)
+
+Full text: `TRICKY-LOGIC-PROTOCOL.md` (repo root). A green test proves the code does what you WROTE, not what the user MEANT. Intent bugs live in that gap and a seam that checks "was the function called?" stays green while the human reads the wrong words.
+
+**Trigger — run the protocol if the change touches any of:** time (relative expressions, timezones, before/after, due vs reminder), reference/deixis ("this"/"that"/"the same one"/a swipe-reply), identity (self vs other, who assigned whom, which of two records), claim words (done/paid/sent/reminded/handled), money or any irreversible action, OR the actual words a human reads (any template, reminder, draft, or proactive push). Pure refactor/styling/log line: skip.
+
+**When triggered, the four steps are NON-NEGOTIABLE:**
+1. Write the intent first, as concrete input→exact-human-visible-output examples, in the user's words. Those examples ARE the test cases.
+2. Test the OUTPUT a human sees (rendered message text / final stored value), never just that a function ran.
+3. Adversarial read-back by a separate perspective: "how would the real user read this, what did they mean?" — not "does it run."
+4. Verify the first real fire via the owner-mirror, and for a time-bound event the fix lands BEFORE the event (or you send a correction after). A green wall is not "done" for an intent change.
+
+**Product rule that makes the bot self-correcting:** echo your interpretation when confident ("I'll remind you at 21:00 tomorrow"); ASK (flag_for_clarity / needs-steer) when not. Never silently guess on an intent-loaded input. The email draft surface implements this (KT #332/#333): confident → draft, not sure → ask Jensen, never a guess.
+
 ## Hard rules at this layer
 
 No em-dashes in any output. PII never reaches non-vetted services. Send only through sendTextAndLog. White editorial luxury, never dark by default. No fabricated totals. Shopify wins for Upaya orders. Destructive tools go through pending_action. No raw Graph API outside the chokepoint. Deploy through the configured Vercel project only, never a second driver.

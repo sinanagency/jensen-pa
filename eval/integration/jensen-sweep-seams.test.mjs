@@ -622,6 +622,29 @@ check("seam.53 needsSteer ask carries NO send affordance (can never be fired at 
   return null;
 });
 
+check("seam.54 claim-by-claim verifier exists, is fail-open, and flips ungrounded confident drafts to needsSteer", () => {
+  const v = read("lib/draft-verify.ts");
+  if (!/export async function verifyDraftsGrounded/.test(v)) return "verifyDraftsGrounded not exported";
+  if (!/return \{\};\s*\/\/ FAIL-OPEN|catch\s*\{\s*return \{\};/.test(v.replace(/\n/g, " "))) return "verifier is not fail-open on error";
+  if (!/grounded:\s*o\.grounded !== false/.test(v)) return "verifier does not default-grounded a malformed entry (per-item fail-open)";
+  const t = read("lib/mail-triage.ts");
+  if (!/from "\.\/draft-verify"/.test(t)) return "mail-triage does not import the verifier";
+  if (!/verifyDraftsGrounded\(/.test(t)) return "verifier is never run on the drafts";
+  // it must only verify CONFIDENT drafts, and a failed verdict flips to needsSteer
+  if (!/!t\.needsSteer && \(t\.draft \|\| ""\)\.trim\(\)\.length > 0/.test(t)) return "verifier not scoped to confident drafts";
+  if (!/if \(v && !v\.grounded\)/.test(t)) return "ungrounded verdict does not flip the draft to needsSteer";
+  return null;
+});
+
+check("seam.55 the tricky-logic protocol is wired into the doctrine (always loaded), not just a doc", () => {
+  const c = read("CLAUDE.md");
+  if (!/tricky-logic protocol/i.test(c)) return "CLAUDE.md does not reference the tricky-logic protocol";
+  if (!/TRICKY-LOGIC-PROTOCOL\.md/.test(c)) return "no pointer to the full protocol file";
+  if (!/Test the OUTPUT a human sees|the OUTPUT a human sees/i.test(c)) return "the output-not-mechanism rule is not stated in the doctrine";
+  if (!/echo .* when confident|ASK .* when not/i.test(c)) return "the echo-when-confident / ask-when-not product rule is missing";
+  return null;
+});
+
 // ============================================================================
 // REPORT
 // ============================================================================

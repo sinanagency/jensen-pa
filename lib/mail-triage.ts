@@ -8,6 +8,7 @@ import { askClaude, HAIKU } from "./anthropic";
 import { kvGet, kvSet } from "./db";
 import { enrichDraftContext } from "./mail-draft-context";
 import { groundDraft } from "./draft-grounding";
+import { verifyDraftsGrounded } from "./draft-verify";
 import type { UMailSummary } from "./mail-provider";
 
 export type Quadrant = 1 | 2 | 3 | 4;
@@ -247,6 +248,29 @@ async function classifyChunk(items: UMailSummary[]): Promise<Record<string, Tria
       };
     }
   }
+
+  // PASS 2 — claim-by-claim grounding (TRICKY-LOGIC-PROTOCOL step 3, KT #333). A
+  // confident draft can still assert a NON-numeric fabrication the model's own
+  // self-report + the deterministic number-guard miss ("yes Saturday works"). One
+  // adversarial pass re-reads every confident draft against its sources; any that
+  // is not fully grounded flips to a "needs your steer" ask. Fail-open: on a
+  // verifier error no verdicts come back and the draft is kept (degrades to the
+  // PASS-1 behavior, never silence, never a blanket downgrade).
+  const confident = Object.entries(out).filter(([, t]) => !t.needsSteer && (t.draft || "").trim().length > 0);
+  if (confident.length) {
+    const verdicts = await verifyDraftsGrounded(
+      confident.map(([id, t]) => ({ id, draft: t.draft, sources: sourcesById.get(id) || "" }))
+    ).catch(() => ({} as Record<string, { grounded: boolean; unsupported?: string }>));
+    for (const [id, t] of confident) {
+      const v = verdicts[id];
+      if (v && !v.grounded) {
+        t.needsSteer = true;
+        t.steerGap = (v.unsupported && v.unsupported.trim()) || "details I cannot confirm from what I have";
+        t.draft = "";
+      }
+    }
+  }
+
   return out;
 }
 
