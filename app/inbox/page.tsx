@@ -10,7 +10,7 @@ type Mail = {
   from: string; fromEmail: string; subject: string; date: string; seen: boolean; attachments: number;
   important: boolean; urgent: boolean; needsReply: boolean; quadrant: 1 | 2 | 3 | 4; summary: string; draft: string;
   needsSteer?: boolean; steerGap?: string;
-  event?: { title: string; date: string; time?: string; note?: string } | null;
+  event?: { title: string; date: string; time?: string; note?: string; meetingUrl?: string } | null;
 };
 
 function dateShort(iso: string): string {
@@ -187,9 +187,12 @@ function MailModal({ m, onClose }: { m: Mail; onClose: () => void }) {
     if (!m.event) return;
     setEvStatus("adding"); setEvErr("");
     const note = [m.event.note, link ? `Join: ${link}` : ""].filter(Boolean).join(" · ");
+    // Prefer the link the triage extractor already found on the email; fall back to a
+    // link Jensen pasted manually. Lands in meeting_url so the reminder surfaces it (KT #342).
+    const meetingUrl = m.event.meetingUrl || link || undefined;
     const r = await fetch("/api/calendar/add", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messageId: m.id, title: m.event.title, date: m.event.date, time: m.event.time || null, note }),
+      body: JSON.stringify({ messageId: m.id, title: m.event.title, date: m.event.date, time: m.event.time || null, note, meetingUrl }),
     }).then((x) => x.json()).catch(() => ({ ok: false, error: "Network error." }));
     if (r.ok) setEvStatus(r.already ? "already" : "added");
     else { setEvStatus("err"); setEvErr(r.error || "Could not add."); }

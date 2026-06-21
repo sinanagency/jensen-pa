@@ -12,7 +12,7 @@ function uid(): string {
 
 export async function addEmailEvent(
   messageId: string,
-  ev: { title: string; date: string; time?: string | null; note?: string | null }
+  ev: { title: string; date: string; time?: string | null; note?: string | null; meetingUrl?: string | null }
 ): Promise<{ added: boolean; already: boolean }> {
   const list = await kvGet<string[]>(ADDED, []);
   if (list.includes(messageId)) return { added: false, already: true };
@@ -23,6 +23,7 @@ export async function addEmailEvent(
     date: ev.date,
     time: ev.time ?? null,
     note: ev.note ?? null,
+    meetingUrl: ev.meetingUrl ?? null,
     createdAt: Date.now(),
   });
   await kvSet(ADDED, [...list, messageId].slice(-3000)).catch(() => {});

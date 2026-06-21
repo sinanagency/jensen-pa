@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
     }
     const time = typeof b.time === "string" && /^\d{1,2}:\d{2}$/.test(b.time) ? b.time : null;
     const note = b.note ? String(b.note).slice(0, 300) : null;
-    const r = await addEmailEvent(messageId, { title, date, time, note });
+    // Carry the meeting link onto the event so the T-5 reminder can hand it back (KT #342).
+    const meetingUrl = typeof b.meetingUrl === "string" && /^https?:\/\//i.test(b.meetingUrl) ? b.meetingUrl.slice(0, 500) : null;
+    const r = await addEmailEvent(messageId, { title, date, time, note, meetingUrl });
     return NextResponse.json({ ok: true, ...r });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 });

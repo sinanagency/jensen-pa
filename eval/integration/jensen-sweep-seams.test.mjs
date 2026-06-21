@@ -734,6 +734,27 @@ check("seam.62 persona role-disclosure: 'X built/runs me' + 'my developer' + 'Ta
   return null;
 });
 
+check("seam.63 emailed meeting links reach the event row (meetingUrl threads inbox->route->addEmailEvent->addEvent) (KT #342)", () => {
+  // addEvent must actually WRITE meeting_url (it silently omitted it before)
+  const db = read("lib/db.ts");
+  const ins = db.slice(db.indexOf("export async function addEvent"), db.indexOf("export async function addEvent") + 1200);
+  if (!/meetingUrl\?:\s*string/.test(ins)) return "addEvent does not accept meetingUrl";
+  if (!/meeting_url:\s*e\.meetingUrl/.test(ins)) return "addEvent insert still omits meeting_url (emailed invites land link-less)";
+  // addEmailEvent must accept + forward it
+  const sync = read("lib/calendar-sync.ts");
+  if (!/meetingUrl\?:\s*string/.test(sync)) return "addEmailEvent does not accept meetingUrl";
+  if (!/meetingUrl:\s*ev\.meetingUrl/.test(sync)) return "addEmailEvent does not forward meetingUrl to addEvent";
+  // the accept route must parse + forward it (http(s) validated)
+  const route = read("app/api/calendar/add/route.ts");
+  if (!/b\.meetingUrl/.test(route) || !/https\?:/.test(route)) return "calendar/add route does not parse/validate meetingUrl";
+  if (!/addEmailEvent\([^)]*meetingUrl/.test(route.replace(/\n/g, " "))) return "calendar/add route does not forward meetingUrl";
+  // the inbox accept must send it
+  const inbox = read("app/inbox/page.tsx");
+  if (!/meetingUrl/.test(inbox)) return "inbox does not send meetingUrl on accept";
+  if (!/m\.event\.meetingUrl/.test(inbox)) return "inbox does not use the triage-detected meetingUrl";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";

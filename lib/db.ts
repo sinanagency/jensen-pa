@@ -86,12 +86,15 @@ function chk<T>(res: { data: T; error: any }, where: string): T {
 // Server-side calendar event insert (raw PostgREST, consistent with kv). Used by
 // the email -> calendar auto-sync so detected meetings land on /calendar.
 export async function addEvent(e: {
-  id: string; title: string; date: string; time?: string | null; note?: string | null; entityId?: string | null; createdAt: number;
+  id: string; title: string; date: string; time?: string | null; note?: string | null; entityId?: string | null; meetingUrl?: string | null; createdAt: number;
 }): Promise<void> {
   const r = await fetch(sbRest("events"), {
     method: "POST",
     headers: { ...sbHeaders(), Prefer: "return=minimal" },
-    body: JSON.stringify([{ id: e.id, title: e.title, entity_id: e.entityId ?? null, date: e.date, time: e.time ?? null, note: e.note ?? null, created_at: e.createdAt }]),
+    // meeting_url MUST be written here (KT #342): the column existed and the reminder
+    // surfaces it, but this insert silently omitted it, so emailed invites landed with
+    // a null link and the T-5 reminder had nothing to hand Jensen.
+    body: JSON.stringify([{ id: e.id, title: e.title, entity_id: e.entityId ?? null, date: e.date, time: e.time ?? null, note: e.note ?? null, meeting_url: e.meetingUrl ?? null, created_at: e.createdAt }]),
   });
   if (!r.ok) throw new Error(`event insert: ${r.status} ${(await r.text()).slice(0, 200)}`);
 }
