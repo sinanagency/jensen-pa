@@ -34,6 +34,15 @@ export const JENSEN_BOT_GUARDS_CONFIG = defineBotConfig({
     // Test/dev artifacts must never land on the owner's phone (Law 10).
     { label: 'test_artifact_only', mode: 'drop', pattern: /^\s*test\s*$/i },
     { label: 'test_recant', mode: 'drop', pattern: /\btest\b[^.]{0,40}\bnot actually sent\b/i },
+    // Developer/persona leak (KT #340). 'Taona' WAS a bare forbiddenBrand, but it
+    // collided with Jensen's OWN board ("Dorje contract for Taona", "Meeting with
+    // Taona") and silently dropped EVERY list request — same failure class as
+    // 'Stephen' (KT #339): a name that is also legitimate client data cannot be a
+    // blanket drop. Scope it to dev/infra ACTION context instead, so the Jun-18
+    // persona leak ("Taona caught it, recharged the tokens") still dies while
+    // Jensen's legitimate references to Taona flow. Verified board-passes /
+    // leak-drops in seam.61.
+    { label: 'dev_persona_leak', mode: 'drop', pattern: /\btaona\b[^.!?\n]{0,50}\b(caught|recharged|topped\s*up|drained|deployed|debugg\w*|restarted|the bug|a bug|code bug|api|token|server|backend|fixed it|fixed the|caught it)\b|\b(caught|recharged|topped\s*up|drained|deployed|debugg\w*|restarted|fixed it|fixed the|caught it)\b[^.!?\n]{0,50}\btaona\b/i },
   ],
 
   // Brand names + the developer's name that MUST NEVER appear in Jensen's
@@ -50,7 +59,10 @@ export const JENSEN_BOT_GUARDS_CONFIG = defineBotConfig({
     'Canada Made',
     'Sinan Agency',
     'sinanagency',
-    'Taona',             // the developer — never named to the client (Law 1)
+    // 'Taona' removed (KT #340): bare-string ban dropped Jensen's OWN board, which
+    // legitimately contains "Dorje contract for Taona" + "Meeting with Taona". Moved
+    // to the scoped `dev_persona_leak` bannedPattern above (drops dev/infra narration
+    // about Taona, passes Jensen's own references). Same lesson as 'Stephen' (KT #339).
     'zanii',             // agency brand — Jensen is single-tenant larencontre.ae (Law 9)
     'sanad',             // sibling zanii product — never surfaced to this client
   ],
