@@ -6,9 +6,35 @@ import { callOwner, twilioConfigured } from "@/lib/voice-call";
 import { dubaiToday, dayPart } from "@/lib/time";
 import { isInWindow } from "@/lib/whatsapp-window";
 import { peekCount } from "@/lib/mail-pending";
+import { admin } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+// Per-run observability (KT #341). The daily brief kept NO record of itself:
+// the off-window TEMPLATE branch never logged (only the in-window text path
+// did, via sendTextAndLog), so a MISSED 8am was indistinguishable from a
+// fired-but-template run. This writes one durable system/audit row on EVERY
+// exit path (skip / sent / error) plus a date-keyed kv marker, so tomorrow's
+// 8am is observable, not inferred — and the future self-heal can read the
+// marker to answer "did today's brief go out?". STRICTLY fail-open: a bad
+// audit write must NEVER block or break the real send.
+async function auditDaily(content: string): Promise<void> {
+  try {
+    await admin().from("chat_messages").insert({
+      role: "system", party: "system", channel: "audit",
+      content: `daily_brief_run: ${content}`, ts: Date.now(),
+    });
+  } catch { /* fail-open: observability must never break delivery */ }
+}
+async function markBriefSent(today: string, sent: Record<string, any>): Promise<void> {
+  try {
+    await admin().from("kv").upsert(
+      { key: `daily_brief:${today}`, value: { ran_at: Date.now(), sent } },
+      { onConflict: "key" }
+    );
+  } catch { /* fail-open */ }
+}
 
 function owners(): string[] {
   return (process.env.OWNER_WHATSAPP || "").split(",").map((n) => n.trim()).filter(Boolean);
@@ -76,7 +102,10 @@ export async function GET(req: NextRequest) {
     // Stay silent until Jensen is switched on (past onboarding). No proactive
     // messages while he is still being set up.
     const prefs = await ops.getPrefs().catch(() => ({} as any));
-    if (prefs?.onboarding !== false) return NextResponse.json({ ok: true, skipped: "onboarding" });
+    if (prefs?.onboarding !== false) {
+      await auditDaily(`skip=onboarding (onboarding=${JSON.stringify(prefs?.onboarding)})`);
+      return NextResponse.json({ ok: true, skipped: "onboarding" });
+    }
 
     const brief = await buildBrief();
     // Brief goes to JENSEN only (the owner), never the admin/developer.
@@ -137,8 +166,15 @@ export async function GET(req: NextRequest) {
       const r = await callOwner(to[0], brief.call);
       call = { attempted: true, ...r };
     }
+
+    // Observability + self-heal marker (fail-open, after the real send is done).
+    const summary = Object.entries(sent).map(([n, s]: any) => `${n.replace(/[^0-9]/g, "").slice(-4)}=${s.mode}${s.ok === false ? "(send-failed)" : ""}`).join(",") || "no-recipients";
+    await auditDaily(`${summary} q1=${brief.q1}`);
+    await markBriefSent(dubaiToday(), sent);
+
     return NextResponse.json({ ok: true, q1: brief.q1, sent, call });
   } catch (e: any) {
+    await auditDaily(`error=${(e?.message || String(e)).slice(0, 160)}`);
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
   }
 }
