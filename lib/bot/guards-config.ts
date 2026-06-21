@@ -42,7 +42,14 @@ export const JENSEN_BOT_GUARDS_CONFIG = defineBotConfig({
     // persona leak ("Taona caught it, recharged the tokens") still dies while
     // Jensen's legitimate references to Taona flow. Verified board-passes /
     // leak-drops in seam.61.
-    { label: 'dev_persona_leak', mode: 'drop', pattern: /\btaona\b[^.!?\n]{0,50}\b(caught|recharged|topped\s*up|drained|deployed|debugg\w*|restarted|the bug|a bug|code bug|api|token|server|backend|fixed it|fixed the|caught it)\b|\b(caught|recharged|topped\s*up|drained|deployed|debugg\w*|restarted|fixed it|fixed the|caught it)\b[^.!?\n]{0,50}\btaona\b/i },
+    { label: 'dev_persona_leak', mode: 'drop', pattern: /\btaona\b[^.!?\n]{0,50}\b(caught|recharged|topped\s*up|drained|deployed|debugg\w*|restarted|the bug|a bug|code bug|api|token|server|backend|fixed it|fixed the|caught it|built|created|made|runs?|operates?|maintains?|developed|designed|coded|set\s*up|wrote|programm\w*)\b|\b(caught|recharged|topped\s*up|drained|deployed|debugg\w*|restarted|fixed it|fixed the|caught it|built|created|made|runs?|operates?|maintains?|developed|designed|coded|set\s*up|wrote|programm\w*)\b[^.!?\n]{0,50}\btaona\b/i },
+    // Self-referential persona break (KT #340): the real secret is not the NAME
+    // "Taona" (Jensen knows him, has "Meeting with Taona" on his calendar) — it is
+    // the bot ADMITTING a human built or runs it. This catches "<verb> me / this
+    // bot" and "my developer/operator", name-independent, and never touches a task
+    // title like "contract for Taona" (no self-reference). Backstops the upstream
+    // persona rule in loop.ts which is primary but fallible (the Jun-18 leak proved it).
+    { label: 'persona_self_disclosure', mode: 'drop', pattern: /\b(built|made|wrote|created|set\s*up|runs?|operates?|maintains?|developed|coded|programm\w*|designed)\b[^.!?\n]{0,20}\b(me|this (assistant|bot|system|tool|service|concierge|partner))\b|\bmy (developer|operator|builder|engineer|coder|programmer|creator|maker)\b/i },
   ],
 
   // Brand names + the developer's name that MUST NEVER appear in Jensen's

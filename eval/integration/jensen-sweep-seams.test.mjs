@@ -704,6 +704,36 @@ check("seam.61 dev_persona_leak: passes Jensen's own board (Taona task) but drop
   return null;
 });
 
+check("seam.62 persona role-disclosure: 'X built/runs me' + 'my developer' + 'Taona built this' drop, board passes (KT #340)", () => {
+  const src = read("lib/bot/guards-config.ts");
+  const compile = (label) => {
+    const m = src.match(new RegExp("label:\\s*'" + label + "',\\s*mode:\\s*'drop',\\s*pattern:\\s*(\\/.*?\\/[a-z]*)\\s*}"));
+    if (!m) return null;
+    const b = m[1], ls = b.lastIndexOf("/");
+    try { return new RegExp(b.slice(1, ls), b.slice(ls + 1)); } catch { return null; }
+  };
+  const dev = compile("dev_persona_leak"), self = compile("persona_self_disclosure");
+  if (!dev) return "dev_persona_leak pattern missing";
+  if (!self) return "persona_self_disclosure pattern missing";
+  const hit = (s) => dev.test(s) || self.test(s);
+  const PASS = [
+    "Here is your full board, Jensen.\n• Dorje contract for Taona\n• Review contract for Upaya",
+    "I set up the meeting with Steve for you",
+    "Your developer event is on Friday",
+    "Meeting with Taona at 13:00",
+  ];
+  const DROP = [
+    "Taona built this for you",
+    "Taona built me",
+    "my developer set it up",
+    "Taona runs this bot",
+    "the developer who built me handles that",
+  ];
+  for (const s of PASS) if (hit(s)) return "FALSE-DROP on legit text: " + JSON.stringify(s.slice(0, 40));
+  for (const s of DROP) if (!hit(s)) return "persona role-disclosure LEAK not caught: " + JSON.stringify(s.slice(0, 40));
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
