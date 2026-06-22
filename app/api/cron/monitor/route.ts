@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { admin } from "@/lib/db";
+import { admin, kvGet, kvSet } from "@/lib/db";
 import { sendTextAndLog } from "@/lib/sendTextAndLog";
-import { whoIs } from "@/lib/whatsapp";
+import { whoIs, devPhone } from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -42,8 +42,10 @@ async function httpCheck(url: string): Promise<{ ok: boolean; status: number; ms
 }
 
 async function inboundRate(db: ReturnType<typeof admin>): Promise<{ last5m: number; baseline: number }> {
-  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  // chat_messages.ts is epoch-ms (bigint); compare to NUMBERS, not ISO strings
+  // (the old ISO bound silently never matched — FM-20, the dead inbound signal).
+  const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+  const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
   const [recent, past] = await Promise.all([
     db.from("chat_messages").select("id", { count: "exact", head: true })
       .gte("ts", fiveMinAgo),
@@ -70,9 +72,11 @@ export async function GET(req: NextRequest) {
       let error: string | null = null;
       let ir: { last5m: number; baseline: number } | null = null;
 
-      if (!http.ok || http.status === 0) {
+      if (!http.ok || http.status === 0 || http.status >= 500) {
+        // 403 is the EXPECTED Meta webhook-verify rejection on a bare GET (= up).
+        // Only a network failure or a 5xx is a real outage (FM-28).
         status = "down";
-        error = `HTTP unreachable`;
+        error = http.status >= 500 ? `HTTP ${http.status}` : `HTTP unreachable`;
       } else if (bot.name === "jensen") {
         ir = await inboundRate(db);
         const { last5m, baseline } = ir;
@@ -110,21 +114,22 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Alert if fleet has issues (with cooldown)
-  if (fleetDegraded) {
-    const lastAlerts = await db
-      .from("health_checks")
-      .select("checked_at")
-      .eq("status", "degraded")
-      .order("checked_at", { ascending: false })
-      .limit(2);
-    const prevAlert = lastAlerts.data?.[1];
-    if (!prevAlert || Date.now() - new Date(prevAlert.checked_at).getTime() >= ALERT_COOLDOWN_MS) {
-      const to = owners();
-      const msg = `[fleet monitor] ${new Date().toISOString()}\n${results.map((r) => `${r.bot}: ${r.status}${r.error ? ` (${r.error})` : ""}`).join("\n")}`;
-      for (const owner of to) {
-        sendTextAndLog(owner, msg, { party: "taona", dev: false }).catch(() => {});
-      }
+  // PAGE the developer ONLY, and ONLY on a real DOWN (webhook unreachable / 5xx) —
+  // never on quiet-night "degraded" (low inbound), never to owners()/Jensen. The old
+  // block sent to owners() (which included Jensen) with a body containing "sasa", so
+  // Jensen's own wall scrubbed it AND it leaked internal monitoring to the client
+  // (FM-19/BUG-001). devPhone() is role=developer, which bypasses the send wall
+  // (whatsapp.ts), so the alert arrives intact with the real bot names. Cooldown is
+  // keyed on a kv marker of the last ALERT SENT, not the per-minute degraded
+  // health_checks heartbeat that kept the old cooldown permanently shut (FM-27).
+  const downBots = results.filter((r) => r.status === "down");
+  if (downBots.length > 0) {
+    const dev = devPhone();
+    const last = await kvGet<{ ts: number }>("monitor_last_alert", { ts: 0 }).catch(() => ({ ts: 0 }));
+    if (dev && Date.now() - (last?.ts || 0) >= ALERT_COOLDOWN_MS) {
+      const msg = `[fleet monitor] ${new Date().toISOString()}\nDOWN: ${downBots.map((r) => `${r.bot} (${r.error || `http ${r.http}`})`).join(", ")}`;
+      await sendTextAndLog(dev, msg, { party: "taona" }).catch(() => {});
+      await kvSet("monitor_last_alert", { ts: Date.now() }).catch(() => {});
     }
   }
 

@@ -755,6 +755,27 @@ check("seam.63 emailed meeting links reach the event row (meetingUrl threads inb
   return null;
 });
 
+check("seam.64 CHARACTERIZATION: monitor still logs a health_checks row per bot every run + returns {ok,checks} (must not regress)", () => {
+  const src = read("app/api/cron/monitor/route.ts");
+  if (!/\.from\(["']health_checks["']\)\s*\.insert\(/.test(src)) return "monitor no longer inserts health_checks rows";
+  for (const col of ["bot:", "http_status:", "latency_ms:"]) {
+    if (!src.includes(col)) return `health_checks insert missing ${col}`;
+  }
+  if (!/ok: true, checks/.test(src)) return "monitor no longer returns {ok:true, checks}";
+  return null;
+});
+
+check("seam.65 monitor pages devPhone ONLY on real DOWN, kv-cooldown, never owners()/Jensen, never on quiet-night degraded (FM-19/20/27/28, BUG-001)", () => {
+  const src = read("app/api/cron/monitor/route.ts");
+  if (!/devPhone\(\)/.test(src)) return "alert does not route to devPhone()";
+  if (/for \(const owner of (to|owners)\b/.test(src)) return "alert still loops owners() as recipients (leaks to Jensen)";
+  if (/sendTextAndLog\(\s*owner\b/.test(src)) return "alert still sends to an owner recipient";
+  if (!/monitor_last_alert/.test(src)) return "cooldown not keyed on kv monitor_last_alert (FM-27)";
+  if (!/status === "down"/.test(src)) return "paging not gated on status==='down' (still pages quiet-night degraded)";
+  if (!/http\.status >= 500/.test(src)) return "down-detection does not treat 5xx as down (FM-28)";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
