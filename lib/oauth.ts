@@ -39,9 +39,13 @@ export function providerConfig(p: Provider): ProviderConfig {
       authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
       tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
       // offline_access => refresh token; Graph mail read/send; User.Read for the
-      // address; Calendars.Read so the Outlook calendar can sync into /calendar.
-      scopes: "offline_access openid email profile User.Read Mail.Read Mail.Send Calendars.Read",
-      extraAuthParams: { prompt: "select_account", response_mode: "query" },
+      // address; Calendars.ReadWrite so the bot can CREATE Outlook events + send
+      // real meeting invites (attendees) from Jensen's mailbox, not just read.
+      // prompt:"consent" forces Microsoft's permission screen so the NEW calendar
+      // scope is actually granted on re-connect (select_account would skip it and
+      // silently keep the old read-only token).
+      scopes: "offline_access openid email profile User.Read Mail.Read Mail.Send Calendars.ReadWrite",
+      extraAuthParams: { prompt: "consent", response_mode: "query" },
     };
   }
   return {
