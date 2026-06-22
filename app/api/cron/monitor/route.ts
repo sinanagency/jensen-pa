@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { admin, kvGet, kvSet } from "@/lib/db";
-import { sendTextAndLog } from "@/lib/sendTextAndLog";
-import { whoIs, devPhone } from "@/lib/whatsapp";
+import { whoIs, devPhone, sendWhatsAppRaw } from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -128,7 +127,13 @@ export async function GET(req: NextRequest) {
     const last = await kvGet<{ ts: number }>("monitor_last_alert", { ts: 0 }).catch(() => ({ ts: 0 }));
     if (dev && Date.now() - (last?.ts || 0) >= ALERT_COOLDOWN_MS) {
       const msg = `[fleet monitor] ${new Date().toISOString()}\nDOWN: ${downBots.map((r) => `${r.bot} (${r.error || `http ${r.http}`})`).join(", ")}`;
-      await sendTextAndLog(dev, msg, { party: "taona" }).catch(() => {});
+      // Send via the PRIMITIVE, NOT sendTextAndLog: the wrapper runs an UNCONDITIONAL
+      // brand-wall sanitize (sendTextAndLog.ts:34) that scrubs a "DOWN: sasa" body to
+      // the reaskPhrase BEFORE the recipient is known — so Taona would get "Tell me
+      // more so I can handle it." instead of the outage. sendWhatsAppRaw skips the wall
+      // for a developer recipient (whatsapp.ts toDev), delivering the real bot names
+      // intact — the same proven path KT #338 uses for the [Dorje wall] dev diagnostic.
+      await sendWhatsAppRaw(dev, msg).catch(() => {});
       await kvSet("monitor_last_alert", { ts: Date.now() }).catch(() => {});
     }
   }

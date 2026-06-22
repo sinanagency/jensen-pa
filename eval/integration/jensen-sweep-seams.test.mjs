@@ -765,14 +765,22 @@ check("seam.64 CHARACTERIZATION: monitor still logs a health_checks row per bot 
   return null;
 });
 
-check("seam.65 monitor pages devPhone ONLY on real DOWN, kv-cooldown, never owners()/Jensen, never on quiet-night degraded (FM-19/20/27/28, BUG-001)", () => {
+check("seam.65 monitor pages devPhone ONLY on real DOWN via the wall-EXEMPT primitive (a 'DOWN: sasa' body must not be scrubbed), kv-cooldown, never owners()/Jensen (FM-19/27/28, BUG-001)", () => {
   const src = read("app/api/cron/monitor/route.ts");
   if (!/devPhone\(\)/.test(src)) return "alert does not route to devPhone()";
-  if (/for \(const owner of (to|owners)\b/.test(src)) return "alert still loops owners() as recipients (leaks to Jensen)";
-  if (/sendTextAndLog\(\s*owner\b/.test(src)) return "alert still sends to an owner recipient";
+  if (/for \(const owner of (to|owners)\b/.test(src)) return "alert still loops owners() (leaks to Jensen)";
+  // sendTextAndLog runs an UNCONDITIONAL line-34 sanitize that scrubs a 'DOWN: sasa'
+  // body to the reaskPhrase before the recipient is known — the alert must NOT use it.
+  if (/sendTextAndLog\(/.test(src)) return "alert still uses sendTextAndLog (its line-34 sanitize mangles 'DOWN: sasa' to the reaskPhrase)";
+  if (!/sendWhatsAppRaw\(\s*dev\b/.test(src)) return "alert not sent via sendWhatsAppRaw(dev) — the wall-exempt-for-developer primitive";
   if (!/monitor_last_alert/.test(src)) return "cooldown not keyed on kv monitor_last_alert (FM-27)";
   if (!/status === "down"/.test(src)) return "paging not gated on status==='down' (still pages quiet-night degraded)";
   if (!/http\.status >= 500/.test(src)) return "down-detection does not treat 5xx as down (FM-28)";
+  // WHY the bypass primitive is load-bearing: the alert body carries the real bot name
+  // "sasa", which IS a forbidden brand — via the wrapper it would be dropped to the reaskPhrase.
+  const guards = read("lib/bot/guards-config.ts");
+  if (!/['"]Sasa['"]/.test(guards)) return "'Sasa' is no longer a forbiddenBrand (the bypass-required assumption changed)";
+  if (!/name:\s*"sasa"/.test(src)) return "monitor BOTS no longer includes a bot named 'sasa' (the forbidden-brand-in-alert-body case)";
   return null;
 });
 
