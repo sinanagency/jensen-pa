@@ -92,6 +92,10 @@ export async function dispatchMeetingBot(opts: {
         callbackKey: ingestKey || undefined,
         displayName: opts.displayName || "Digital Jensen",
         phone: opts.phone || undefined,
+        // KT #362: opt in to lifecycle pings. The engine calls back {event:"joined"}
+        // when admitted and {event:"waiting"} if stuck in the waiting room. The
+        // /api/ingest handler handles both; flag and handler ship together.
+        lifecycle: true,
       }),
     });
     const body = await r.json().catch(() => ({}));

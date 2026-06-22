@@ -377,13 +377,19 @@ export async function POST(req: NextRequest) {
             phone: from,
           }).catch((e: any) => ({ ok: false, error: e?.message || String(e) }));
 
+          // KT #362: a dispatch 200 means the join was QUEUED, not that the bot is
+          // in the room (the engine joins after responding). So the immediate ack
+          // claims only the dispatch, asks Jensen to admit the bot from the waiting
+          // room (the usual no-join cause), and promises word either way. The
+          // lifecycle pings then deliver "I am in now" / "admit me" at the real
+          // moments. The scheduled ack is a future intent and stays as is.
           const ack = !d.ok
             ? `I could not reach my note-taker just now to set up the join. Send me the link again in a moment and I will retry.`
             : future
             ? `Saved. I will join *${title}* at ${match.time} on ${match.date} to take notes, and you will get the link in your reminder so you can hop in too.`
             : match
-            ? `I am joining *${title}* now to take notes. I will send you the summary and the action items when it wraps.`
-            : `I am joining the meeting now to take notes. I will send you the summary and the action items when it wraps.`;
+            ? `I am sending Digital Jensen into *${title}* now. If the meeting has a waiting room, please admit Digital Jensen so it can get in. Once it is in I will send you the summary and the action items when it wraps, and if it cannot get in I will tell you here.`
+            : `I am sending Digital Jensen into the meeting now. If the meeting has a waiting room, please admit Digital Jensen so it can get in. Once it is in I will send you the summary and the action items when it wraps, and if it cannot get in I will tell you here.`;
           await sendTextAndLog(from, ack, { party: inboundParty, dev: sender.role === "developer" ? true : undefined });
           return NextResponse.json({ ok: true });
         }

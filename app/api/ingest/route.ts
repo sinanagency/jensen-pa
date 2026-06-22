@@ -179,6 +179,30 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Lifecycle pings (KT #362, opt-in via dispatch lifecycle:true). These land
+    // BEFORE the terminal callback and carry no transcript and no error, so they
+    // must be handled before the error/empty branches (otherwise a join ping would
+    // wrongly trip the empty-capture path). Fired at most once each by the engine.
+    // Not a terminal outcome, so we never write events.outcome here, and the real
+    // notes callback still flows through.
+    // Gate on event PRESENCE (not a two-string whitelist): handle the known ones,
+    // and for ANY other event value acknowledge + return WITHOUT falling through
+    // to the error/empty relay. A future/unknown lifecycle event must never be
+    // mistaken for a failed capture and write a terminal outcome that then blocks
+    // the real transcript callback via the max-1-retry guard. KT #362, hardened.
+    if (body?.event) {
+      if (body.event === "joined" || body.event === "waiting") {
+        const to = dispatchPhone || ownerJensenNumber();
+        const msg = stripDashes(
+          body.event === "joined"
+            ? `I am in ${title} now. I will send you the summary and the action items here when it wraps.`
+            : `I am at the door for ${title}, waiting to be let in from the meeting waiting room. Please admit Digital Jensen so I can join and take the notes.`,
+        );
+        if (to) await sendTextAndLog(to, msg, { party: "jensen" });
+      }
+      return NextResponse.json({ ok: true, mode: `lifecycle-${body.event}` });
+    }
+
     // Failure path: meeting-bot couldn't capture (waiting room, password, etc).
     // WhatsApp Jensen the reason, write nothing to tasks.
     if (body?.error) {
@@ -192,7 +216,17 @@ export async function POST(req: NextRequest) {
     }
 
     const transcript = String(body?.transcript || "").trim();
-    if (!transcript) return NextResponse.json({ ok: false, error: "transcript required" }, { status: 400 });
+    if (!transcript) {
+      // KT #361/#362: a truly-empty capture must NOT be a silent 400 that leaves
+      // Jensen with no word. Mirror the empty-outcome path: the bot connected but
+      // came away with nothing (most often left in the waiting room). Tell Jensen
+      // once and mark the outcome so the retry guard stops re-probing.
+      const to = dispatchPhone || ownerJensenNumber();
+      const durationSec = typeof body?.durationSec === "number" ? body.durationSec : undefined;
+      if (to) await sendTextAndLog(to, buildEmptyOutcomeMessage(title, durationSec), { party: "jensen" });
+      await setEventOutcome(id, "empty");
+      return NextResponse.json({ ok: true, mode: "empty-capture-relayed", meetingId: id });
+    }
 
     // KT #234: classify the meeting OUTCOME before calling the extractor.
     // An empty audio capture (Zomato 2026-06-12 incident) used to fall
