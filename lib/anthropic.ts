@@ -110,23 +110,31 @@ export async function readImage(base64: string, mediaType: string): Promise<stri
 // Claude is the vetted endpoint (Law 3 PII) so a passport scan is safe to read
 // here. Returns "" on failure so the caller can still file the doc. KT #348.
 export async function readPdf(base64: string): Promise<string> {
+  // DIRECT fetch, NOT runClaude: runClaude (brain-core) silently drops the
+  // `document` content block (it carries image blocks fine, but a PDF document
+  // block comes back empty — proven). The raw /v1/messages call with the document
+  // block works on claude-sonnet-4-6 with the standard version header (no beta).
   try {
-    const data = await runClaude({
-      model: SONNET,
-      anthropicKey: key(),
-      system: "",
-      messages: [{
-        role: "user",
-        content: [
-          { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-          { type: "text", text: "Transcribe everything readable in this document into clean text: all fields, names, numbers, dates, and any tables. If it is an ID/passport, capture the holder name, document number, dates and key fields. Output only the transcribed content, no commentary." },
-        ],
-      }],
-      tools: [],
-      maxTokens: 2000,
+    const res = await fetch(API, {
+      method: "POST",
+      headers: { "x-api-key": key(), "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model: SONNET,
+        max_tokens: 2000,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+            { type: "text", text: "Transcribe everything readable in this document into clean text: all fields, names, numbers, dates, and any tables. If it is an ID/passport, capture the holder name, document number, dates and key fields. Output only the transcribed content, no commentary." },
+          ],
+        }],
+      }),
     });
+    if (!res.ok) { console.log(`[readPdf] ${res.status}: ${(await res.text()).slice(0, 200)}`); return ""; }
+    const data: any = await res.json();
     return (data?.content?.[0]?.text || "").trim();
-  } catch {
+  } catch (e: any) {
+    console.log(`[readPdf] threw: ${e?.message || e}`);
     return "";
   }
 }
