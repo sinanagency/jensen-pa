@@ -56,7 +56,11 @@ async function handle(req: NextRequest) {
   const today = dubaiToday();
   const nowMin = dubaiNowMinutes();
 
-  const rows = await sbSelect<any>("events", `date=eq.${enc(today)}&reminded_at=is.null&order=time.asc`).catch(() => []);
+  // outcome=is.null excludes events Jensen already concluded (complete_event stamps
+  // outcome='happened'/'empty'/etc.) — without it the cron fires a reminder for a
+  // meeting he already marked done, since completeEvent leaves reminded_at null
+  // (FM-23 / the Memorae FM-09 bug reborn now that the reminder engine is live).
+  const rows = await sbSelect<any>("events", `date=eq.${enc(today)}&reminded_at=is.null&outcome=is.null&order=time.asc`).catch(() => []);
 
   const due = rows.filter((ev: any) => {
     if (!ev?.time) return false;

@@ -784,6 +784,23 @@ check("seam.65 monitor pages devPhone ONLY on real DOWN via the wall-EXEMPT prim
   return null;
 });
 
+check("seam.66 CHARACTERIZATION: reminder cron still fires due events at T-5 + latches reminded_at BEFORE send (must not regress)", () => {
+  const src = read("app/api/cron/reminders/route.ts");
+  if (!/reminded_at=is\.null/.test(src)) return "cron no longer selects on reminded_at=is.null";
+  if (!/delta >= LEAD_MIN - WINDOW && delta <= LEAD_MIN \+ WINDOW/.test(src)) return "cron no longer uses the [4,6]-min lead window";
+  if (!/\/\^Reminder:\/i\.test\(ev\.title\)/.test(src)) return "cron no longer skips legacy 'Reminder:' rows";
+  const latchIdx = src.indexOf("reminded_at: Date.now()");
+  const sendIdx = src.indexOf("sendTextAndLog(num, body");
+  if (latchIdx < 0 || sendIdx < 0 || latchIdx > sendIdx) return "cron no longer latches reminded_at BEFORE send (at-most-once broken)";
+  return null;
+});
+
+check("seam.67 reminder cron does NOT fire for completed events (outcome filter) — FM-23 / FM-09 reborn", () => {
+  const src = read("app/api/cron/reminders/route.ts");
+  if (!/outcome=is\.null/.test(src)) return "cron select missing outcome=is.null — fires reminders for events Jensen already marked done";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
