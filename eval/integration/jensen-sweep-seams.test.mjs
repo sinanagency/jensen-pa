@@ -882,6 +882,14 @@ check("seam.73 sanad ingest delivers a contract PDF ONLY to Jensen — recipient
   return null;
 });
 
+check("seam.74 sanad_draft_contract is confirm-gated (in DESTRUCTIVE) — a contract PDF cannot be enqueued + delivered without a confirm (ADR-0002 Phase 0 / Class C1)", () => {
+  const src = read("lib/concierge/dispatch.ts");
+  const start = src.indexOf("const DESTRUCTIVE");
+  const set = src.slice(start, src.indexOf("]);", start));
+  if (!/"sanad_draft_contract"/.test(set)) return "sanad_draft_contract is NOT in the DESTRUCTIVE set — it can ship a legal PDF ungated";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";

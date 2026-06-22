@@ -98,6 +98,12 @@ const DESTRUCTIVE = new Set([
   "call_owner",    // places a real Twilio phone call
   "send_meeting_invite", // sends a real calendar invite to an external person
   "send_email",    // composes + sends a brand-new outbound email
+  // ADR-0002 Phase 0: a contract draft enqueues a real legal PDF delivered to a
+  // WhatsApp number (sanad_pending_drafts -> cron/sanad-deliver). It must surface
+  // a confirm to Jensen first, same as send_email — it was UNGATED (Class C1).
+  // The structural self-confirm fix (pending_actions, distinct-inbound) is
+  // ADR-0002 Phase 1; C1 stays OPEN until then.
+  "sanad_draft_contract",
 ]);
 
 function destructiveGate(name: string, input: any): { ok: boolean; error?: string } | null {
