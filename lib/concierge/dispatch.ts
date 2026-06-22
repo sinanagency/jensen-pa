@@ -10,6 +10,7 @@ import { ordersContext } from "../shopify";
 import { callOwner } from "../voice-call";
 import { aggregateInbox, readUnified, sendUnified, unpackId, sendMeetingInviteEmail, sendNewEmail } from "../mail-provider";
 import { dubaiLocalToUtc } from "../ics";
+import { searchDocsWithClaude } from "../docs-server";
 import { enrichDraftContext } from "../mail-draft-context";
 import { kvGet } from "../db";
 import { sbSelect, enc } from "./rest";
@@ -277,7 +278,7 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
       case "vat_report": result = await vatReport(input); break;
       case "ct_estimate": result = await ctEstimate(input); break;
       // documents
-      case "search_documents": { const r = await recall(input.query, { docK: 8, factK: 0 }); result = r.docs; break; }
+      case "search_documents": { result = await searchDocsWithClaude(input.query, 8); break; }
       case "list_documents": result = await ops.listDocs(input); break;
       case "file_document": result = await ops.fileDocument(input); break;
       case "delete_document": result = await ops.deleteDoc(input.id); break;

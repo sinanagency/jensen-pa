@@ -854,6 +854,16 @@ check("seam.70 doc intake degrades when embeddings are down — files the doc ke
   return null;
 });
 
+check("seam.71 doc search is Claude-powered (no OpenAI embeddings) — reads the index + content, picks matches (KT #348)", () => {
+  const ds = read("lib/docs-server.ts");
+  if (!/export async function searchDocsWithClaude/.test(ds)) return "searchDocsWithClaude missing";
+  if (!/askClaude\(/.test(ds.slice(ds.indexOf("searchDocsWithClaude")))) return "searchDocsWithClaude does not use Claude";
+  const disp = read("lib/concierge/dispatch.ts");
+  if (!/case "search_documents": \{ result = await searchDocsWithClaude/.test(disp)) return "search_documents not wired to the Claude search";
+  if (/case "search_documents":[^}]*\brecall\(/.test(disp)) return "search_documents still calls recall() (the dead OpenAI embed-query path)";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
