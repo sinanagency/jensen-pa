@@ -873,6 +873,15 @@ check("seam.72 recall() keyword-searches the docs TABLE (title or content) so co
   return null;
 });
 
+check("seam.73 sanad ingest delivers a contract PDF ONLY to Jensen — recipient is the resolved owner number, an arbitrary send_to_wa is refused (Law 9 single-tenant / Law 3 PII)", () => {
+  const src = read("app/api/ingest/sanad/route.ts");
+  if (!/function jensenWa\(/.test(src)) return "no jensenWa() owner resolver";
+  if (/sendWhatsAppDocument\(\s*body\.send_to_wa/.test(src)) return "still delivers to the raw request number (not locked to Jensen)";
+  if (!/sendWhatsAppDocument\(\s*jensen,/.test(src)) return "does not deliver to the resolved Jensen number";
+  if (!/recipient_not_jensen/.test(src)) return "no refusal path when the caller asks for a non-Jensen recipient";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
