@@ -6,6 +6,7 @@
 import { freshToken, listAccounts, imapCreds, accountProvider } from "./mail-accounts";
 import { zohoApiHost, Provider } from "./oauth";
 import { listInbox as imapList, readMessage as imapRead, sendMail as imapSend, imapPackLocal, imapUnpackLocal } from "./mail-ops";
+import { buildInviteIcs } from "./ics";
 
 export type UMailSummary = {
   id: string; accountId: string; accountEmail: string; provider: Provider | "imap";
@@ -72,6 +73,48 @@ async function msSend(token: string, to: string, subject: string, text: string):
     body: JSON.stringify({ message: { subject, body: { contentType: "Text", content: text }, toRecipients: [{ emailAddress: { address: to } }] }, saveToSentItems: true }),
   });
   if (!res.ok) throw new Error(`Graph send ${res.status}: ${(await res.text()).slice(0, 240)}`);
+}
+
+// Send a real meeting INVITE (accept/decline) from Jensen's OWN mailbox as an
+// iCalendar REQUEST over SMTP. Works on his plain-IMAP larencontre.ae account —
+// no Microsoft Graph, no calendar API, no extra OAuth. The recipient's mail app
+// (Outlook/Gmail/Apple) renders Accept/Decline; Jensen's own calendar picks it up
+// as the organizer. Throws an honest error if no mailbox is connected.
+// Compose + send a BRAND-NEW outbound email from Jensen's own mailbox to any
+// address. reply_email only replies to an existing inbox message (needs an id);
+// this is the missing "send a new email to someone" capability the bot wrongly
+// told Jensen it lacked.
+export async function sendNewEmail(opts: { toEmail: string; subject: string; body: string }): Promise<{ from: string }> {
+  const accounts = await listAccounts();
+  const imap = accounts.filter((a) => a.provider === "imap");
+  const jensen = imap.find((a) => /jensen/i.test(a.email)) || imap[0];
+  if (!jensen) throw new Error("No mailbox is connected to send from.");
+  await sendUnified(jensen.id, opts.toEmail, opts.subject, opts.body);
+  return { from: jensen.email };
+}
+
+export async function sendMeetingInviteEmail(opts: {
+  toEmail: string; toName?: string; subject: string; whenLabel: string;
+  start: Date; end: Date; location?: string; description?: string;
+}): Promise<{ from: string; uid: string }> {
+  const accounts = await listAccounts();
+  // Jensen's personal mailbox: prefer the imap account with "jensen" in it, else
+  // the first imap account (never the "info@" catch-all if a personal one exists).
+  const imap = accounts.filter((a) => a.provider === "imap");
+  const jensen = imap.find((a) => /jensen/i.test(a.email)) || imap[0];
+  if (!jensen) throw new Error("No mailbox is connected to send the invite from.");
+  const creds = await imapCreds(jensen.id);
+  const uid = `lr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}@larencontre.ae`;
+  const ics = buildInviteIcs({
+    uid, organizerEmail: jensen.email, organizerName: "Jensen Moonien",
+    attendeeEmail: opts.toEmail, attendeeName: opts.toName,
+    summary: opts.subject, location: opts.location, description: opts.description,
+    start: opts.start, end: opts.end, method: "REQUEST",
+  });
+  const text = `You are invited to: ${opts.subject}\nWhen: ${opts.whenLabel}\n${opts.location ? `Where: ${opts.location}\n` : ""}${opts.description ? `\n${opts.description}\n` : ""}\nPlease accept or decline using the invite attached to this email.`;
+  const r = await imapSend(creds, { to: opts.toEmail, subject: opts.subject, text, icalEvent: { method: "REQUEST", content: ics } });
+  if (!r.ok) throw new Error(r.error || "Could not send the invite.");
+  return { from: jensen.email, uid };
 }
 
 // ---------- Zoho Mail ----------

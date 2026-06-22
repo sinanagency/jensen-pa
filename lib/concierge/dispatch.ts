@@ -8,7 +8,8 @@ import { askClaude, NO_DASHES, SONNET } from "../anthropic";
 import { dubaiToday, dubaiNow } from "../time";
 import { ordersContext } from "../shopify";
 import { callOwner } from "../voice-call";
-import { aggregateInbox, readUnified, sendUnified, unpackId } from "../mail-provider";
+import { aggregateInbox, readUnified, sendUnified, unpackId, sendMeetingInviteEmail, sendNewEmail } from "../mail-provider";
+import { dubaiLocalToUtc } from "../ics";
 import { enrichDraftContext } from "../mail-draft-context";
 import { kvGet } from "../db";
 import { sbSelect, enc } from "./rest";
@@ -94,6 +95,8 @@ const DESTRUCTIVE = new Set([
   "forget_memory",
   "reply_email",   // sends real outbound mail
   "call_owner",    // places a real Twilio phone call
+  "send_meeting_invite", // sends a real calendar invite to an external person
+  "send_email",    // composes + sends a brand-new outbound email
 ]);
 
 function destructiveGate(name: string, input: any): { ok: boolean; error?: string } | null {
@@ -213,6 +216,41 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
       case "query_calendar": result = await ops.queryCalendar(input); break;
       case "day_log": result = await ops.dayLog(input.date); break;
       case "create_event": result = await ops.createEvent(input); break;
+      case "send_email": {
+        try {
+          const r = await sendNewEmail({ toEmail: String(input.to), subject: String(input.subject || ""), body: String(input.body || "") });
+          result = { sent: true, to: input.to, subject: input.subject, from_mailbox: r.from };
+        } catch (e: any) {
+          result = { ok: false, error: `Could not send the email: ${String(e?.message || e).slice(0, 200)}` };
+        }
+        break;
+      }
+      case "send_meeting_invite": {
+        const start = dubaiLocalToUtc(String(input.date || ""), String(input.time || ""));
+        if (!start) { result = { ok: false, error: "Need a valid date (YYYY-MM-DD) and time (HH:MM, Dubai)." }; break; }
+        const dur = Number(input.durationMin) > 0 ? Number(input.durationMin) : 60;
+        const end = new Date(start.getTime() + dur * 60000);
+        const hh = String(input.time).match(/^(\d{1,2}):(\d{2})/);
+        const timeLabel = hh ? `${hh[1].padStart(2, "0")}:${hh[2]}` : String(input.time);
+        const whenLabel = `${input.date}, ${timeLabel} (Dubai)`;
+        try {
+          const inv = await sendMeetingInviteEmail({
+            toEmail: String(input.attendeeEmail), toName: input.attendeeName || undefined,
+            subject: String(input.title), whenLabel, start, end,
+            location: input.location || undefined, description: input.note || undefined,
+          });
+          // Mirror onto Jensen's board so it shows on his list + a reminder fires.
+          const mirror = await ops.createEvent({
+            title: String(input.title), date: String(input.date), time: timeLabel,
+            note: [input.location, `invite sent to ${input.attendeeEmail}`].filter(Boolean).join(" · "),
+          }).catch(() => null);
+          result = { sent: true, invited: input.attendeeEmail, when: whenLabel, location: input.location || null, from_mailbox: inv.from, on_board: !!mirror };
+        } catch (e: any) {
+          // Never fake success — surface the real reason.
+          result = { ok: false, error: `Could not send the invite: ${String(e?.message || e).slice(0, 200)}` };
+        }
+        break;
+      }
       case "update_event": result = await ops.updateEvent(input); break;
       case "delete_event": result = await ops.deleteEvent(input.id); break;
       case "complete_event": {

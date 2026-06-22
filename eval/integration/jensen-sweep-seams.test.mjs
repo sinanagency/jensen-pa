@@ -204,7 +204,7 @@ check("seam.35 meeting link: saved onto event; future scheduled, ad-hoc/now join
   if (!/meeting_url: meetingLink/.test(src)) return "meeting link not saved onto the event";
   if (!/scheduledAt: future \?/.test(src)) return "future calendar match is not scheduled at meeting time";
   if (!/const d = await dispatchMeetingBot/.test(src)) return "dispatch is not awaited (serverless can SIGTERM a fire-and-forget dispatch before it lands)";
-  if (!/now to take notes/.test(src)) return "no immediate-join path for ad-hoc / now meetings";
+  if (!/sending Digital Jensen into/i.test(src)) return "no immediate-join path for ad-hoc / now meetings";
   if (!/could not reach my note-taker/.test(src)) return "ack does not honestly report a dispatch failure";
   if (!/reminder so you can/.test(src)) return "future-scheduled ack does not promise the link in the reminder";
   return null;
@@ -808,6 +808,34 @@ check("seam.68 isOwner FAILS CLOSED when OWNER_WHATSAPP is empty (deny all, neve
   if (/if \(!raw\) return true/.test(body)) return "isOwner still ALLOWS ALL on empty OWNER_WHATSAPP (any number drives Jensen's concierge — Law 9 breach)";
   if (!/if \(!raw\) return false/.test(body)) return "isOwner does not fail-closed (deny all) on empty OWNER_WHATSAPP";
   if (!/includes\(fromDigits\)/.test(body)) return "isOwner membership check regressed (the configured-owners gate broke)";
+  return null;
+});
+
+check("seam.69 send_meeting_invite: real .ics REQUEST over the mailbox's own SMTP, confirm-gated, board-mirrored (Outlook invite without MS Graph)", () => {
+  const tools = read("lib/concierge/tools.ts");
+  if (!/name:\s*"send_meeting_invite"/.test(tools)) return "send_meeting_invite tool missing";
+  const td = tools.slice(tools.indexOf("send_meeting_invite"), tools.indexOf("send_meeting_invite") + 1400);
+  if (!/confirm:\s*bool/.test(td)) return "send_meeting_invite has no confirm arg (Law 8)";
+  const disp = read("lib/concierge/dispatch.ts");
+  const dset = disp.slice(disp.indexOf("DESTRUCTIVE"), disp.indexOf("DESTRUCTIVE") + 500);
+  if (!/"send_meeting_invite"/.test(dset)) return "send_meeting_invite not in the DESTRUCTIVE confirm set";
+  if (!/case "send_meeting_invite"/.test(disp)) return "no dispatch case for send_meeting_invite";
+  if (!/sendMeetingInviteEmail\(/.test(disp)) return "dispatch does not call sendMeetingInviteEmail";
+  const mp = read("lib/mail-provider.ts");
+  if (!/export async function sendMeetingInviteEmail/.test(mp)) return "sendMeetingInviteEmail missing";
+  if (!/icalEvent:\s*\{\s*method:\s*"REQUEST"/.test(mp)) return "invite not sent as an iCal REQUEST (recipient gets no accept/decline)";
+  const ics = read("lib/ics.ts");
+  if (!/METHOD:\$\{opts\.method/.test(ics)) return "ics builder does not emit METHOD";
+  if (!/ORGANIZER/.test(ics) || !/ATTENDEE/.test(ics)) return "ics builder missing ORGANIZER/ATTENDEE";
+  // send_email: the missing "compose + send a brand-NEW email" capability (Jensen hit this live)
+  if (!/name:\s*"send_email"/.test(tools)) return "send_email tool missing (bot can't compose a new outbound email)";
+  if (!/case "send_email"/.test(disp)) return "no dispatch case for send_email";
+  if (!/sendNewEmail\(/.test(disp)) return "dispatch does not call sendNewEmail";
+  if (!/export async function sendNewEmail/.test(mp)) return "sendNewEmail missing in mail-provider";
+  // teach-the-bot: the prompt must say it CAN send invites AND new emails (no more 'not wired in')
+  const loop = read("lib/concierge/loop.ts");
+  if (!/MEETING INVITE/.test(loop)) return "system prompt does not tell the bot it can send a real meeting invite";
+  if (!/compose and SEND a brand-new email/i.test(loop)) return "system prompt does not tell the bot it can send a brand-new email (it will keep refusing)";
   return null;
 });
 

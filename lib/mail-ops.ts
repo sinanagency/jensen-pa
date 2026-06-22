@@ -178,6 +178,9 @@ export type OutAttachment = { filename: string; content: string; contentType?: s
 
 export async function sendMail(c: MailCreds, opts: {
   to: string; subject: string; text: string; inReplyTo?: string; attachments?: OutAttachment[];
+  // A calendar meeting REQUEST. nodemailer wires it as the correct text/calendar
+  // part so the recipient (Outlook/Gmail/Apple) shows Accept/Decline.
+  icalEvent?: { method: string; content: string };
 }): Promise<{ ok: boolean; error?: string }> {
   try {
     const transport = nodemailer.createTransport({
@@ -187,6 +190,7 @@ export async function sendMail(c: MailCreds, opts: {
     await transport.sendMail({
       from: c.email, to: opts.to, subject: opts.subject, text: opts.text,
       inReplyTo: opts.inReplyTo, references: opts.inReplyTo,
+      ...(opts.icalEvent ? { icalEvent: { method: opts.icalEvent.method, content: opts.icalEvent.content } } : {}),
       attachments: (opts.attachments || []).map((a) => ({ filename: a.filename, content: Buffer.from(a.content, "base64"), contentType: a.contentType })),
     });
     return { ok: true };
