@@ -271,11 +271,13 @@ export function ownerNumber(): string | null {
 }
 
 // Multi-owner gate: OWNER_WHATSAPP may be a comma-separated list (e.g. Jensen +
-// Taona). A sender is allowed if their digits match any entry. If unset, allow
-// all (no gate). Returns true when the sender may drive the concierge.
+// Taona). A sender is allowed if their digits match any entry. If unset, DENY
+// all (fail closed) — never allow-all: an empty/blanked env (deploy slip, rotation)
+// must NOT open Jensen's single-tenant concierge to every number (FM-18, Law 9).
+// Returns true only when the sender matches a configured owner.
 export function isOwner(from: string): boolean {
   const raw = process.env.OWNER_WHATSAPP;
-  if (!raw) return true;
+  if (!raw) return false;
   const fromDigits = (from || "").replace(/[^0-9]/g, "");
   return raw.split(",").map((n) => n.replace(/[^0-9]/g, "")).filter(Boolean).includes(fromDigits);
 }

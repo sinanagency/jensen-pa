@@ -801,6 +801,16 @@ check("seam.67 reminder cron does NOT fire for completed events (outcome filter)
   return null;
 });
 
+check("seam.68 isOwner FAILS CLOSED when OWNER_WHATSAPP is empty (deny all, never allow-all) — FM-18 single-tenant breach", () => {
+  const src = read("lib/whatsapp.ts");
+  const i = src.indexOf("export function isOwner");
+  const body = src.slice(i, i + 400);
+  if (/if \(!raw\) return true/.test(body)) return "isOwner still ALLOWS ALL on empty OWNER_WHATSAPP (any number drives Jensen's concierge — Law 9 breach)";
+  if (!/if \(!raw\) return false/.test(body)) return "isOwner does not fail-closed (deny all) on empty OWNER_WHATSAPP";
+  if (!/includes\(fromDigits\)/.test(body)) return "isOwner membership check regressed (the configured-owners gate broke)";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
