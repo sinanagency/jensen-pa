@@ -839,6 +839,21 @@ check("seam.69 send_meeting_invite: real .ics REQUEST over the mailbox's own SMT
   return null;
 });
 
+check("seam.70 doc intake degrades when embeddings are down — files the doc keyword-only, never fails the upload (web + whatsapp) (BUG-003 / KT #348)", () => {
+  const ing = read("app/api/ingest-file/route.ts");
+  if (!/embedDegraded = true/.test(ing)) return "ingest-file (web) does not catch embed failure — a 401 aborts the whole upload (the live 'could not file' bug)";
+  if (!/title, text, chunks, kind, embedDegraded/.test(ing)) return "ingest-file does not still return the doc after a degraded embed";
+  const wa = read("app/api/whatsapp/route.ts");
+  if (!/keyword only/.test(wa)) return "whatsapp doc intake does not degrade to keyword-only on embed failure";
+  // scanned / image-only PDF (e.g. passport scan): OCR fallback via Claude document block
+  const an = read("lib/anthropic.ts");
+  if (!/export async function readPdf/.test(an)) return "readPdf (scanned-PDF OCR) missing";
+  if (!/type: "document"/.test(an)) return "readPdf does not use Claude's document block for PDF OCR";
+  if (!/readPdf\(/.test(ing)) return "ingest-file (web) has no scanned-PDF OCR fallback";
+  if (!/readPdf\(dl\.base64\)/.test(wa)) return "whatsapp has no scanned-PDF OCR fallback";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";

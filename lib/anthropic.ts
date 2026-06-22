@@ -105,6 +105,32 @@ export async function readImage(base64: string, mediaType: string): Promise<stri
   }
 }
 
+// OCR a PDF via Claude's native document block — for SCANNED / image-only PDFs
+// (e.g. a passport scan) where the text-layer extractor (unpdf) gets nothing.
+// Claude is the vetted endpoint (Law 3 PII) so a passport scan is safe to read
+// here. Returns "" on failure so the caller can still file the doc. KT #348.
+export async function readPdf(base64: string): Promise<string> {
+  try {
+    const data = await runClaude({
+      model: SONNET,
+      anthropicKey: key(),
+      system: "",
+      messages: [{
+        role: "user",
+        content: [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+          { type: "text", text: "Transcribe everything readable in this document into clean text: all fields, names, numbers, dates, and any tables. If it is an ID/passport, capture the holder name, document number, dates and key fields. Output only the transcribed content, no commentary." },
+        ],
+      }],
+      tools: [],
+      maxTokens: 2000,
+    });
+    return (data?.content?.[0]?.text || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 // JSON helper for tool-like extraction.
 export async function claudeJSON<T = any>(system: string, user: string, maxTokens = 1500): Promise<T | null> {
   const text = await askClaude({

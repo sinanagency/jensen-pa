@@ -6,7 +6,7 @@ import { runConcierge } from "@/lib/concierge/loop";
 import { kvGet, kvSet, admin } from "@/lib/db";
 import * as ops from "@/lib/concierge/ops";
 import { classifyAndFile } from "@/lib/concierge/intake";
-import { readImage } from "@/lib/anthropic";
+import { readImage, readPdf } from "@/lib/anthropic";
 import { extractTextFromBuffer } from "@/lib/extract-text";
 import { embed, chunk } from "@/lib/openai";
 import { transcribeAudio } from "@/lib/transcribe";
@@ -254,6 +254,9 @@ export async function POST(req: NextRequest) {
       let text = "";
       if (dl.mime.startsWith("image/")) text = await readImage(dl.base64, dl.mime);
       else text = (await extractTextFromBuffer(dl.buf, dl.mime, media.filename || "document")) || "";
+      // Scanned / image-only PDF (no text layer, e.g. a passport scan): OCR via
+      // Claude's document block so it is still read + filed (KT #348).
+      if (!text.trim() && (dl.mime === "application/pdf" || /\.pdf$/i.test(media.filename || ""))) text = await readPdf(dl.base64);
       if (!text.trim()) { await sendWhatsApp(from, "I saved your file but couldn't read text from it. If it's a photo, a clearer shot helps."); return NextResponse.json({ ok: true }); }
 
       const id = uid();
