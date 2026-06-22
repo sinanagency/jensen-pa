@@ -864,6 +864,15 @@ check("seam.71 doc search is Claude-powered (no OpenAI embeddings) — reads the
   return null;
 });
 
+check("seam.72 recall() keyword-searches the docs TABLE (title or content) so content-only docs (no chunks, embed down) still ground the brain — FM-42 / KT #349", () => {
+  const br = read("lib/concierge/brain.ts");
+  const rc = br.slice(br.indexOf("export async function recall"));
+  if (!/sbSelect<any>\("docs",\s*`or=\(title\.ilike/.test(rc)) return "recall does not keyword-search the docs table by title";
+  if (!/content\.ilike/.test(rc)) return "recall docs-table fallback does not search content";
+  if (!/rrf<any>\(\[docVecNorm, docKw, docTbl\]/.test(rc)) return "docTbl not fused into the doc ranking";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";

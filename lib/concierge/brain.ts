@@ -113,7 +113,16 @@ export async function recall(query: string, opts?: { factK?: number; docK?: numb
   }
   const docKw = docKwRows.map((r) => ({ title: titles[r.doc_id] || "document", content: r.text }));
   const docVecNorm = docVec.map((r) => ({ title: r.title, content: r.content }));
-  const docs = docK ? rrf<any>([docVecNorm, docKw], (r) => (r.content || "").slice(0, 80)).slice(0, docK).map((r) => ({ title: r.title, text: r.content })) : [];
+  // DOCS-TABLE FALLBACK (embed-down / no-chunks resilience, KT #349). Degraded
+  // intake files docs.content with NO doc_chunks rows (KT #348), and the vector
+  // path is dead whenever the OpenAI embed key is. Without this, recall is blind
+  // to every recently-uploaded doc and the brain cannot ground "find my X" on it.
+  // Keyword-search the docs table directly (title OR content) so content-only
+  // docs still surface. Purely additive: fused as a third source; the existing
+  // chunk-based ranking is unchanged.
+  const docTblRows: any[] = docK ? await sbSelect<any>("docs", `or=(title.ilike.*${enc(q)}*,content.ilike.*${enc(q)}*)&limit=10&select=title,content`).catch(() => []) : [];
+  const docTbl = docTblRows.map((r) => ({ title: r.title || "document", content: (r.content || "").slice(0, 600) }));
+  const docs = docK ? rrf<any>([docVecNorm, docKw, docTbl], (r) => (r.content || "").slice(0, 80)).slice(0, docK).map((r) => ({ title: r.title, text: r.content })) : [];
 
   return { facts, docs };
 }
