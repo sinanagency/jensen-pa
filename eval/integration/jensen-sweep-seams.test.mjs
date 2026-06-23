@@ -934,6 +934,14 @@ check("seam.80 send_filed_document does NOT silently send the newest on a multi-
   return null;
 });
 
+check("seam.81 a meeting mention lands on the CALENDAR (create_event), never gated behind an un-sendable invite — a meeting must not vanish (failure-surface iter 2, transcript: 'A2 farm at sohum')", () => {
+  const src = read("lib/concierge/loop.ts");
+  if (!/PUTTING A MEETING ON THE CALENDAR/.test(src)) return "no calendar-routing rule";
+  if (!/create_event RIGHT AWAY/.test(src)) return "rule does not force immediate create_event";
+  if (!/ONLY when he gives an attendee EMAIL/.test(src)) return "send_meeting_invite not scoped to email-present (would block the calendar add)";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
