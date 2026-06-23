@@ -898,6 +898,14 @@ check("seam.75 recall dedups doc grounding PER DOC (title key + content fallback
   return null;
 });
 
+check("seam.76 pending_actions confirm layer enforces DISTINCT-inbound (kills model self-confirm) + is fail-safe (ADR-0002 Phase 1 / Class C1)", () => {
+  const src = read("lib/concierge/pending-actions.ts");
+  if (!/confirmInboundId === row\.proposed_inbound_id/.test(src)) return "confirmAndClaim does not refuse a confirm on the SAME inbound that proposed it (self-confirm guard missing)";
+  if (!/status=eq\.pending`/.test(src)) return "confirm transition is not guarded on status=pending (concurrent double-confirm not prevented)";
+  if (!/catch \{ return null; \}/.test(src)) return "module is not fail-safe (catch -> null) for the table-absent / pre-migration case";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
