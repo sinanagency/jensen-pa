@@ -3,11 +3,13 @@ import crypto from "node:crypto";
 import { sendWhatsApp, isOwner, whoIs, mirrorInbound } from "@/lib/whatsapp";
 import { sendTextAndLog } from "@/lib/sendTextAndLog";
 import { runConcierge } from "@/lib/concierge/loop";
+import { sendFiledDocument } from "@/lib/concierge/dispatch";
 import { kvGet, kvSet, admin } from "@/lib/db";
 import * as ops from "@/lib/concierge/ops";
 import { classifyAndFile } from "@/lib/concierge/intake";
 import { readImage, readPdf } from "@/lib/anthropic";
 import { extractTextFromBuffer } from "@/lib/extract-text";
+import { uploadReceipt } from "@/lib/storage";
 import { embed, chunk } from "@/lib/openai";
 import { transcribeAudio } from "@/lib/transcribe";
 import { sbSelect, enc } from "@/lib/concierge/rest";
@@ -19,6 +21,18 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+// Deterministic "send me my <identity doc>" intent -> a canonical doc query, or
+// null. Identity docs are single-instance per person, so a deterministic send
+// carries no wrong-file risk (KT #206561). Requires a retrieve verb AND a
+// specific identity-doc noun, so it never fires on ordinary chat.
+function matchIdentityFileRequest(s: string): string | null {
+  if (!/\b(send|pull\s*up|pull|get|grab|show|share|give|fetch|forward|retrieve)\b/i.test(s)) return null;
+  if (/\bpassport\b/i.test(s)) return "passport";
+  if (/\b(emirates\s*id|national\s*id|\beid\b)\b/i.test(s)) return "emirates id";
+  if (/\bvisa\b/i.test(s)) return "visa";
+  return null;
+}
 
 // Meta webhook verification handshake.
 export async function GET(req: NextRequest) {
@@ -251,19 +265,29 @@ export async function POST(req: NextRequest) {
       }
       const dl = await downloadMedia(media.id);
       if (!dl) { await sendWhatsApp(from, "I couldn't fetch that file from WhatsApp. Try sending it again."); return NextResponse.json({ ok: true }); }
+      // VAULT THE ORIGINAL BYTES FIRST so the file itself is retrievable later
+      // ("send me my passport"). Best-effort: a storage hiccup must not lose the
+      // doc record. KT #206561.
+      let storagePath: string | null = null;
+      try { storagePath = await uploadReceipt(dl.buf, media.filename || "whatsapp-upload", dl.mime); }
+      catch (e) { console.error(`[intake] file-vault failed for ${media.filename}:`, e instanceof Error ? e.message : e); }
       let text = "";
       if (dl.mime.startsWith("image/")) text = await readImage(dl.base64, dl.mime);
       else text = (await extractTextFromBuffer(dl.buf, dl.mime, media.filename || "document")) || "";
       // Scanned / image-only PDF (no text layer, e.g. a passport scan): OCR via
       // Claude's document block so it is still read + filed (KT #348).
       if (!text.trim() && (dl.mime === "application/pdf" || /\.pdf$/i.test(media.filename || ""))) text = await readPdf(dl.base64);
-      if (!text.trim()) { await sendWhatsApp(from, "I saved your file but couldn't read text from it. If it's a photo, a clearer shot helps."); return NextResponse.json({ ok: true }); }
+      const unreadable = !text.trim();
 
       const id = uid();
       const title = (media.filename || combinedCaption || "WhatsApp upload").replace(/\.[a-z0-9]+$/i, "").slice(0, 80) || "WhatsApp upload";
       let chunks: { text: string; embedding: number[] }[] = [];
       try { const parts = chunk(text); const vecs = parts.length ? await embed(parts) : []; chunks = parts.map((t, i) => ({ text: t, embedding: vecs[i] })); } catch { /* no embedder: keyword only */ }
-      await ops.addDoc({ id, title, fileName: media.filename || "whatsapp-upload", mime: dl.mime, kind: "document", text, chunks, createdAt: Date.now() });
+      // ALWAYS file the doc — even when unreadable. The OLD code returned here
+      // ("I saved your file but couldn't read text") WITHOUT calling addDoc, so a
+      // scanned passport whose OCR failed was DROPPED and "saved" was a lie. Now
+      // the record + the vaulted bytes are always kept, so it is retrievable.
+      await ops.addDoc({ id, title, fileName: media.filename || "whatsapp-upload", mime: dl.mime, kind: "document", text, chunks, dataUrl: storagePath ?? undefined, createdAt: Date.now() });
 
       // Intake runs out-of-band from the chat brain. During onboarding it
       // READS (chunks, embeds, remembers) but does NOT WRITE (no finance
@@ -272,7 +296,13 @@ export async function POST(req: NextRequest) {
       const ownerOnboarding = sender.role === "owner" && (prefs as any)?.onboarding !== false;
       const filed = await classifyAndFile({ id, title, text }, { onboarding: ownerOnboarding });
       let msg: string;
-      if (ownerOnboarding) {
+      if (unreadable) {
+        // Honest: the text could not be read, but the FILE is vaulted (if storage
+        // succeeded) and retrievable. Never claim a clean read we did not get.
+        msg = storagePath
+          ? `I've vaulted *${title}* under *${filed.folder}*, restricted. I could not read its text, but I have the file itself and can send it back whenever you ask.`
+          : `I received *${title}* but could not read it or store it cleanly. Please send it again, ideally as a clear PDF or photo, and I'll vault it.`;
+      } else if (ownerOnboarding) {
         msg = `Got it. I've read *${title}* and it's in my memory.`;
         if (filed.summary) msg += ` ${filed.summary}`;
         if (filed.pending) {
@@ -477,6 +507,28 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       // No open tasks: fall through to the brain so Jensen gets a graceful reply.
+    }
+
+    // DETERMINISTIC FILE-SEND-BACK (KT #206561, same principle as FM-11 above:
+    // the model is unreliable at calling send_filed_document because recall-
+    // injected context short-circuits the tool). Scoped to IDENTITY docs only
+    // (passport / Emirates ID / visa) which are single-instance, so there is no
+    // wrong-file risk; multi-instance docs (contracts, invoices) stay with the
+    // brain which can disambiguate. Self-validating: only sends a real vaulted
+    // file; otherwise falls through to the brain to explain + offer a re-upload.
+    if (doneEligible && !swipeAnchor) {
+      const idDoc = matchIdentityFileRequest(cleaned);
+      if (idDoc) {
+        const r = await sendFiledDocument(idDoc, inboundParty);
+        if (r.ok) {
+          const reply = `Sent your ${(r.result?.sent) || idDoc}. It's in this chat now.`;
+          await ops.chatAppend("user", text, "whatsapp", inboundParty, { externalId: inboundWamid }).catch(() => {});
+          await ops.chatAppend("assistant", reply, "whatsapp", inboundParty).catch(() => {});
+          await sendWhatsApp(from, reply);
+          return NextResponse.json({ ok: true });
+        }
+        // No vaulted file: fall through to the brain to explain + ask for a re-send.
+      }
     }
 
     // DURABLE TURN COALESCING (KT #330, ported from Sasa KT #327). A rapid burst

@@ -249,12 +249,16 @@ export async function deleteContact(id: string) { await sbDelete("contacts", `id
 
 // ---------- DOCUMENTS ----------
 const RESTRICTED = ["finance", "legal", "identity", "contracts"];
-export async function addDoc(d: { id: string; title: string; fileName?: string; mime?: string; kind?: string; text: string; folder?: string; entityId?: string; chunks?: { text: string; embedding: number[] }[]; createdAt?: number }) {
+export async function addDoc(d: { id: string; title: string; fileName?: string; mime?: string; kind?: string; text: string; folder?: string; entityId?: string; dataUrl?: string; chunks?: { text: string; embedding: number[] }[]; createdAt?: number }) {
   const created = d.createdAt ?? now();
   const folder = d.folder || "general";
   await sbInsert("docs", {
     id: d.id, title: d.title, file_name: d.fileName ?? null, mime: d.mime ?? null, kind: d.kind ?? "document",
     entity_id: d.entityId ?? null, content: d.text ?? "", folder, sensitivity: RESTRICTED.includes(folder) ? "restricted" : "normal",
+    // data_url carries the Supabase Storage PATH of the original file bytes so
+    // the bot can send the real file (e.g. a passport PDF) back later. Without it,
+    // only OCR text was kept and "pull up my passport" had nothing to return.
+    data_url: d.dataUrl ?? null,
     size: 0, created_at: created,
   });
   const rows = (d.chunks || []).filter((c) => c.embedding?.length).map((c, i) => ({ doc_id: d.id, idx: i, text: c.text, embedding: `[${c.embedding.join(",")}]`, created_at: created }));

@@ -14,6 +14,8 @@ import { searchDocsWithClaude } from "../docs-server";
 import { enrichDraftContext } from "../mail-draft-context";
 import { kvGet } from "../db";
 import { sbSelect, enc } from "./rest";
+import { sendWhatsAppDocument, devPhone, whoIs } from "../whatsapp";
+import { signedReceiptUrl } from "../storage";
 
 type Result = any;
 
@@ -147,6 +149,44 @@ async function ctEstimate(i: { from?: string; to?: string }) {
   const s = await financeSummary(i);
   const ct = corporateTax(s.net);
   return { taxableProfit: s.net, corporateTax: ct.tax, detail: ct, note: "9% on taxable income above AED 375,000. Estimate only; confirm with an accountant." };
+}
+
+// Send the OWNER the actual stored file of a filed document (KT #206561). Finds
+// the best title/content/filename match that has vaulted bytes (data_url),
+// downloads it from Supabase Storage, and delivers it via the document send.
+// Not destructive: it returns the owner his own file (no external recipient, no
+// confirm gate). Honest on miss: says so rather than pretending it sent.
+function jensenOwnerNumber(): string | null {
+  return (process.env.OWNER_WHATSAPP || "")
+    .split(",").map((n) => n.replace(/[^0-9]/g, "")).filter(Boolean)
+    .find((d) => whoIs(d).role === "owner") || null;
+}
+export async function sendFiledDocument(query: string, party?: string): Promise<{ ok: boolean; result?: any; error?: string }> {
+  const q = (query || "").trim();
+  if (!q) return { ok: false, error: "Tell me which document to send, e.g. 'my passport'." };
+  const rows: any[] = await sbSelect(
+    "docs",
+    `or=(title.ilike.*${enc(q)}*,content.ilike.*${enc(q)}*,file_name.ilike.*${enc(q)}*)&data_url=not.is.null&select=id,title,file_name,mime,data_url,folder&order=created_at.desc&limit=5`,
+  ).catch(() => []);
+  if (!rows.length) {
+    return { ok: false, error: `I don't have the actual file for "${q}" vaulted yet. If it was uploaded before I started keeping the file itself, please send it again and I will vault it permanently.` };
+  }
+  const doc = rows[0];
+  let buf: Buffer;
+  try {
+    const url = await signedReceiptUrl(doc.data_url, 300);
+    const res = await fetch(url);
+    if (!res.ok) return { ok: false, error: `found "${doc.title}" but could not fetch the stored file (${res.status}).` };
+    buf = Buffer.from(await res.arrayBuffer());
+  } catch (e: any) {
+    return { ok: false, error: `found "${doc.title}" but the file fetch failed: ${e?.message || e}` };
+  }
+  const to = party && party !== "jensen" ? devPhone() : jensenOwnerNumber();
+  if (!to) return { ok: false, error: "no recipient number is configured." };
+  const filename = doc.file_name || `${doc.title}.pdf`;
+  const wamid = await sendWhatsAppDocument(to, buf, filename, doc.title, { force: true });
+  if (!wamid) return { ok: false, error: `found "${doc.title}" but the WhatsApp file send failed.` };
+  return { ok: true, result: { sent: doc.title, file: filename, folder: doc.folder } };
 }
 
 const GEN_SYS = (kind: string) =>
@@ -285,6 +325,7 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
       case "ct_estimate": result = await ctEstimate(input); break;
       // documents
       case "search_documents": { result = await searchDocsWithClaude(input.query, 8); break; }
+      case "send_filed_document": { result = await sendFiledDocument(String(input.query || ""), ctx?.party); break; }
       case "list_documents": result = await ops.listDocs(input); break;
       case "file_document": result = await ops.fileDocument(input); break;
       case "delete_document": result = await ops.deleteDoc(input.id); break;

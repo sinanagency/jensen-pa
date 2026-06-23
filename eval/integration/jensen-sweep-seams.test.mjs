@@ -898,6 +898,32 @@ check("seam.75 recall dedups doc grounding PER DOC (title key + content fallback
   return null;
 });
 
+check("seam.77 WhatsApp media intake ALWAYS files + vaults the file (no drop-on-unreadable) — a scanned passport whose OCR fails is stored + retrievable, never dropped with a false 'saved' (KT #206561)", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  if (/if \(!text\.trim\(\)\) \{ await sendWhatsApp\(from, "I saved your file but couldn't read/.test(src)) return "still early-returns + DROPS the doc on unreadable text (the passport-loss bug)";
+  if (!/uploadReceipt\(dl\.buf/.test(src)) return "does not vault the original file bytes to storage";
+  if (!/dataUrl: storagePath/.test(src)) return "addDoc does not persist the storage path";
+  return null;
+});
+
+check("seam.78 send_filed_document returns the ACTUAL vaulted file (data_url -> storage -> sendWhatsAppDocument), honest on miss (KT #206561)", () => {
+  const t = read("lib/concierge/tools.ts");
+  if (!/"send_filed_document"/.test(t)) return "send_filed_document tool not registered";
+  const d = read("lib/concierge/dispatch.ts");
+  if (!/case "send_filed_document"/.test(d)) return "no dispatch case for send_filed_document";
+  if (!/data_url=not\.is\.null/.test(d)) return "send-back does not require vaulted bytes (would claim-send a file it doesn't have)";
+  if (!/sendWhatsAppDocument\(/.test(d)) return "send-back does not actually deliver the file";
+  return null;
+});
+
+check("seam.79 deterministic identity file-send-back — 'send me my passport' routes to sendFiledDocument WITHOUT relying on the model to call its own tool (KT #206561 / FM-11 principle / Class C1)", () => {
+  const src = read("app/api/whatsapp/route.ts");
+  if (!/function matchIdentityFileRequest/.test(src)) return "no deterministic identity-file matcher";
+  if (!/matchIdentityFileRequest\(cleaned\)/.test(src)) return "matcher not invoked in the owner text path";
+  if (!/await sendFiledDocument\(idDoc, inboundParty\)/.test(src)) return "match does not call sendFiledDocument deterministically";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";
