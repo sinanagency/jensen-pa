@@ -920,7 +920,17 @@ check("seam.79 deterministic identity file-send-back — 'send me my passport' r
   const src = read("app/api/whatsapp/route.ts");
   if (!/function matchIdentityFileRequest/.test(src)) return "no deterministic identity-file matcher";
   if (!/matchIdentityFileRequest\(cleaned\)/.test(src)) return "matcher not invoked in the owner text path";
-  if (!/await sendFiledDocument\(idDoc, inboundParty\)/.test(src)) return "match does not call sendFiledDocument deterministically";
+  if (!/await sendFiledDocument\(idDoc, inboundParty/.test(src)) return "match does not call sendFiledDocument deterministically";
+  return null;
+});
+
+check("seam.80 send_filed_document does NOT silently send the newest on a multi-match (wrong-record) — disambiguates by title; only the identity route passes autoLatest (failure-surface iter 1)", () => {
+  const d = read("lib/concierge/dispatch.ts");
+  const fn = d.slice(d.indexOf("export async function sendFiledDocument"));
+  if (!/distinctTitles\.length > 1 && !opts\?\.autoLatest/.test(fn)) return "no multi-match disambiguation guard (would send the WRONG private doc)";
+  if (!/ambiguous: true/.test(fn)) return "ambiguous result not surfaced to the brain";
+  const route = read("app/api/whatsapp/route.ts");
+  if (!/sendFiledDocument\(idDoc, inboundParty, \{ autoLatest: true \}\)/.test(route)) return "identity route does not pass autoLatest (would nag on passport re-uploads)";
   return null;
 });
 

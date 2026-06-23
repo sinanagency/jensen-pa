@@ -161,7 +161,7 @@ function jensenOwnerNumber(): string | null {
     .split(",").map((n) => n.replace(/[^0-9]/g, "")).filter(Boolean)
     .find((d) => whoIs(d).role === "owner") || null;
 }
-export async function sendFiledDocument(query: string, party?: string): Promise<{ ok: boolean; result?: any; error?: string }> {
+export async function sendFiledDocument(query: string, party?: string, opts?: { autoLatest?: boolean }): Promise<{ ok: boolean; result?: any; error?: string }> {
   const q = (query || "").trim();
   if (!q) return { ok: false, error: "Tell me which document to send, e.g. 'my passport'." };
   const rows: any[] = await sbSelect(
@@ -170,6 +170,19 @@ export async function sendFiledDocument(query: string, party?: string): Promise<
   ).catch(() => []);
   if (!rows.length) {
     return { ok: false, error: `I don't have the actual file for "${q}" vaulted yet. If it was uploaded before I started keeping the file itself, please send it again and I will vault it permanently.` };
+  }
+  // WRONG-RECORD GUARD (failure-surface, send_filed_document × wrong-record): when
+  // the query matches MULTIPLE DISTINCT documents, do NOT silently send the newest
+  // — that ships the wrong private file. Disambiguate by TITLE (the record's
+  // identity), not content. autoLatest (the deterministic identity route) sends
+  // the newest of same-titled re-uploads (a re-sent passport), which is safe.
+  const distinctTitles = [...new Set(rows.map((r) => String(r.title || "").trim().toLowerCase()))];
+  if (distinctTitles.length > 1 && !opts?.autoLatest) {
+    return {
+      ok: false,
+      error: `I have ${rows.length} documents matching "${q}": ${rows.map((r) => r.title).join(", ")}. Which one should I send?`,
+      result: { ambiguous: true, matches: rows.map((r) => r.title) },
+    };
   }
   const doc = rows[0];
   let buf: Buffer;

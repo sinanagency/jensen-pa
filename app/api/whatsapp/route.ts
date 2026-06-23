@@ -519,7 +519,7 @@ export async function POST(req: NextRequest) {
     if (doneEligible && !swipeAnchor) {
       const idDoc = matchIdentityFileRequest(cleaned);
       if (idDoc) {
-        const r = await sendFiledDocument(idDoc, inboundParty);
+        const r = await sendFiledDocument(idDoc, inboundParty, { autoLatest: true });
         if (r.ok) {
           const reply = `Sent your ${(r.result?.sent) || idDoc}. It's in this chat now.`;
           await ops.chatAppend("user", text, "whatsapp", inboundParty, { externalId: inboundWamid }).catch(() => {});
