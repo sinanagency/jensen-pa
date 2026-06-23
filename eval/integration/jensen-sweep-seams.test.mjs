@@ -890,6 +890,14 @@ check("seam.74 sanad_draft_contract is confirm-gated (in DESTRUCTIVE) — a cont
   return null;
 });
 
+check("seam.75 recall dedups doc grounding PER DOC (title key + content fallback), not by content-prefix — distinct docs sharing a letterhead head are not collision-dropped and one doc cannot eat multiple grounding slots (Class C5 / KT #206558)", () => {
+  const br = read("lib/concierge/brain.ts");
+  const rc = br.slice(br.indexOf("export async function recall"));
+  if (/\(\[docVecNorm, docKw, docTbl\], \(r\) => \(r\.content/.test(rc)) return "recall still dedups doc results on content-prefix only (collision + chunk-dup bug)";
+  if (!/document" \? "T:"/.test(rc)) return "recall dedup key is not the per-doc title key with content fallback";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";

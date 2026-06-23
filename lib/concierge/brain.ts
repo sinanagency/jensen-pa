@@ -122,7 +122,12 @@ export async function recall(query: string, opts?: { factK?: number; docK?: numb
   // chunk-based ranking is unchanged.
   const docTblRows: any[] = docK ? await sbSelect<any>("docs", `or=(title.ilike.*${enc(q)}*,content.ilike.*${enc(q)}*)&limit=10&select=title,content`).catch(() => []) : [];
   const docTbl = docTblRows.map((r) => ({ title: r.title || "document", content: (r.content || "").slice(0, 600) }));
-  const docs = docK ? rrf<any>([docVecNorm, docKw, docTbl], (r) => (r.content || "").slice(0, 80)).slice(0, docK).map((r) => ({ title: r.title, text: r.content })) : [];
+  // RRF dedup key (Class C5 sibling, KT #206558): key on TITLE + content-prefix,
+  // not content-prefix alone. Two DISTINCT docs sharing a letterhead/boilerplate
+  // head (common for La Rencontre invoices/letters) collided to one key and one
+  // was silently dropped from grounding. Adding the title disambiguates them;
+  // the same doc surfaced across arms (same title + same head) still dedups.
+  const docs = docK ? rrf<any>([docVecNorm, docKw, docTbl], (r: any) => { const t = String(r?.title || "").trim(); return t && t !== "document" ? "T:" + t.toLowerCase() : "C:" + (r?.content || "").slice(0, 80); }).slice(0, docK).map((r) => ({ title: r.title, text: r.content })) : [];
 
   return { facts, docs };
 }
