@@ -942,6 +942,15 @@ check("seam.81 a meeting mention lands on the CALENDAR (create_event), never gat
   return null;
 });
 
+check("seam.82 deterministic weekday backstop — create/update_event corrects a model-mis-dated weekday; no-ops when no weekday named (failure-surface iter 6 / date-math)", () => {
+  const d = read("lib/concierge/dispatch.ts");
+  if (!/function reconcileWeekday/.test(d)) return "no reconcileWeekday helper";
+  if (!/case "create_event": \{ await reconcileEventDate\(ctx, input\)/.test(d)) return "create_event not backstopped";
+  if (!/case "update_event": \{ await reconcileEventDate\(ctx, input\)/.test(d)) return "update_event not backstopped";
+  if (!/if \(!m\) return date/.test(d)) return "backstop does not no-op when no weekday is named (would over-correct)";
+  return null;
+});
+
 check("seam.60 a blank-subject email still surfaces (not silently dropped at thread-coalescing)", () => {
   const src = read("lib/mail-sweep.ts");
   if (/if \(!key\) continue;/.test(src)) return "blank-subject emails are still dropped (if (!key) continue)";

@@ -61,6 +61,36 @@ async function discriminatorMismatch(
   return _bcDiscriminatorMismatch(candidateTitle, jensenDiscriminatorAdapters(ctx));
 }
 
+// Deterministic weekday backstop (failure-surface iter 6 / KT #206566). The model
+// computes "Thursday" -> a date and occasionally lands on the WRONG weekday (the
+// 06-22 'Thursday' -> 26 June (a Friday) slip). When the user named a weekday and
+// did NOT give an explicit day-of-month, the named weekday is source of truth:
+// correct a date that falls on a different weekday to the next occurrence. It does
+// NOT touch number-based dates, weekday+number conflicts, or a valid-but-different
+// occurrence of the SAME weekday (the model's occurrence choice) — better, never
+// worse. Proven across edge cases before wiring.
+const _WD = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+function reconcileWeekday(userMsg: string, date: string, todayYmd: string): string {
+  const m = (userMsg || "").toLowerCase().match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+  if (!m) return date;
+  if (/\b\d{1,2}(st|nd|rd|th)\b/i.test(userMsg) || /\b\d{4}-\d{2}-\d{2}\b/.test(userMsg) || /\bthe\s+\d{1,2}\b/i.test(userMsg)) return date;
+  const named = _WD.indexOf(m[1]);
+  const d = new Date(date + "T00:00:00Z");
+  if (isNaN(d.getTime()) || d.getUTCDay() === named) return date;
+  const today = new Date(todayYmd + "T00:00:00Z");
+  if (isNaN(today.getTime())) return date;
+  const delta = (named - today.getUTCDay() + 7) % 7;
+  return new Date(today.getTime() + delta * 86400000).toISOString().slice(0, 10);
+}
+async function reconcileEventDate(ctx: { party?: string } | undefined, input: any): Promise<void> {
+  try {
+    if (!input?.date || !ctx?.party) return;
+    const last = await jensenDiscriminatorAdapters(ctx).getLastUserInbound();
+    const fixed = reconcileWeekday(String(last || ""), String(input.date), dubaiToday());
+    if (fixed !== input.date) input.date = fixed;
+  } catch { /* best-effort backstop; never block the write */ }
+}
+
 // Best-effort observability emit. Sasa has an events table for this; Jensen
 // writes a system row into chat_messages so the wall firings show up in the
 // same transcript review surface Taona already uses.
@@ -275,7 +305,7 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
       // calendar
       case "query_calendar": result = await ops.queryCalendar(input); break;
       case "day_log": result = await ops.dayLog(input.date); break;
-      case "create_event": result = await ops.createEvent(input); break;
+      case "create_event": { await reconcileEventDate(ctx, input); result = await ops.createEvent(input); break; }
       case "send_email": {
         try {
           const r = await sendNewEmail({ toEmail: String(input.to), subject: String(input.subject || ""), body: String(input.body || "") });
@@ -311,7 +341,7 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
         }
         break;
       }
-      case "update_event": result = await ops.updateEvent(input); break;
+      case "update_event": { await reconcileEventDate(ctx, input); result = await ops.updateEvent(input); break; }
       case "delete_event": result = await ops.deleteEvent(input.id); break;
       case "complete_event": {
         // Wall 2: complete_event was added 2026-06-15 (KT #288) precisely for
