@@ -16,6 +16,7 @@ import { sbSelect, enc } from "@/lib/concierge/rest";
 import { extractMeetingLink, dispatchMeetingBot, isCancelIntent, cancelActiveBot } from "@/lib/digital-u";
 import { shouldProcess, mediaArrived } from "@/lib/brain-core/index.js";
 import { coalesceTurn, finishTurn } from "@/lib/whatsapp-coalesce";
+import { parseStatuses, shouldApplyStatus } from "@/lib/concierge/wa-delivery.mjs";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -124,6 +125,34 @@ export async function POST(req: NextRequest) {
     // entry[0].id in kv so the operator has something to inspect when looking
     // up the real WABA_ID in Meta's dashboard.
     try { await captureWebhookDiagnostic(body); } catch {}
+
+    // DELIVERY STATUS (KT #206576): Meta posts sent/delivered/read/failed updates
+    // under value.statuses[], keyed by the message wamid we store on
+    // chat_messages.external_id. Record the real lifecycle so delivery is a
+    // column, not inferred from "Meta accepted it" (the Sotiris blind spot).
+    // Monotonic (never downgrade), best-effort, and degrades cleanly if the
+    // delivery_* columns are not migrated yet. Status webhooks carry no messages,
+    // so handle and ack here before the inbound path.
+    const statuses = parseStatuses(body?.entry?.[0]?.changes?.[0]?.value);
+    if (statuses.length) {
+      try {
+        for (const s of statuses) {
+          const { data } = await admin()
+            .from("chat_messages")
+            .select("id,delivery_status")
+            .eq("external_id", s.wamid)
+            .order("ts", { ascending: false })
+            .limit(1);
+          const row = Array.isArray(data) ? data[0] : null;
+          if (!row || !shouldApplyStatus(row.delivery_status, s.status)) continue;
+          await admin()
+            .from("chat_messages")
+            .update({ delivery_status: s.status, delivery_at: s.at ?? Date.now(), delivery_error: s.error })
+            .eq("id", row.id);
+        }
+      } catch { /* best-effort; never block the 200 ack to Meta */ }
+      return NextResponse.json({ ok: true, statuses: statuses.length });
+    }
 
     const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     const from: string = msg?.from || "";
