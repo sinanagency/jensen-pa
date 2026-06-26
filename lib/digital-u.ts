@@ -20,6 +20,19 @@ export function extractMeetingLink(text: string): string | null {
   return m[1].replace(/[).,;'"!?\]]+$/, "");
 }
 
+// Decide what meeting_url to persist on a calendar write. An explicit value the
+// model passed wins; otherwise pull the link straight out of the operator's
+// triggering message. This is the deterministic capture that stops links from
+// being dropped: the LLM is no longer trusted to remember to pass it (Sotiris,
+// 25 Jun, the bot even said "Teams link saved" and saved nothing). KT #206573.
+export function meetingUrlForWrite(explicit: string | undefined | null, lastInbound: string | undefined | null): string | undefined {
+  if (explicit && String(explicit).trim()) {
+    const inExplicit = extractMeetingLink(String(explicit));
+    return inExplicit || String(explicit).trim();
+  }
+  return extractMeetingLink(String(lastInbound || "")) || undefined;
+}
+
 function siteUrl(): string {
   // Prefer an explicit override (set on Vercel), then VERCEL_URL, then the
   // canonical production domain.

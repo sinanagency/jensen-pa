@@ -166,7 +166,7 @@ export function normalizeEventTitleKey(title: string): string {
     .trim();
 }
 
-export async function createEvent(i: { title: string; date: string; time?: string; entityId?: string; note?: string; recurrence?: string; recurrenceUntil?: string }) {
+export async function createEvent(i: { title: string; date: string; time?: string; entityId?: string; note?: string; recurrence?: string; recurrenceUntil?: string; meetingUrl?: string }) {
   // Soft-dedup: normalized title + same date (+ same time if both provided) is
   // the same event, not a copy. Prevents the 06-13 Karafotias case where the
   // model produced "Meeting with the Karafotias at Dubai Hills Mall" and
@@ -182,13 +182,16 @@ export async function createEvent(i: { title: string; date: string; time?: strin
     if (dup) return { id: dup.id, title: dup.title, date: i.date, deduped: true };
   }
   const validRecurrence = ["weekly", "monthly", "yearly"].includes(i.recurrence || "") ? i.recurrence : null;
-  const row = { id: uid(), title: i.title, date: i.date, time: i.time ?? null, entity_id: i.entityId ?? null, note: i.note ?? null, recurrence: validRecurrence, recurrence_until: i.recurrenceUntil ?? null, created_at: now() };
+  const row: any = { id: uid(), title: i.title, date: i.date, time: i.time ?? null, entity_id: i.entityId ?? null, note: i.note ?? null, recurrence: validRecurrence, recurrence_until: i.recurrenceUntil ?? null, created_at: now() };
+  if (i.meetingUrl) row.meeting_url = i.meetingUrl;
   await sbInsert("events", row);
-  return { id: row.id, title: i.title, date: i.date, time: i.time, recurrence: validRecurrence };
+  return { id: row.id, title: i.title, date: i.date, time: i.time, recurrence: validRecurrence, meetingUrlSaved: !!i.meetingUrl };
 }
 export async function updateEvent(i: any) {
   const patch: any = {};
   for (const k of ["title", "date", "time", "note", "recurrence", "recurrence_until"]) if (i[k] !== undefined) patch[k] = i[k];
+  // Meeting link maps to the meeting_url column (only when provided, never clobbered to null).
+  if (i.meetingUrl) patch.meeting_url = i.meetingUrl;
   // Wall-at-primitive: any change to fire-time invalidates the reminder latch.
   // Without this, a moved event keeps its old reminded_at and the cron's
   // `reminded_at IS NULL` filter silently skips the row on the new date.

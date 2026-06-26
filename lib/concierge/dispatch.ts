@@ -16,6 +16,7 @@ import { kvGet } from "../db";
 import { sbSelect, enc } from "./rest";
 import { sendWhatsAppDocument, devPhone, whoIs } from "../whatsapp";
 import { signedReceiptUrl } from "../storage";
+import { meetingUrlForWrite } from "../digital-u";
 
 type Result = any;
 
@@ -89,6 +90,21 @@ async function reconcileEventDate(ctx: { party?: string } | undefined, input: an
     const fixed = reconcileWeekday(String(last || ""), String(input.date), dubaiToday());
     if (fixed !== input.date) input.date = fixed;
   } catch { /* best-effort backstop; never block the write */ }
+}
+
+// Deterministic meeting-link capture (KT #206573). When Jensen schedules or moves
+// a meeting in a message that carries a Zoom/Teams/Meet link, attach the link to
+// the event's meeting_url even if the model forgot to pass meetingUrl. The
+// reminder cron already renders meeting_url, so this is the missing half: capture.
+// Never clobbers an explicit value; never writes null (no link in message = no-op).
+async function attachMeetingLink(ctx: { party?: string } | undefined, input: any): Promise<void> {
+  try {
+    if (input?.meetingUrl) return; // explicit value the model passed wins
+    if (!ctx?.party) return;
+    const last = await jensenDiscriminatorAdapters(ctx).getLastUserInbound();
+    const url = meetingUrlForWrite(undefined, String(last || ""));
+    if (url) input.meetingUrl = url;
+  } catch { /* best-effort; never block the write */ }
 }
 
 // Best-effort observability emit. Sasa has an events table for this; Jensen
@@ -305,7 +321,7 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
       // calendar
       case "query_calendar": result = await ops.queryCalendar(input); break;
       case "day_log": result = await ops.dayLog(input.date); break;
-      case "create_event": { await reconcileEventDate(ctx, input); result = await ops.createEvent(input); break; }
+      case "create_event": { await reconcileEventDate(ctx, input); await attachMeetingLink(ctx, input); result = await ops.createEvent(input); break; }
       case "send_email": {
         try {
           const r = await sendNewEmail({ toEmail: String(input.to), subject: String(input.subject || ""), body: String(input.body || "") });
@@ -341,7 +357,7 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
         }
         break;
       }
-      case "update_event": { await reconcileEventDate(ctx, input); result = await ops.updateEvent(input); break; }
+      case "update_event": { await reconcileEventDate(ctx, input); await attachMeetingLink(ctx, input); result = await ops.updateEvent(input); break; }
       case "delete_event": result = await ops.deleteEvent(input.id); break;
       case "complete_event": {
         // Wall 2: complete_event was added 2026-06-15 (KT #288) precisely for
