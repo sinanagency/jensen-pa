@@ -10,6 +10,7 @@ import { stripDashes } from "../whatsapp";
 import { recall, captureSalience, listDirectives } from "./brain";
 import * as ops from "./ops";
 import { dubaiToday, dayPart, dubaiClockBlock } from "../time";
+import { isUpdatedListRequest, formatUpdatedList } from "./updated-list.mjs";
 
 const API = "https://api.anthropic.com/v1/messages";
 
@@ -255,6 +256,19 @@ export async function runConcierge(input: { messages: { role: "user" | "assistan
     const blocks: any[] = data.content || [];
     reply = blocks.filter((b) => b.type === "text").map((b) => b.text).join("").trim()
       || `I'm here, ${input.sender?.name || "Jensen"}. Tell me everything you'd want me to take off your plate and how you like to work. I'm capturing all of it so I'm ready the moment we go live.`;
+  } else if (!graduating && isUpdatedListRequest(lastUser)) {
+    // DETERMINISTIC ROUTE (KT #206540): "updated list" has a fixed contract the
+    // operator stated himself, all four quadrants plus every upcoming reminder.
+    // The free-form brain kept re-deciding the format (leading with today's
+    // calendar, truncating quadrants, today-only reminders). This bypasses the
+    // model entirely and renders the canonical list from the source of truth, so
+    // it is identical and complete every single time.
+    const today = dubaiToday();
+    const [tasks, events] = await Promise.all([
+      ops.listTasks({ done: false }).catch(() => [] as any[]),
+      ops.queryCalendar({ from: today }).catch(() => [] as any[]),
+    ]);
+    reply = formatUpdatedList({ tasks, events, today, name: input.sender?.name || "Jensen" });
   } else {
     for (let i = 0; i < 6; i++) {
       const data = await callRaw(system, convo, 1800, true, toolset);
