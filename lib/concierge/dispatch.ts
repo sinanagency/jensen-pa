@@ -17,6 +17,7 @@ import { sbSelect, enc } from "./rest";
 import { sendWhatsAppDocument, devPhone, whoIs } from "../whatsapp";
 import { signedReceiptUrl } from "../storage";
 import { meetingUrlForWrite } from "../digital-u";
+import { selectProposedTasks } from "./meeting-proposal.mjs";
 
 type Result = any;
 
@@ -316,6 +317,24 @@ export async function runAction(name: string, input: any, ctx?: { party?: string
           return { ok: false, error: `I will not delete "${title}" from your message about ${disc.got}. Those name different people. Tell me which task you meant.` };
         }
         result = await ops.deleteTask(input.id);
+        break;
+      }
+      // meeting-task proposal acceptance (Digital Jensen wrap-up). Creates tasks
+      // DETERMINISTICALLY from the stored proposal (KT #206574) so the model
+      // cannot re-type, drop, or invent items. Jensen's reply IS the confirmation,
+      // so this is not destructive-gated; the gate is that nothing was created
+      // until he said so.
+      case "accept_meeting_tasks": {
+        if (input.skip === true) { await ops.clearPendingMeetingTasks(); result = { skipped: true }; break; }
+        const pending = await ops.getPendingMeetingTasks();
+        if (!pending || !pending.tasks?.length) { result = { ok: false, error: "No meeting action items are waiting to be accepted right now." }; break; }
+        const which = Array.isArray(input.numbers) && input.numbers.length ? input.numbers : "all";
+        const chosen = selectProposedTasks(pending.tasks, which);
+        if (!chosen.length) { result = { error: "None of those numbers matched the proposed list.", proposed: pending.tasks.map((t: any, i: number) => ({ n: i + 1, title: t.title })) }; break; }
+        const created: any[] = [];
+        for (const t of chosen) { try { created.push(await ops.createTask({ title: t.title, quadrant: t.quadrant })); } catch { /* skip single failure */ } }
+        await ops.clearPendingMeetingTasks();
+        result = { accepted: created.length, fromMeeting: pending.title, tasks: created };
         break;
       }
       // calendar

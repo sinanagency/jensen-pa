@@ -3,6 +3,23 @@
 
 import { sbSelect, sbInsert, sbUpsert, sbUpdate, sbDelete, enc } from "./rest";
 import { dubaiToday, dubaiHHMM } from "../time";
+import { kvGet, kvSet } from "../db";
+
+// ---------- PENDING MEETING-TASK PROPOSAL (Digital Jensen wrap-up) ----------
+// Tasks a finished meeting proposed but Jensen has NOT yet accepted. Stored in
+// kv (single-tenant, one Jensen) so /api/ingest can park them and the brain can
+// create them deterministically from THIS list when he accepts. KT #206574.
+const PENDING_MEETING_TASKS_KEY = "lr_pending_meeting_tasks";
+export type PendingMeetingTasks = { title: string; proposedAt: number; tasks: { title: string; quadrant: number }[] };
+export async function setPendingMeetingTasks(p: PendingMeetingTasks): Promise<void> {
+  await kvSet(PENDING_MEETING_TASKS_KEY, p);
+}
+export async function getPendingMeetingTasks(): Promise<PendingMeetingTasks | null> {
+  return kvGet<PendingMeetingTasks | null>(PENDING_MEETING_TASKS_KEY, null).catch(() => null);
+}
+export async function clearPendingMeetingTasks(): Promise<void> {
+  await kvSet(PENDING_MEETING_TASKS_KEY, null).catch(() => {});
+}
 
 // Tag each calendar row with a derived status so the LLM never has to compare
 // time strings against "now" when rendering Jensen's board. Past items must

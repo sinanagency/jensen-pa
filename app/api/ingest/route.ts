@@ -27,7 +27,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { claudeJSON, NO_DASHES } from "@/lib/anthropic";
-import { createTask } from "@/lib/concierge/ops";
+import { setPendingMeetingTasks, clearPendingMeetingTasks } from "@/lib/concierge/ops";
+import { orderProposedTasks, buildMeetingBubbles } from "@/lib/concierge/meeting-proposal.mjs";
 import { sendTextAndLog } from "@/lib/sendTextAndLog";
 import { sbHeaders, sbRest } from "@/lib/db";
 import { classifyOutcome, buildEmptyOutcomeMessage, isTerminalOutcome, type MeetingOutcome } from "@/lib/meeting-outcome";
@@ -43,13 +44,6 @@ type IncomingNotes = {
   actions?: { who?: string; what?: string; due?: string }[];
 };
 type ExtractedTask = { title: string; quadrant: 1 | 2 | 3 | 4 };
-
-const QUADRANT_LABEL: Record<number, string> = {
-  1: "Do first",
-  2: "Schedule",
-  3: "Delegate",
-  4: "Drop",
-};
 
 function ownerJensenNumber(): string | null {
   // Default identity is canonical; OWNER_WHATSAPP also lists Jensen but is
@@ -112,45 +106,6 @@ async function getEventOutcome(id: string): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-function buildWhatsAppBody(opts: {
-  title: string;
-  summary: string;
-  decisions: string[];
-  tasks: ExtractedTask[];
-}): string {
-  const { title, summary, decisions, tasks } = opts;
-  const q1 = tasks.filter((t) => t.quadrant === 1);
-  const q2 = tasks.filter((t) => t.quadrant === 2);
-  const q3 = tasks.filter((t) => t.quadrant === 3);
-
-  const lines: string[] = [];
-  lines.push(`I finished ${title || "the meeting"} and I have the notes for you.`);
-  if (summary) { lines.push(""); lines.push(summary); }
-  if (decisions.length) {
-    lines.push("");
-    lines.push("Decisions I noted:");
-    decisions.slice(0, 5).forEach((d) => lines.push(`• ${d}`));
-  }
-  if (q1.length) {
-    lines.push("");
-    lines.push("On you, do first:");
-    q1.slice(0, 6).forEach((t) => lines.push(`• ${t.title}`));
-  }
-  if (q2.length) {
-    lines.push("");
-    lines.push("To schedule when you can:");
-    q2.slice(0, 4).forEach((t) => lines.push(`• ${t.title}`));
-  }
-  if (q3.length) {
-    lines.push("");
-    lines.push("Worth delegating:");
-    q3.slice(0, 3).forEach((t) => lines.push(`• ${t.title}`));
-  }
-  lines.push("");
-  lines.push("The full list is in your Tasks tab.");
-  return stripDashes(lines.join("\n"));
 }
 
 export async function POST(req: NextRequest) {
@@ -270,30 +225,30 @@ export async function POST(req: NextRequest) {
     const decisions = (extracted?.decisions || []).map(stripDashes).filter(Boolean).slice(0, 8);
     const rawTasks = (extracted?.tasks || []).filter((t) => t && t.title && [1, 2, 3, 4].includes(t.quadrant as number));
 
-    // Write tasks. createTask already soft-dedups by exact-title-while-open
-    // (Memorae's worst bug). We collect ids for the ack.
-    const created: { id: string; title: string; quadrant: number; deduped?: boolean }[] = [];
-    for (const t of rawTasks.slice(0, 20)) {
-      try {
-        const r = await createTask({ title: stripDashes(t.title).slice(0, 200), quadrant: t.quadrant as number });
-        created.push(r as any);
-      } catch {
-        // single-task failures don't block the whole batch
-      }
+    // PROPOSE, never auto-populate (KT #206574). Park the extracted tasks in kv
+    // as a pending proposal; they land on the board ONLY when Jensen accepts via
+    // accept_meeting_tasks. The summary goes out in MULTIPLE bubbles, ending with
+    // a numbered proposal he can accept ("add all" / "add 1, 3") or skip.
+    const orderedTasks = orderProposedTasks(rawTasks as any);
+    if (orderedTasks.length) {
+      await setPendingMeetingTasks({ title, proposedAt: Date.now(), tasks: orderedTasks }).catch(() => {});
+    } else {
+      // No items proposed: clear any stale proposal so an old one cannot be
+      // accepted against the wrong meeting.
+      await clearPendingMeetingTasks().catch(() => {});
     }
 
-    // WhatsApp Jensen with the summary + the do-first list. sendTextAndLog
-    // handles the chokepoint, the dash-strip, the audit log, and the dev-mode
-    // reroute if this is Taona running the smoke harness.
+    const bubbles = buildMeetingBubbles({ title, summary, decisions, orderedTasks });
     const to = dispatchPhone || ownerJensenNumber();
     let msgOk = false;
     if (to) {
-      const text = buildWhatsAppBody({ title, summary, decisions, tasks: rawTasks as ExtractedTask[] });
-      const r = await sendTextAndLog(to, text, { party: "jensen" });
-      msgOk = !!r.ok;
+      for (const b of bubbles) {
+        const r = await sendTextAndLog(to, b, { party: "jensen" });
+        msgOk = !!r.ok || msgOk;
+      }
     }
 
-    // Mark the happened outcome only AFTER the ack has shipped. If the send
+    // Mark the happened outcome only AFTER the ack has shipped. If every send
     // failed we leave outcome null so a manual retry isn't blocked by a stale
     // state.
     if (msgOk) await setEventOutcome(id, "happened");
@@ -301,8 +256,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       meetingId: id,
-      taskCount: created.length,
+      proposedTaskCount: orderedTasks.length,
+      autoCreated: false,
       decisionCount: decisions.length,
+      bubbles: bubbles.length,
       whatsappOk: msgOk,
       outcome: "happened",
     });
