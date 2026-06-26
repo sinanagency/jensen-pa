@@ -158,15 +158,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, mode: `lifecycle-${body.event}` });
     }
 
-    // Failure path: meeting-bot couldn't capture (waiting room, password, etc).
-    // WhatsApp Jensen the reason, write nothing to tasks.
+    // Failure path: meeting-bot couldn't capture (waiting room, password, the
+    // meeting-bot's own provider error, etc). Write nothing to tasks.
+    //
+    // KT #206575 (Sotiris, 26 Jun): the raw reason used to be pasted into
+    // Jensen's message. A meeting-bot Claude 401 auth error carried the literal
+    // api-key header name into the outbound, the infra_api_token guard correctly
+    // refused it, and Jensen got the cryptic graceful fallback instead of any
+    // word. NEVER put the raw provider error in a client message: give Jensen one
+    // clean honest line, and keep the technical reason in an audit row for Taona.
     if (body?.error) {
-      const reason = String(body.error).slice(0, 240);
-      const fail = stripDashes(
-        `I could not capture ${title}. Reason: ${reason}. If you send me the recording or transcript, I will still write the notes for you.`,
-      );
+      const rawReason = String(body.error).slice(0, 500);
+      const fail =
+        `I joined ${title} but could not capture the notes this time. It was a technical issue on my end, not anything you did. If you send me the recording or a transcript, I will still write the notes up for you.`;
       const to = dispatchPhone || ownerJensenNumber();
       if (to) await sendTextAndLog(to, fail, { party: "jensen" });
+      // Audit the real reason (system row, never shown to Jensen) so Taona can see why.
+      try {
+        await fetch(sbRest("chat_messages"), {
+          method: "POST",
+          headers: { ...sbHeaders(), Prefer: "return=minimal" },
+          body: JSON.stringify({ role: "system", content: `ingest.capture_failed title=${title} reason=${rawReason}`, channel: "audit", party: "jensen", ts: Date.now() }),
+        });
+      } catch { /* audit is best-effort */ }
+      await setEventOutcome(id, "empty");
       return NextResponse.json({ ok: true, mode: "failure-relayed" });
     }
 
